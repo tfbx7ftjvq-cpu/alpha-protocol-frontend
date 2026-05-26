@@ -150,7 +150,7 @@ function AppContent() {
       {/* ── Main content ── */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 relative z-10">
         {activeTab === 'treasury' && <TreasuryDashboard lang={lang} walletConnected={walletConnected} />}
-        {activeTab === 'shame' && <WallOfShame lang={lang} walletConnected={walletConnected} />}
+        {activeTab === 'shame' && <WallOfShame lang={lang} />}
         {activeTab === 'relief' && <VictimRelief lang={lang} />}
       </main>
 
