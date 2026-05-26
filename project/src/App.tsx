@@ -1,11 +1,19 @@
 import { useState } from 'react';
-import { Globe, ShieldCheck, BookOpen, LayoutDashboard, Wifi, WifiOff, Hexagon } from 'lucide-react';
+import { ConnectionProvider, WalletProvider, useWallet } from '@solana/wallet-adapter-react';
+import { WalletModalProvider, WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
+import { clusterApiUrl } from '@solana/web3.js';
+import '@solana/wallet-adapter-react-ui/styles.css';
+import { Globe, ShieldCheck, BookOpen, LayoutDashboard, Hexagon } from 'lucide-react';
 import { Lang } from './translations';
 import TreasuryDashboard from './components/TreasuryDashboard';
 import WallOfShame from './components/WallOfShame';
-import AlphaStaking from './components/AlphaStaking'; // 优雅重命名：升级为全网公共质押组件
+import VictimRelief from './components/VictimRelief';
 
 type Tab = 'treasury' | 'shame' | 'relief';
+
+const endpoint = clusterApiUrl('devnet');
+const wallets = [new PhantomWalletAdapter()];
 
 const HERO = {
   en: {
@@ -14,8 +22,6 @@ const HERO = {
     tabTreasury: 'Treasury Router',
     tabShame: 'On-Chain Court & DAO',
     tabRelief: 'Staking & Dividends',
-    connected: 'CONNECTED',
-    connectWallet: 'Connect Wallet',
     protocolBadge: 'α Protocol',
     permissionless: 'PERMISSIONLESS',
   },
@@ -25,17 +31,15 @@ const HERO = {
     tabTreasury: '国库分流账本',
     tabShame: '链上法庭与DAO治理',
     tabRelief: '资产质押与分红',
-    connected: '已连接',
-    connectWallet: '连接钱包',
     protocolBadge: 'α 协议',
     permissionless: '无许可',
   },
 };
 
-export default function App() {
-  const [lang, setLang] = useState<Lang>('zh'); // 默认对齐国人开发直觉，设为中文初始状态
+function AppContent() {
+  const { connected: walletConnected } = useWallet();
+  const [lang, setLang] = useState<Lang>('zh');
   const [activeTab, setActiveTab] = useState<Tab>('treasury');
-  const [walletConnected, setWalletConnected] = useState(false);
 
   const h = HERO[lang];
 
@@ -46,9 +50,9 @@ export default function App() {
     activeColor: string;
     activeBorder: string;
   }[] = [
-    { key: 'treasury', label: h.tabTreasury, icon: BookOpen,        activeColor: 'text-green-400', activeBorder: 'border-green-400' },
-    { key: 'shame',    label: h.tabShame,    icon: ShieldCheck,     activeColor: 'text-red-400',   activeBorder: 'border-red-400'   },
-    { key: 'relief',   label: h.tabRelief,   icon: LayoutDashboard, activeColor: 'text-cyan-400',  activeBorder: 'border-cyan-400'  },
+    { key: 'treasury', label: h.tabTreasury, icon: BookOpen, activeColor: 'text-green-400', activeBorder: 'border-green-400' },
+    { key: 'shame', label: h.tabShame, icon: ShieldCheck, activeColor: 'text-red-400', activeBorder: 'border-red-400' },
+    { key: 'relief', label: h.tabRelief, icon: LayoutDashboard, activeColor: 'text-cyan-400', activeBorder: 'border-cyan-400' },
   ];
 
   return (
@@ -60,7 +64,6 @@ export default function App() {
 
       {/* ── Header ── */}
       <header className="sticky top-0 z-50 border-b border-zinc-900 bg-zinc-950/90 backdrop-blur-md">
-
         {/* Status bar */}
         <div className="border-b border-zinc-900 px-4 py-1 flex items-center justify-between bg-zinc-950">
           <div className="flex items-center gap-4 text-zinc-600 text-[10px]">
@@ -75,17 +78,7 @@ export default function App() {
             <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded border border-zinc-900 text-zinc-600 text-[9px] uppercase tracking-widest font-black">
               {h.permissionless}
             </span>
-            <button
-              onClick={() => setWalletConnected(!walletConnected)}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded border text-[10px] font-black tracking-wider transition-all duration-200 ${
-                walletConnected
-                  ? 'border-green-400/30 text-green-400 bg-green-400/5 hover:bg-green-400/10'
-                  : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-400'
-              }`}
-            >
-              {walletConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-              {walletConnected ? h.connected : h.connectWallet}
-            </button>
+            <WalletMultiButton className="!bg-green-500 !text-black font-mono hover:!bg-green-400 transition-all rounded-md px-4 py-2 text-sm" />
           </div>
         </div>
 
@@ -106,24 +99,19 @@ export default function App() {
             {/* Title block */}
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-lg font-black text-zinc-100 tracking-tight leading-none">
-                  {h.protocolBadge}
-                </h1>
+                <h1 className="text-lg font-black text-zinc-100 tracking-tight leading-none">{h.protocolBadge}</h1>
                 <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-green-400/10 border border-green-400/20 text-green-400 uppercase tracking-widest">
                   v2.1 Production
                 </span>
               </div>
-              <p className="text-green-400 font-mono text-xs font-bold mt-2 leading-snug max-w-lg">
-                {h.tagline}
-              </p>
-              <p className="text-zinc-500 font-mono text-[10px] mt-1 leading-relaxed max-w-xl">
-                {h.sub}
-              </p>
+              <p className="text-green-400 font-mono text-xs font-bold mt-2 leading-snug max-w-lg">{h.tagline}</p>
+              <p className="text-zinc-500 font-mono text-[10px] mt-1 leading-relaxed max-w-xl">{h.sub}</p>
             </div>
           </div>
 
           {/* Language switcher */}
           <button
+            type="button"
             onClick={() => setLang(lang === 'en' ? 'zh' : 'en')}
             className="self-start sm:self-auto flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded border border-zinc-800 bg-zinc-900/5
                        text-zinc-500 hover:bg-zinc-900 hover:border-zinc-700 hover:text-zinc-300 transition-all duration-200 text-[11px] font-bold tracking-wider group"
@@ -143,6 +131,7 @@ export default function App() {
             return (
               <button
                 key={tab.key}
+                type="button"
                 onClick={() => setActiveTab(tab.key)}
                 className={`flex items-center gap-2 px-5 py-3 text-xs font-black border-b-2 whitespace-nowrap transition-all duration-200 ${
                   isActive
@@ -159,11 +148,10 @@ export default function App() {
       </header>
 
       {/* ── Main content ── */}
-      {/* 核心风控注入：将钱包状态统一向下游透传，保证子组件内部投票、质押能无缝读取上下文 */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 relative z-10">
         {activeTab === 'treasury' && <TreasuryDashboard lang={lang} walletConnected={walletConnected} />}
-        {activeTab === 'shame'    && <WallOfShame lang={lang} walletConnected={walletConnected} />}
-        {activeTab === 'relief'   && <AlphaStaking lang={lang} walletConnected={walletConnected} />}
+        {activeTab === 'shame' && <WallOfShame lang={lang} walletConnected={walletConnected} />}
+        {activeTab === 'relief' && <VictimRelief lang={lang} />}
       </main>
 
       {/* ── Footer ── */}
@@ -175,12 +163,27 @@ export default function App() {
         </p>
         <div className="flex items-center justify-center gap-2 flex-wrap">
           {['Solana Web3', 'Jupiter Swap API', 'Jito Bundles', 'Node.js Core Daemon', 'SQLite Persistent Storage'].map((item) => (
-            <span key={item} className="text-[9px] text-zinc-600 border border-zinc-900 bg-zinc-950 px-2 py-0.5 rounded font-mono font-bold tracking-tight">
+            <span
+              key={item}
+              className="text-[9px] text-zinc-600 border border-zinc-900 bg-zinc-950 px-2 py-0.5 rounded font-mono font-bold tracking-tight"
+            >
               {item}
             </span>
           ))}
         </div>
       </footer>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ConnectionProvider endpoint={endpoint}>
+      <WalletProvider wallets={wallets} autoConnect>
+        <WalletModalProvider>
+          <AppContent />
+        </WalletModalProvider>
+      </WalletProvider>
+    </ConnectionProvider>
   );
 }

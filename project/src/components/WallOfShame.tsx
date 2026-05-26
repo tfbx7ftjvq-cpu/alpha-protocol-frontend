@@ -4,6 +4,7 @@ import { t, Lang } from '../translations';
 
 interface Props {
   lang: Lang;
+  walletConnected: boolean;
 }
 
 const certifiedData = [
@@ -29,7 +30,7 @@ interface ImpeachState {
   animating: boolean;
 }
 
-export default function WallOfShame({ lang }: Props) {
+export default function WallOfShame({ lang, walletConnected: _walletConnected }: Props) {
   const tr = t[lang];
   const [activeTab, setActiveTab] = useState<0 | 1 | 2>(0);
   const [projectInput, setProjectInput] = useState('');
