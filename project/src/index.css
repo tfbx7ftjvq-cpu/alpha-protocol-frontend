@@ -1,0 +1,172 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&family=Noto+Sans+SC:wght@400;500;700;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: #030712;
+    color: #e2e8f0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    line-height: 1.6;
+    letter-spacing: -0.01em;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    font-weight: 700;
+  }
+
+  /* Monospace — only for tagged elements */
+  .font-mono {
+    font-family: 'JetBrains Mono', 'Noto Sans SC', ui-monospace, monospace;
+    font-feature-settings: 'liga' 1, 'calt' 1;
+  }
+
+  /* Tabular numbers for consistent alignment */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Better paragraph spacing for descriptive Chinese/English text */
+  p {
+    line-height: 1.65;
+  }
+
+  /* Placeholder styling */
+  input::placeholder, textarea::placeholder {
+    opacity: 0.55;
+    font-weight: 400;
+  }
+
+  /* Buttons get slightly tighter tracking */
+  button {
+    letter-spacing: 0.01em;
+    font-weight: 600;
+  }
+}
+
+/* Neon text glow */
+.neon-text {
+  text-shadow:
+    0 0 8px rgba(74, 222, 128, 0.8),
+    0 0 20px rgba(74, 222, 128, 0.4),
+    0 0 40px rgba(74, 222, 128, 0.2);
+}
+
+.neon-red {
+  text-shadow:
+    0 0 8px rgba(248, 113, 113, 0.8),
+    0 0 20px rgba(248, 113, 113, 0.4);
+}
+
+/* Scanline overlay */
+.scanlines {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 1) 2px,
+    rgba(0, 0, 0, 1) 4px
+  );
+  pointer-events: none;
+}
+
+/* Cyber grid */
+.cyber-grid {
+  background-image:
+    linear-gradient(rgba(74, 222, 128, 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(74, 222, 128, 0.15) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Shimmer animation for progress bars */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+.animate-shimmer {
+  animation: shimmer 2.5s infinite;
+}
+
+/* Glitch effect for header */
+@keyframes glitch {
+  0%, 100% { text-shadow: 0 0 8px rgba(74, 222, 128, 0.8), 0 0 20px rgba(74, 222, 128, 0.4); }
+  25% { text-shadow: -2px 0 rgba(248, 113, 113, 0.8), 2px 0 rgba(74, 222, 128, 0.8), 0 0 20px rgba(74, 222, 128, 0.4); }
+  75% { text-shadow: 2px 0 rgba(96, 165, 250, 0.8), -2px 0 rgba(74, 222, 128, 0.8), 0 0 20px rgba(74, 222, 128, 0.4); }
+}
+
+.neon-text {
+  animation: glitch 8s infinite;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(74, 222, 128, 0.3);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(74, 222, 128, 0.6);
+}
+
+/* Selection color */
+::selection {
+  background: rgba(74, 222, 128, 0.25);
+  color: #4ade80;
+}
+
+/* Reservoir idle breathing pulse — shown when balance is 0 */
+@keyframes reservoir-idle {
+  0%, 100% {
+    opacity: 0.12;
+    transform: scaleX(0.3);
+    transform-origin: left center;
+  }
+  50% {
+    opacity: 0.28;
+    transform: scaleX(0.6);
+    transform-origin: left center;
+  }
+}
+
+.animate-reservoir-idle {
+  animation: reservoir-idle 3s ease-in-out infinite;
+}
+
+/* Modal entrance animation */
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-modal-in {
+  animation: modal-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
