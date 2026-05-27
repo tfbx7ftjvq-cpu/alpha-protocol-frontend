@@ -1,10 +1,10 @@
-import { useState } from 'react';
-import { ConnectionProvider, WalletProvider, useWallet } from '@solana/wallet-adapter-react';
+import { useState, useEffect } from 'react';
+import { ConnectionProvider, WalletProvider, useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletModalProvider, WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
-import { clusterApiUrl } from '@solana/web3.js';
+import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import '@solana/wallet-adapter-react-ui/styles.css';
-import { Globe, ShieldCheck, BookOpen, LayoutDashboard, Hexagon } from 'lucide-react';
+import { Globe, ShieldCheck, BookOpen, LayoutDashboard, Hexagon, Wallet } from 'lucide-react';
 import { Lang } from './translations';
 import TreasuryDashboard from './components/TreasuryDashboard';
 import WallOfShame from './components/WallOfShame';
@@ -12,7 +12,7 @@ import VictimRelief from './components/VictimRelief';
 
 type Tab = 'treasury' | 'shame' | 'relief';
 
-const endpoint = clusterApiUrl('devnet');
+const endpoint = "https://api.devnet.solana.com";
 const wallets = [new PhantomWalletAdapter()];
 
 const HERO = {
@@ -37,9 +37,39 @@ const HERO = {
 };
 
 function AppContent() {
-  const { connected: walletConnected } = useWallet();
+  const { connection } = useConnection();
+  const { publicKey, connected: walletConnected } = useWallet();
   const [lang, setLang] = useState<Lang>('zh');
   const [activeTab, setActiveTab] = useState<Tab>('treasury');
+  
+  // ── 新增核心状态：负责存放钱包余额 ──
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+
+  // ── 新增核心副作用：动态监听钱包并抓取 Devnet 余额 ──
+  useEffect(() => {
+    async function fetchBalance() {
+      if (walletConnected && publicKey) {
+        try {
+          // 向 Devnet 发起 RPC 请求数钱
+          const lamports = await connection.getBalance(publicKey);
+          // 转换成人类能看懂的 SOL 数量
+          setWalletBalance(lamports / LAMPORTS_PER_SOL);
+        } catch (error) {
+          console.error("Failed to fetch balance from Devnet:", error);
+          setWalletBalance(0);
+        }
+      } else {
+        // 钱包断开时，强制归零
+        setWalletBalance(null);
+      }
+    }
+
+    fetchBalance();
+    
+    // 设置一个 10 秒定时自动对账，防止链上数据变动前端不知道
+    const interval = setInterval(fetchBalance, 10000);
+    return () => clearInterval(interval);
+  }, [walletConnected, publicKey, connection]);
 
   const h = HERO[lang];
 
@@ -73,6 +103,14 @@ function AppContent() {
             </span>
             <span>SLOT: #284,723,019</span>
             <span className="hidden sm:block">BASE FEE: 0.000025 SOL</span>
+            
+            {/* ── 核心 UI 焊入：钱包余额监控通道 ── */}
+            {walletConnected && (
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded border border-green-500/20 bg-green-500/5 text-green-400 font-bold text-[9px] animate-fade-in">
+                <Wallet className="w-2.5 h-2.5" />
+                BALANCE: {walletBalance !== null ? `${walletBalance.toFixed(4)} SOL` : 'LOADING...'}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded border border-zinc-900 text-zinc-600 text-[9px] uppercase tracking-widest font-black">
@@ -149,7 +187,14 @@ function AppContent() {
 
       {/* ── Main content ── */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 relative z-10">
-        {activeTab === 'treasury' && <TreasuryDashboard lang={lang} walletConnected={walletConnected} />}
+        {/* ── 核心传递：同时将抓到的网络余额塞给子组件 ── */}
+        {activeTab === 'treasury' && (
+          <TreasuryDashboard 
+            lang={lang} 
+            walletConnected={walletConnected} 
+            walletBalance={walletBalance} 
+          />
+        )}
         {activeTab === 'shame' && <WallOfShame lang={lang} />}
         {activeTab === 'relief' && <VictimRelief lang={lang} />}
       </main>
