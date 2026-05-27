@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { Flame, Activity, Clock, Calculator, Terminal, Lock, Radio, CheckCircle } from 'lucide-react';
+import { Flame, Activity, Clock, Calculator, Terminal, Lock, Radio, CircleCheck as CheckCircle } from 'lucide-react';
 import { Lang } from '../translations';
 import { TOTAL_NETWORK_POINTS, getDaysMultiplier, pad } from '../utils/staking';
 import ProtocolArchitecture from './ProtocolArchitecture';
 import DAOGovernance from './DAOGovernance';
+import OnChainTreasury from './OnChainTreasury';
 
-interface Props { 
-  lang: Lang; 
-  walletConnected: boolean; // 风控注入：完美接收上层钱包连接上下文
+interface Props {
+  lang: Lang;
+  walletConnected: boolean;
+  walletBalance?: number | null;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -150,7 +152,7 @@ function RoutingLog({ lang }: { lang: Lang }) {
 }
 
 // ─── Revenue Router Splitter ──────────────────────────────────────────────────
-import { LucideIcon } from 'lucide-react';
+import { Video as LucideIcon } from 'lucide-react';
 const SPLIT_POOLS: {
   pct: number;
   icon: LucideIcon;
@@ -504,6 +506,12 @@ export default function TreasuryDashboard({ lang, walletConnected }: Props) {
             <p className="text-zinc-500 text-[9px] font-mono mt-0.5">{m.unit}</p>
           </div>
         ))}
+      </div>
+
+      {/* ─── On-Chain Treasury Monitor (Live PDA Polling) ─── */}
+      <div className="border border-emerald-400/15 bg-zinc-950/60 rounded-2xl p-5 sm:p-6 relative overflow-hidden">
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/40 to-transparent" />
+        <OnChainTreasury lang={lang} />
       </div>
 
       <EligibilityNotice lang={lang} />
