@@ -18,4 +18,12 @@ pub mod my_first_solana_program {
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         initialize::handler(ctx)
     }
+
+    pub fn initialize_protocol(ctx: Context<InitializeProtocol>) -> Result<()> {
+        initialize_protocol::handler(ctx)
+    }
+
+    pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
+        deposit::handler(ctx, amount)
+    }
 }
