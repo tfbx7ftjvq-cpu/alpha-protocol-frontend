@@ -18,7 +18,7 @@ pub struct InitializeProtocol<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(ctx: Context<InitializeProtocol>) -> Result<()> {
+pub fn initialize_protocol_handler(ctx: Context<InitializeProtocol>) -> Result<()> {
     let treasury_state = &mut ctx.accounts.treasury_state;
 
     treasury_state.authority = ctx.accounts.authority.key();

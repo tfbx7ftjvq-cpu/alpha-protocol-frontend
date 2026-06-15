@@ -16,7 +16,7 @@ pub struct Deposit<'info> {
     pub treasury_state: Account<'info, TreasuryState>,
 }
 
-pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
+pub fn deposit_handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     require!(amount > 0, CustomError::InvalidSplitConfig);
 
     let configured_bps = RELIEF_BPS
