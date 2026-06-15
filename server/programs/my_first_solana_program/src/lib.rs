@@ -1,13 +1,16 @@
 use anchor_lang::prelude::*;
 
+pub mod constants;
+pub mod error;
 pub mod instructions;
 pub mod state;
-pub mod error;
-pub mod constants;
 
-use instructions::*;
+pub use constants::*;
+pub use error::*;
+pub use instructions::*;
+pub use state::*;
 
-declare_id!("你的program id");
+declare_id!("HrLBQxUD3XHkB3KABjHXTiBHuAe6jVP2UPqiwmpmH8EY");
 
 #[program]
 pub mod my_first_solana_program {
