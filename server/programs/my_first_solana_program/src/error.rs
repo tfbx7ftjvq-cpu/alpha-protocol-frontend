@@ -1,11 +1,10 @@
 use anchor_lang::prelude::*;
 
 #[error_code]
-pub enum ErrorCode {
-    #[msg("Custom error message")]
-    CustomError,
-    #[msg("Math operation overflowed")]
+pub enum CustomError {
+    #[msg("Math overflow")]
     MathOverflow,
-    #[msg("Invalid treasury split configuration")]
+
+    #[msg("Invalid split config")]
     InvalidSplitConfig,
 }

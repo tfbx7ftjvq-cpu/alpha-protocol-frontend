@@ -1,8 +1,9 @@
 use anchor_lang::prelude::*;
 
-use crate::{
-    BPS_DENOMINATOR, BUYBACK_BPS, ErrorCode, PAYROLL_BPS, RELIEF_BPS, STAKING_BPS,
-    TREASURY_STATE_SEED, TreasuryState,
+use crate::error::CustomError;
+use crate::state::TreasuryState;
+use crate::constants::{
+    BPS_DENOMINATOR, BUYBACK_BPS, PAYROLL_BPS, RELIEF_BPS, STAKING_BPS, TREASURY_STATE_SEED,
 };
 
 #[derive(Accounts)]
@@ -16,16 +17,16 @@ pub struct Deposit<'info> {
 }
 
 pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
-    require!(amount > 0, ErrorCode::InvalidSplitConfig);
+    require!(amount > 0, CustomError::InvalidSplitConfig);
 
     let configured_bps = RELIEF_BPS
         .checked_add(BUYBACK_BPS)
         .and_then(|value| value.checked_add(PAYROLL_BPS))
         .and_then(|value| value.checked_add(STAKING_BPS))
-        .ok_or(ErrorCode::MathOverflow)?;
+        .ok_or(CustomError::MathOverflow)?;
     require!(
         configured_bps == BPS_DENOMINATOR,
-        ErrorCode::InvalidSplitConfig
+        CustomError::InvalidSplitConfig
     );
 
     let relief = split_amount(amount, RELIEF_BPS)?;
@@ -35,29 +36,29 @@ pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
         .checked_sub(relief)
         .and_then(|value| value.checked_sub(buyback))
         .and_then(|value| value.checked_sub(payroll))
-        .ok_or(ErrorCode::MathOverflow)?;
+        .ok_or(CustomError::MathOverflow)?;
 
     let treasury_state = &mut ctx.accounts.treasury_state;
     treasury_state.total_inflow = treasury_state
         .total_inflow
         .checked_add(amount)
-        .ok_or(ErrorCode::MathOverflow)?;
+        .ok_or(CustomError::MathOverflow)?;
     treasury_state.relief_pool = treasury_state
         .relief_pool
         .checked_add(relief)
-        .ok_or(ErrorCode::MathOverflow)?;
+        .ok_or(CustomError::MathOverflow)?;
     treasury_state.buyback_pool = treasury_state
         .buyback_pool
         .checked_add(buyback)
-        .ok_or(ErrorCode::MathOverflow)?;
+        .ok_or(CustomError::MathOverflow)?;
     treasury_state.payroll_pool = treasury_state
         .payroll_pool
         .checked_add(payroll)
-        .ok_or(ErrorCode::MathOverflow)?;
+        .ok_or(CustomError::MathOverflow)?;
     treasury_state.staking_pool = treasury_state
         .staking_pool
         .checked_add(staking)
-        .ok_or(ErrorCode::MathOverflow)?;
+        .ok_or(CustomError::MathOverflow)?;
 
     Ok(())
 }
@@ -66,5 +67,5 @@ fn split_amount(amount: u64, bps: u64) -> Result<u64> {
     amount
         .checked_mul(bps)
         .and_then(|value| value.checked_div(BPS_DENOMINATOR))
-        .ok_or(ErrorCode::MathOverflow.into())
+        .ok_or(CustomError::MathOverflow.into())
 }

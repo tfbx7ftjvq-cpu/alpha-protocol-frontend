@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 
-use crate::{TreasuryState, TREASURY_STATE_SEED};
+use crate::constants::TREASURY_STATE_SEED;
+use crate::state::TreasuryState;
 
 #[derive(Accounts)]
 pub struct InitializeProtocol<'info> {
