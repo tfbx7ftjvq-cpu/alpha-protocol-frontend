@@ -1,691 +1,424 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useWallet } from '@solana/wallet-adapter-react';
-import {
-  Shield,
-  Users,
-  Clock,
-  Vote,
-  Zap,
-  Lock,
-  CheckCircle,
-  XCircle,
-  RefreshCw,
-  SlidersHorizontal,
-  Wallet,
-  PlusCircle,
-} from 'lucide-react';
+import { Buffer } from 'buffer';
+import { useEffect, useState } from 'react';
+import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import { PublicKey } from '@solana/web3.js';
+import { Vote, CheckCircle2, XCircle, ShieldAlert, Award, ChevronRight } from 'lucide-react';
 import { Lang } from '../translations';
+
+if (typeof window !== 'undefined' && !(window as typeof window & { Buffer?: typeof Buffer }).Buffer) {
+  (window as typeof window & { Buffer?: typeof Buffer }).Buffer = Buffer;
+}
+
+const ALPHA_TOKEN_MINT = '6VXo4Ut8wNyhFvHSiXVtnJwZfcoRg8FyNFjMgjokSMu8';
 
 interface Props {
   lang: Lang;
+  onExecuteSuccess?: () => void;
 }
 
-const BASE_YES_VOTES = 4500;
-const BASE_NO_VOTES = 1200;
+const TREASURY_PDA = new PublicKey('2yVkP9w21w78tD6vSAtmfbpukWN5u8VmsZxF8bUSyWhv');
 
-function parsePositive(raw: string) {
-  const n = parseFloat(raw);
-  return Number.isFinite(n) && n > 0 ? n : 0;
+interface Proposal {
+  id: string;
+  titleZh: string;
+  titleEn: string;
+  proposer: string;
+  forVotes: number;
+  againstVotes: number;
+  quorum: number;
+  endTime: number;
+  executed: boolean;
+  status: 'ACTIVE_VOTING' | 'PASSED' | 'DEFEATED' | 'EXECUTED';
+  descZh: string;
+  descEn: string;
 }
 
-function useBump(value: number) {
-  const [bump, setBump] = useState(false);
+export default function DAOGovernance({ lang, onExecuteSuccess }: Props) {
+  const isZh = lang === 'zh';
+  const { connection } = useConnection();
+  const { connected, publicKey } = useWallet();
+  const [userAlphaBalance, setUserAlphaBalance] = useState(0);
+  const [voteError, setVoteError] = useState('');
+
+  const [proposals, setProposals] = useState<Proposal[]>([
+    {
+      id: 'DAO-053',
+      titleZh: '项目 [RugPullX] 绿标合规与 500 USDC 保证金审计',
+      titleEn: 'Project [RugPullX] Green-List Compliance & 500 USDC Deposit Audit',
+      proposer: '8UVQ...vPhe',
+      forVotes: 245000,
+      againstVotes: 120000,
+      quorum: 5000000,
+      endTime: Date.now() + 48 * 60 * 60 * 1000,
+      executed: false,
+      status: 'ACTIVE_VOTING',
+      descZh: '本提案用于审计项目方提交的 500 USDC 合规履约保证金，并以 DAO 投票决定该笔保证金后续执行路径：通过则原路退回申请地址，否决则按国库规则没收充公。',
+      descEn: 'This proposal audits the 500 USDC compliance deposit submitted by the project and uses DAO voting to determine its execution path: pass to refund the applicant address, or reject to confiscate and route into treasury per protocol rules.',
+    },
+    {
+      id: 'DAO-054',
+      titleZh: '紧急理赔倾斜：从国库储备调拨 15,000 USDC 注入理赔池',
+      titleEn: 'Emergency Fund Tilting: Allocate 15,000 USDC from Reserve to Restitution Pool',
+      proposer: '8UVQ...vPhe',
+      forVotes: 410000,
+      againstVotes: 32000,
+      quorum: 5000000,
+      endTime: Date.now() + 48 * 60 * 60 * 1000,
+      executed: false,
+      status: 'ACTIVE_VOTING',
+      descZh: '本提案面向二级市场暴跌情形，授权国库从储备中倾斜 15,000 USDC 至理赔池，以提升即时救济与市场稳定能力。',
+      descEn: 'This proposal targets secondary market crashes and authorizes the treasury to tilt 15,000 USDC from reserves into the restitution pool for immediate relief and stabilization.',
+    },
+    {
+      id: 'DAO-055',
+      titleZh: '全链司法弹劾：将恶意砸盘项目 [AlphaDrain] 永久列入黑名单并没收资产',
+      titleEn: 'Permanent On-Chain Impeachment: Blacklist [AlphaDrain] & Forfeit Assets',
+      proposer: '8UVQ...vPhe',
+      forVotes: 189000,
+      againstVotes: 290000,
+      quorum: 5000000,
+      endTime: Date.now() + 48 * 60 * 60 * 1000,
+      executed: false,
+      status: 'ACTIVE_VOTING',
+      descZh: '本提案用于对恶意地址执行最高司法确权，完成黑名单封禁后将其资产永久没收并进入链上司法处置流程。',
+      descEn: 'This proposal applies the highest judicial on-chain ruling to malicious addresses, blacklisting them permanently and forfeiting assets into the judicial disposal flow.',
+    },
+  ]);
+
+  const [hasVotedMap, setHasVotedMap] = useState<Record<string, boolean>>({});
+  const [voteTypeMap, setVoteTypeMap] = useState<Record<string, 'FOR' | 'AGAINST' | null>>({});
+  const [walletVoteLocks, setWalletVoteLocks] = useState<Record<string, Record<string, boolean>>>({});
+  const [now, setNow] = useState(Date.now());
+  const [txLogMap, setTxLogMap] = useState<Record<string, string[]>>({});
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [activeProposalId, setActiveProposalId] = useState<string>('DAO-053');
+
+  const voteWeight = Math.floor(Math.sqrt(userAlphaBalance));
+  const proposalWeight = voteWeight;
+
   useEffect(() => {
-    setBump(true);
-    const id = setTimeout(() => setBump(false), 160);
-    return () => clearTimeout(id);
-  }, [value]);
-  return bump;
-}
+    const fetchAlphaBalance = async () => {
+      if (!publicKey) {
+        setUserAlphaBalance(0);
+        return;
+      }
+      try {
+        const res = await connection.getParsedTokenAccountsByOwner(publicKey, {
+          mint: new PublicKey(ALPHA_TOKEN_MINT),
+        });
+        const balance = res.value.reduce((sum, account) => {
+          const amount = account.account.data.parsed.info.tokenAmount.uiAmount ?? 0;
+          return sum + amount;
+        }, 0);
+        setUserAlphaBalance(balance);
+      } catch {
+        setUserAlphaBalance(0);
+      }
+    };
 
-function voteButtonClass(connected: boolean, active: boolean, side: 'yes' | 'no') {
-  if (!connected) {
-    return 'border-zinc-700/50 bg-zinc-900/50 text-zinc-500 cursor-not-allowed opacity-50';
-  }
-  if (active) {
-    return side === 'yes'
-      ? 'border-green-400/60 bg-green-400/20 text-green-400'
-      : 'border-red-400/60 bg-red-400/20 text-red-400';
-  }
-  return side === 'yes'
-    ? 'border-green-500/40 bg-green-500/10 text-green-400 hover:bg-green-500/20 hover:border-green-500/60 hover:shadow-green-500/10 hover:shadow-lg'
-    : 'border-red-500/40 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:border-red-500/60 hover:shadow-red-500/10 hover:shadow-lg';
-}
+    void fetchAlphaBalance();
+  }, [connection, publicKey]);
 
-// ─── Quadratic Voting Panel (DAO 003) ─────────────────────────────────────────
-function QuadraticVotingPanel({
-  lang,
-  connected,
-  connectHint,
-  voteAmount,
-  setVoteAmount,
-}: {
-  lang: Lang;
-  connected: boolean;
-  connectHint: string;
-  voteAmount: string;
-  setVoteAmount: (v: string) => void;
-}) {
-  const zh = lang === 'zh';
-  const [yesVotes, setYesVotes] = useState(BASE_YES_VOTES);
-  const [noVotes, setNoVotes] = useState(BASE_NO_VOTES);
-  const [lastVote, setLastVote] = useState<'yes' | 'no' | null>(null);
+  const activeProposal = proposals.find((item) => item.id === activeProposalId) ?? proposals[0];
 
-  const stake = useMemo(() => parsePositive(voteAmount), [voteAmount]);
-  const effectiveVotes = useMemo(() => (stake > 0 ? Math.sqrt(stake) : 0), [stake]);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
-  const totalVotes = yesVotes + noVotes;
-  const yesPct = totalVotes > 0 ? (yesVotes / totalVotes) * 100 : 0;
-  const noPct = totalVotes > 0 ? (noVotes / totalVotes) * 100 : 0;
+  useEffect(() => {
+    setProposals((prev) =>
+      prev.map((item) => {
+        if (item.status !== 'ACTIVE_VOTING' || now <= item.endTime) return item;
+        const nextStatus = item.forVotes > item.againstVotes ? 'PASSED' : 'DEFEATED';
+        return {
+          ...item,
+          status: item.executed ? 'EXECUTED' : nextStatus,
+        };
+      })
+    );
+  }, [now]);
 
-  const yesBump = useBump(yesVotes);
-  const noBump = useBump(noVotes);
-  const evBump = useBump(effectiveVotes);
+  useEffect(() => {
+    const dao053 = proposals.find((item) => item.id === 'DAO-053');
+    if (!dao053 || dao053.status !== 'DEFEATED' || dao053.executed === true) return;
 
-  function castVote(side: 'yes' | 'no') {
-    if (!connected || effectiveVotes <= 0) return;
-    setLastVote(side);
-    if (side === 'yes') setYesVotes((v) => v + effectiveVotes);
-    else setNoVotes((v) => v + effectiveVotes);
-  }
+    setProposals((prev) =>
+      prev.map((item) =>
+        item.id === 'DAO-053' && item.status === 'DEFEATED' && item.executed === false
+          ? { ...item, executed: true, status: 'EXECUTED' }
+          : item
+      )
+    );
+    if (onExecuteSuccess) onExecuteSuccess();
+    console.info('[treasury]', {
+      status: 'FORFEIT_LOCKED',
+      proposalId: dao053.id,
+      treasury: TREASURY_PDA.toBase58(),
+      note: '500 USDC + 100,000 $α permanently retained and routed into restitution sub-pools',
+    });
+  }, [proposals, onExecuteSuccess]);
+
+  useEffect(() => {
+    if (!activeProposal && proposals.length > 0) setActiveProposalId(proposals[0].id);
+  }, [activeProposal, proposals]);
+
+  const totalVotes = activeProposal.forVotes + activeProposal.againstVotes;
+  const forPercentage = totalVotes > 0 ? (activeProposal.forVotes / totalVotes) * 100 : 0;
+  const quorumPercentage = Math.min((totalVotes / activeProposal.quorum) * 100, 100);
+  const currentVoteType = voteTypeMap[activeProposal.id] ?? null;
+  const hasVoted = hasVotedMap[activeProposal.id] ?? false;
+  const txLog = txLogMap[activeProposal.id] ?? [];
+
+  const handleVote = (proposalId: string, type: 'YES' | 'NO') => {
+    if (!connected || !publicKey || isProcessing) return;
+    if (userAlphaBalance <= 0) {
+      setVoteError(isZh ? '未持有 $α 代币，无法参与审判' : 'You do not hold $α tokens and cannot participate in the tribunal');
+      return;
+    }
+
+    const voteWeight = Math.floor(Math.sqrt(userAlphaBalance));
+    if (voteWeight <= 0) return;
+
+    const walletKey = publicKey.toBase58();
+    if (walletVoteLocks[proposalId]?.[walletKey]) return;
+
+    setVoteError('');
+    setIsProcessing(true);
+    setWalletVoteLocks((prev) => ({
+      ...prev,
+      [proposalId]: {
+        ...(prev[proposalId] ?? {}),
+        [walletKey]: true,
+      },
+    }));
+    setProposals((prev) =>
+      prev.map((item) =>
+        item.id === proposalId
+          ? {
+              ...item,
+              forVotes: type === 'YES' ? item.forVotes + voteWeight : item.forVotes,
+              againstVotes: type === 'NO' ? item.againstVotes + voteWeight : item.againstVotes,
+            }
+          : item
+      )
+    );
+    setTxLogMap((prev) => ({
+      ...prev,
+      [proposalId]: [
+        ...(prev[proposalId] ?? []),
+        isZh
+          ? `[CALL] ${proposalId} 投票签名中：当前钱包 ${walletKey.slice(0, 4)}...${walletKey.slice(-4)}，权重 ${voteWeight.toLocaleString()} ve-α`
+          : `[CALL] ${proposalId} vote signing: wallet ${walletKey.slice(0, 4)}...${walletKey.slice(-4)}, weight ${voteWeight.toLocaleString()} ve-α`,
+      ],
+    }));
+
+    setTimeout(() => {
+      setHasVotedMap((prev) => ({ ...prev, [proposalId]: true }));
+      setVoteTypeMap((prev) => ({ ...prev, [proposalId]: type === 'YES' ? 'FOR' : 'AGAINST' }));
+      setIsProcessing(false);
+      setTxLogMap((prev) => ({
+        ...prev,
+        [proposalId]: [
+          ...(prev[proposalId] ?? []),
+          isZh
+            ? `[SUCCESS] 投票成功：${type === 'YES' ? '赞成' : '反对'}，权重 ${voteWeight.toLocaleString()}`
+            : `[SUCCESS] Vote cast: ${type}, weight ${voteWeight.toLocaleString()}`,
+        ],
+      }));
+    }, 1200);
+  };
+
+  const handleExecute = () => {
+    if (activeProposal.status !== 'ACTIVE_VOTING' || isProcessing) return;
+    setIsProcessing(true);
+    setTxLogMap((prev) => ({
+      ...prev,
+      [activeProposal.id]: [
+        ...(prev[activeProposal.id] ?? []),
+        isZh ? '[EXECUTE] 正在广播提案执行指令...' : '[EXECUTE] Broadcasting proposal execution instruction...',
+      ],
+    }));
+
+    setTimeout(() => {
+      setProposals((prev) => prev.map((item) => (item.id === activeProposal.id ? { ...item, status: 'EXECUTED', executed: true } : item)));
+      setIsProcessing(false);
+      setTxLogMap((prev) => ({
+        ...prev,
+        [activeProposal.id]: [
+          ...(prev[activeProposal.id] ?? []),
+          isZh
+            ? `[DISPATCH] ${activeProposal.id} 已执行，国库赔付池解冻权限已释放。`
+            : `[DISPATCH] ${activeProposal.id} executed, treasury payout unlock permission released.`,
+        ],
+      }));
+      if (onExecuteSuccess) onExecuteSuccess();
+    }, 1500);
+  };
 
   return (
-    <div className="border border-green-400/25 bg-green-400/5 rounded-xl overflow-hidden">
-      <div className="px-5 py-4 border-b border-green-400/20 bg-zinc-950/60 flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <Vote className="w-4 h-4 text-green-400 flex-shrink-0" />
-          <div>
-            <p className="text-green-400 font-mono text-xs font-bold uppercase tracking-widest">
-              {zh ? 'DAO 003 号提案 · 二次方投票' : 'DAO Proposal #003 · Quadratic Voting'}
-            </p>
-            <p className="text-zinc-400 font-mono text-[11px] mt-0.5 truncate">
-              {zh
-                ? '针对 X 项目受害者实施 150,000 USDC 救济分发'
-                : '150,000 USDC relief distribution for X Protocol victims'}
-            </p>
+    <div className="border border-zinc-800 bg-zinc-950/20 rounded-xl overflow-hidden mt-8">
+      {/* 组件头部 */}
+      <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-900 bg-zinc-950">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 rounded bg-purple-500/10 border border-purple-500/20">
+            <Vote className="w-3.5 h-3.5 text-purple-400" />
           </div>
-        </div>
-        <span className="ml-auto text-[10px] font-mono font-bold text-cyan-400 border border-cyan-400/30 px-2 py-0.5 rounded">
-          {zh ? '计票中' : 'ACTIVE'}
-        </span>
-      </div>
-
-      <div className="p-5 sm:p-6 space-y-5">
-        <p className="text-zinc-400 font-mono text-xs leading-relaxed">
-          {zh
-            ? '本提案已由 DAO 陪审团表决通过事件定性，现进入链上二次方投票阶段。请投入 α 代币权重参与赞成或反对。'
-            : 'Event qualification passed by jury. On-chain quadratic voting is live — stake α weight to vote FOR or AGAINST.'}
-        </p>
-
-        <div className="border border-cyan-400/30 bg-cyan-400/5 rounded-lg px-4 py-3">
-          <p className="text-cyan-400 font-mono text-xs leading-relaxed">
-            🛡️{' '}
-            {zh
-              ? '治理防线：本自治组织采用二次方投票算法（Votes = √Tokens）。大户资金具备严重边际递减效应，捍卫散户治理主权。'
-              : 'Governance defense: quadratic voting (Votes = √Tokens). Whale capital faces severe diminishing returns — retail sovereignty protected.'}
+          <p className="text-zinc-200 font-mono text-xs font-bold">
+            {isZh ? 'DAO 链上主权治理矩阵' : 'DAO On-Chain Sovereign Governance Matrix'}
           </p>
         </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-2 min-w-0">
-            <label className="text-zinc-500 text-xs font-mono uppercase tracking-wider">
-              {zh ? '计划投出 α 数量' : 'α Tokens to Vote'}
-            </label>
-            <input
-              type="number"
-              min={0}
-              step="any"
-              value={voteAmount}
-              onChange={(e) => setVoteAmount(e.target.value)}
-              disabled={!connected}
-              placeholder={zh ? '输入代币数量' : 'Enter token amount'}
-              className="w-full bg-zinc-950 border border-green-400/25 rounded-lg px-3 py-2.5 text-sm font-mono text-zinc-200 focus:outline-none focus:border-green-400/60 transition-colors disabled:opacity-40"
-            />
-          </div>
-          <div className="bg-zinc-950/80 border border-zinc-700/50 rounded-lg p-4 text-center min-w-0">
-            <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-wider mb-1">
-              {zh ? '有效票数' : 'Effective Votes'}
-            </p>
-            <p
-              className={`text-2xl sm:text-3xl font-bold font-mono text-cyan-400 tabular-nums transition-transform duration-150 ${
-                evBump ? 'scale-[1.03]' : 'scale-100'
-              }`}
-            >
-              {effectiveVotes.toFixed(4)}
-            </p>
-            <p className="text-zinc-600 font-mono text-[10px] mt-1">√(voteAmount)</p>
-          </div>
-        </div>
-
-        {/* Live vote bars */}
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between font-mono text-xs">
-              <span className="text-green-400 font-bold flex items-center gap-1">
-                <CheckCircle className="w-3 h-3" />
-                {zh ? '赞成票' : 'YES'}
-              </span>
-              <span
-                className={`text-green-400 font-bold tabular-nums transition-transform duration-150 ${
-                  yesBump ? 'scale-[1.03]' : ''
-                }`}
-              >
-                {yesVotes.toLocaleString('en-US', { maximumFractionDigits: 2 })} {zh ? '票' : 'votes'}
-              </span>
-            </div>
-            <div className="relative h-4 bg-zinc-800 rounded-full overflow-hidden border border-zinc-700/50">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-green-800 to-green-400 transition-all duration-500 relative overflow-hidden"
-                style={{ width: `${yesPct}%` }}
-              >
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
-              </div>
-            </div>
-            <p className="text-[10px] font-mono text-zinc-600 text-right tabular-nums">{yesPct.toFixed(2)}%</p>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between font-mono text-xs">
-              <span className="text-red-400 font-bold flex items-center gap-1">
-                <XCircle className="w-3 h-3" />
-                {zh ? '反对票' : 'NO'}
-              </span>
-              <span
-                className={`text-red-400 font-bold tabular-nums transition-transform duration-150 ${
-                  noBump ? 'scale-[1.03]' : ''
-                }`}
-              >
-                {noVotes.toLocaleString('en-US', { maximumFractionDigits: 2 })} {zh ? '票' : 'votes'}
-              </span>
-            </div>
-            <div className="relative h-4 bg-zinc-800 rounded-full overflow-hidden border border-zinc-700/50">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-red-900 to-red-400 transition-all duration-500"
-                style={{ width: `${noPct}%` }}
-              />
-            </div>
-            <p className="text-[10px] font-mono text-zinc-600 text-right tabular-nums">{noPct.toFixed(2)}%</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-600">
-          <Clock className="w-3 h-3" />
-          {zh ? '剩余 32 小时 10 分钟 · 链上实时计票' : '32h 10m remaining · on-chain tally LIVE'}
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => castVote('yes')}
-            disabled={!connected || effectiveVotes <= 0}
-            className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border text-xs font-mono font-bold tracking-widest uppercase transition-all duration-200 ${voteButtonClass(
-              connected,
-              lastVote === 'yes',
-              'yes'
-            )}`}
-          >
-            <CheckCircle className="w-3.5 h-3.5" />
-            {!connected ? connectHint : zh ? '投赞成票' : 'Vote YES'}
-          </button>
-          <button
-            type="button"
-            onClick={() => castVote('no')}
-            disabled={!connected || effectiveVotes <= 0}
-            className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border text-xs font-mono font-bold tracking-widest uppercase transition-all duration-200 ${voteButtonClass(
-              connected,
-              lastVote === 'no',
-              'no'
-            )}`}
-          >
-            <XCircle className="w-3.5 h-3.5" />
-            {!connected ? connectHint : zh ? '投反对票' : 'Vote NO'}
-          </button>
-        </div>
-
         <button
           type="button"
-          disabled={!connected}
-          className={`w-full flex items-center justify-center gap-2 py-3 rounded-lg border text-xs font-mono font-bold uppercase tracking-wider transition-all duration-200 ${
-            connected
-              ? 'border-green-500/50 bg-green-500/10 text-green-400 hover:bg-green-500/20 hover:border-green-500/60'
-              : 'border-zinc-700/50 bg-zinc-900/50 text-zinc-500 cursor-not-allowed opacity-50'
-          }`}
+          onClick={() => setActiveProposalId((prev) => {
+            const currentIndex = proposals.findIndex((item) => item.id === prev);
+            const nextIndex = (currentIndex + 1) % proposals.length;
+            return proposals[nextIndex]?.id ?? prev;
+          })}
+          className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-purple-400/20 bg-purple-400/5 text-purple-400 uppercase tracking-wider"
         >
-          <PlusCircle className="w-4 h-4" />
-          {!connected ? connectHint : zh ? '发起新提案' : 'Submit New Proposal'}
+          {activeProposal.id} · {activeProposal.status}
         </button>
       </div>
-    </div>
-  );
-}
 
-// ─── Payroll slot registry ────────────────────────────────────────────────────
-interface PayrollSlot {
-  id: number;
-  roleEn: string;
-  roleZh: string;
-  tagEn: string;
-  tagZh: string;
-  poolPct: number;
-  revenuePct: number;
-  address: string;
-  status: 'active' | 'impeachment_pending' | 'dismissed';
-}
-
-const INITIAL_SLOTS: PayrollSlot[] = [
-  { id: 1, roleEn: 'Core Technical Infrastructure', roleZh: '核心技术流', tagEn: 'Core Dev', tagZh: '核心开发', poolPct: 40, revenuePct: 8.0, address: 'AnLi...mF9k', status: 'impeachment_pending' },
-  { id: 2, roleEn: 'Global Growth & Community Operations', roleZh: '全球宣发流', tagEn: 'Global Ops', tagZh: '全球运营', poolPct: 30, revenuePct: 6.0, address: 'Ops7...XyZ2', status: 'active' },
-  { id: 3, roleEn: 'Jury Pool', roleZh: '陪审团池', tagEn: 'Jury Pool', tagZh: '陪审团', poolPct: 20, revenuePct: 4.0, address: 'Jury...K3p1', status: 'active' },
-  { id: 4, roleEn: 'Protocol Reserve', roleZh: '协议储备金', tagEn: 'Reserve', tagZh: '储备金', poolPct: 10, revenuePct: 2.0, address: 'Res9...7Wq0', status: 'active' },
-];
-
-const PAYROLL_LEGEND = [
-  { label: { en: 'Core Dev 40%', zh: '核心开发 40%' }, dot: 'bg-cyan-500' },
-  { label: { en: 'Global Ops 30%', zh: '全球运营 30%' }, dot: 'bg-green-500' },
-  { label: { en: 'Jury Pool 20%', zh: '陪审团池 20%' }, dot: 'bg-yellow-500' },
-  { label: { en: 'Reserve 10%', zh: '储备金 10%' }, dot: 'bg-zinc-500' },
-];
-
-function VoteBar({
-  label,
-  value,
-  threshold,
-  passed,
-  barClass,
-  labelClass,
-}: {
-  label: string;
-  value: number;
-  threshold?: number;
-  passed?: boolean;
-  barClass: string;
-  labelClass: string;
-}) {
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between font-mono text-[11px]">
-        <span className={`font-bold ${passed ? 'text-green-400' : labelClass}`}>{label}</span>
-        <span className={`font-bold tabular-nums ${passed ? 'text-green-400' : labelClass}`}>{value.toFixed(1)}%</span>
-      </div>
-      <div className={`relative bg-zinc-800 rounded-full overflow-hidden border border-zinc-700/50 ${threshold !== undefined ? 'h-4' : 'h-2.5'}`}>
-        {threshold !== undefined && (
-          <div className="absolute top-0 bottom-0 w-0.5 bg-green-400/60 z-10" style={{ left: `${threshold}%` }} />
-        )}
-        <div
-          className={`h-full rounded-full transition-all duration-500 relative overflow-hidden ${barClass}`}
-          style={{ width: `${Math.min(value, 100)}%` }}
-        >
-          {threshold !== undefined && (
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function RoleElectionDashboard({
-  lang,
-  connected,
-  connectHint,
-  voteAmount,
-}: {
-  lang: Lang;
-  connected: boolean;
-  connectHint: string;
-  voteAmount: string;
-}) {
-  const zh = lang === 'zh';
-  const [slots, setSlots] = useState<PayrollSlot[]>(INITIAL_SLOTS);
-  const [yesVotes, setYesVotes] = useState(42.5);
-  const [noVotes, setNoVotes] = useState(15.0);
-  const [p004Voted, setP004Voted] = useState<'for' | 'against' | null>(null);
-  const [p004Executed, setP004Executed] = useState(false);
-
-  const effectiveVotes = useMemo(() => {
-    const s = parsePositive(voteAmount);
-    return s > 0 ? Math.sqrt(s) : 0;
-  }, [voteAmount]);
-
-  const THRESHOLD = 51.0;
-  const p004Passed = yesVotes >= THRESHOLD;
-
-  function vote(side: 'for' | 'against') {
-    if (!connected || effectiveVotes <= 0 || p004Voted) return;
-    setP004Voted(side);
-    const delta = effectiveVotes * 0.4;
-    if (side === 'for') setYesVotes((v) => parseFloat(Math.min(v + delta, 100).toFixed(1)));
-    else setNoVotes((v) => parseFloat(Math.min(v + delta, 100).toFixed(1)));
-  }
-
-  function executeProposal() {
-    if (!connected || !p004Passed || p004Executed) return;
-    setP004Executed(true);
-    setSlots((prev) => prev.map((s) => (s.id === 1 ? { ...s, address: 'NewD...8v7x', status: 'active' } : s)));
-  }
-
-  const visibleSlots = slots.filter((s) => s.status !== 'dismissed');
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2 border-b border-zinc-800 pb-2">
-        <RefreshCw className="w-4 h-4 text-zinc-500" />
-        <h4 className="text-sm font-bold text-zinc-100 font-mono">
-          {zh ? '3. 动态基础设施角色选举与弹劾看板' : '3. Dynamic Infrastructure Role Election & Impeachment'}
-        </h4>
-      </div>
-
-      <div className="border border-zinc-700/50 bg-zinc-900/60 rounded-xl p-4 space-y-3">
-        <p className="text-zinc-500 font-mono text-[10px] uppercase tracking-widest">
-          {zh ? '贡献者薪资池分配（占协议总营收 20%）' : 'Contributor Payroll Pool — 20% of Protocol Revenue'}
-        </p>
-        <div className="flex h-3 rounded-full overflow-hidden gap-0.5">
-          <div className="bg-cyan-500/80" style={{ width: '40%' }} />
-          <div className="bg-green-500/80" style={{ width: '30%' }} />
-          <div className="bg-yellow-500/80" style={{ width: '20%' }} />
-          <div className="bg-zinc-500/80" style={{ width: '10%' }} />
-        </div>
-        <div className="flex flex-wrap gap-x-5 gap-y-1">
-          {PAYROLL_LEGEND.map(({ label, dot }) => (
-            <div key={label.en} className="flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full ${dot}`} />
-              <span className="text-[10px] font-mono text-zinc-400">{zh ? label.zh : label.en}</span>
+      <div className="p-5 space-y-6">
+        {/* 提案主卡片 */}
+        <div className="border border-zinc-900 bg-zinc-950/40 rounded-xl p-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 border-b border-zinc-900 pb-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono font-bold text-purple-400 bg-purple-500/5 border border-purple-500/10 px-1.5 py-0.5 rounded">
+                  {activeProposal.id}
+                </span>
+                <h3 className="text-sm font-bold text-zinc-200 font-mono">
+                  {isZh ? activeProposal.titleZh : activeProposal.titleEn}
+                </h3>
+              </div>
+              <p className="text-zinc-500 font-mono text-[10px]">
+                {isZh ? '提案发起人' : 'Proposer'}: <span className="text-zinc-400 font-bold">{activeProposal.proposer}</span>
+              </p>
             </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="border border-zinc-700/50 rounded-xl overflow-hidden bg-zinc-900/40">
-        <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/70 flex items-center gap-2">
-          <Shield className="w-3.5 h-3.5 text-zinc-500" />
-          <span className="text-zinc-300 font-mono text-xs font-bold uppercase tracking-widest">
-            {zh ? '当前活跃地址登记册' : 'Current Active Registry'}
-          </span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs font-mono">
-            <thead>
-              <tr className="border-b border-zinc-800 bg-zinc-900/50">
-                {[zh ? '槽位' : 'Slot', zh ? '职能' : 'Role', zh ? '池占比' : 'Pool', zh ? '地址' : 'Address', zh ? '状态' : 'Status'].map((col) => (
-                  <th key={col} className="text-left px-4 py-2.5 text-zinc-500 uppercase tracking-widest text-[10px] font-bold whitespace-nowrap">
-                    {col}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {visibleSlots.map((slot) => (
-                <tr key={slot.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30">
-                  <td className="px-4 py-3 text-zinc-500">#{slot.id}</td>
-                  <td className="px-4 py-3 text-zinc-200 font-bold">{zh ? slot.roleZh : slot.roleEn}</td>
-                  <td className="px-4 py-3 text-cyan-400 font-bold">{slot.poolPct}%</td>
-                  <td className="px-4 py-3 text-zinc-300">{slot.address}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`text-[10px] px-2 py-0.5 rounded border ${
-                        slot.status === 'impeachment_pending'
-                          ? 'border-red-400/40 bg-red-400/10 text-red-400'
-                          : 'border-green-400/30 bg-green-400/5 text-green-400'
-                      }`}
-                    >
-                      {slot.status === 'impeachment_pending' ? (zh ? '弹劾待决' : 'PENDING') : zh ? '活跃' : 'ACTIVE'}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="border border-cyan-400/25 bg-cyan-400/5 rounded-xl p-5 space-y-4">
-        <p className="text-zinc-100 font-mono text-sm font-bold">
-          {zh ? '[提案 #004 - 替换核心技术基础设施负责人]' : '[Proposal #004 - Replace Core Infrastructure Lead]'}
-        </p>
-        <VoteBar
-          label={zh ? '赞成' : 'YES'}
-          value={yesVotes}
-          threshold={THRESHOLD}
-          passed={p004Passed}
-          barClass={p004Passed ? 'bg-gradient-to-r from-green-700 to-green-400' : 'bg-gradient-to-r from-zinc-600 to-zinc-400'}
-          labelClass="text-zinc-300"
-        />
-        <VoteBar label={zh ? '反对' : 'NO'} value={noVotes} barClass="bg-gradient-to-r from-zinc-700 to-zinc-500" labelClass="text-zinc-500" />
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => vote('for')}
-            disabled={!connected || p004Voted !== null || effectiveVotes <= 0}
-            className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border text-xs font-mono font-bold uppercase transition-all duration-200 ${voteButtonClass(
-              connected,
-              p004Voted === 'for',
-              'yes'
-            )}`}
-          >
-            <CheckCircle className="w-3.5 h-3.5" />
-            {!connected ? connectHint : zh ? '投赞成票' : 'Vote YES'}
-          </button>
-          <button
-            type="button"
-            onClick={() => vote('against')}
-            disabled={!connected || p004Voted !== null || effectiveVotes <= 0}
-            className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border text-xs font-mono font-bold uppercase transition-all duration-200 ${voteButtonClass(
-              connected,
-              p004Voted === 'against',
-              'no'
-            )}`}
-          >
-            <XCircle className="w-3.5 h-3.5" />
-            {!connected ? connectHint : zh ? '投反对票' : 'Vote NO'}
-          </button>
-        </div>
-
-        {p004Passed && !p004Executed && (
-          <button
-            type="button"
-            onClick={executeProposal}
-            disabled={!connected}
-            className={`w-full py-2.5 rounded-lg border text-xs font-mono font-bold uppercase tracking-widest transition-all duration-200 ${
-              connected
-                ? 'border-green-400/50 bg-green-400/15 text-green-400 hover:bg-green-400/25'
-                : 'border-zinc-700/50 text-zinc-500 cursor-not-allowed opacity-50'
-            }`}
-          >
-            {connected ? (zh ? '确认执行地址覆写' : 'Confirm Address Overwrite') : connectHint}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-const GENESIS_SPLITS = [
-  { pct: 50, labelZh: '散户赔付救济金池', labelEn: 'Retail Relief Pool', color: 'text-green-400', track: 'bg-green-400', border: 'border-green-400/30' },
-  { pct: 20, labelZh: '自动回购销毁矩阵', labelEn: 'Buyback & Burn Matrix', color: 'text-red-400', track: 'bg-red-400', border: 'border-red-400/30' },
-  { pct: 20, labelZh: 'DAO 建设者工资池', labelEn: 'DAO Contributor Payroll', color: 'text-blue-400', track: 'bg-blue-400', border: 'border-blue-400/30' },
-  { pct: 10, labelZh: '纯代币质押分红池', labelEn: 'Pure Staking Dividend', color: 'text-yellow-400', track: 'bg-yellow-400', border: 'border-yellow-400/30' },
-];
-
-function GenesisParameterConsole({ lang }: { lang: Lang }) {
-  const zh = lang === 'zh';
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 border-b border-zinc-800 pb-2">
-        <SlidersHorizontal className="w-4 h-4 text-zinc-500" />
-        <h4 className="text-sm font-bold text-zinc-100 font-mono">
-          {zh ? '5. ⚙️ 创世参数微调控制台' : '5. ⚙️ Genesis Parameter Tuning Console'}
-        </h4>
-      </div>
-      <div className="border border-zinc-700/40 bg-zinc-900/40 rounded-xl p-5 space-y-3">
-        {GENESIS_SPLITS.map((s) => (
-          <div key={s.labelEn} className="space-y-1">
-            <div className="flex justify-between font-mono text-[11px]">
-              <span className={`font-bold ${s.color}`}>{zh ? s.labelZh : s.labelEn}</span>
-              <span className={`font-black ${s.color}`}>{s.pct}%</span>
-            </div>
-            <div className="h-4 bg-zinc-800 rounded-full overflow-hidden border border-zinc-700/40">
-              <div className={`h-full ${s.track} opacity-40 rounded-full`} style={{ width: `${s.pct}%` }} />
+            <div className="text-right shrink-0">
+              <p className="text-zinc-600 font-mono text-[9px] uppercase tracking-wider">{isZh ? '投票倒计时' : 'Voting Ends In'}</p>
+              <p className="text-sm font-bold font-mono text-zinc-300 animate-pulse">{activeProposal.endTime}</p>
             </div>
           </div>
-        ))}
-        <p className="text-zinc-600 font-mono text-[10px] pt-2 border-t border-zinc-800">
-          {zh ? '创世参数已链上锁定至 Epoch 10' : 'Genesis parameters locked on-chain until Epoch 10'}
-        </p>
-      </div>
-    </div>
-  );
-}
 
-const content = {
-  zh: {
-    heading: 'α 协议双轨制去中心化治理看板',
-    matrixTitle: '治理权限分摊矩阵',
-    track1Title: '轨道一：陪审团日常裁决提案',
-    track1Scope: '适用场景：绿标合规审计评级、涉嫌 Rug 资产定性、链上清算纠纷初审。',
-    track1Threshold: '法定通过门槛：51% 相对多数赞成票。',
-    track2Title: '轨道二：国库调拨与最高弹劾提案',
-    track2Scope: '适用场景：动用多签蓄水池资金理赔、修改底层风控参数。',
-    track2Threshold: '法定通过门槛：66% 绝对多数赞成票。',
-    votingTitle: '二次方投票治理中心',
-    verifiabilityTitle: '链上治理对账提示',
-    verifiabilityText:
-      '连接钱包后，系统将读取您在 Realms (SPL-Governance) 中的 ve-lock 权重。有效票数 = √(投入 α 数量)，大户边际效益递减。',
-  },
-  en: {
-    heading: 'α Protocol Dual-Track DAO Governance',
-    matrixTitle: 'Governance Authorization Matrix',
-    track1Title: 'Track 1: Jury Verdict Registry',
-    track1Scope: 'Scope: compliance ratings, rug determination, dispute review.',
-    track1Threshold: 'Threshold: 51% relative majority.',
-    track2Title: 'Track 2: Supreme Veto & Treasury',
-    track2Scope: 'Scope: treasury disbursement, core parameter changes.',
-    track2Threshold: 'Threshold: 66% supermajority.',
-    votingTitle: 'Quadratic Voting Center',
-    verifiabilityTitle: 'On-Chain Verifiability',
-    verifiabilityText:
-      'When connected, ve-lock weight is fetched from Realms. Effective Votes = √(α staked) — whale diminishing returns enforced.',
-  },
-};
+          {/* 提案描述 */}
+          <p className="text-zinc-400 font-mono text-xs leading-relaxed bg-black/20 border border-zinc-900/60 p-3 rounded-lg">
+            {isZh ? activeProposal.descZh : activeProposal.descEn}
+          </p>
 
-export default function DAOGovernance({ lang }: Props) {
-  const c = content[lang];
-  const zh = lang === 'zh';
-  const { publicKey, connected } = useWallet();
-  const [voteAmount, setVoteAmount] = useState('10000');
+          {/* 进度条：赞成率 与 法定人数(Quorum) */}
+          <div className="space-y-3 pt-2">
+            {/* 赞成 vs 反对 */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-[11px] font-mono">
+                <span className="text-green-400 font-bold">{isZh ? '赞成' : 'FOR'}: {activeProposal.forVotes.toLocaleString()} ({forPercentage.toFixed(1)}%)</span>
+                <span className="text-red-400 font-bold">{isZh ? '反对' : 'AGAINST'}: {activeProposal.againstVotes.toLocaleString()}</span>
+              </div>
+              <div className="h-2 w-full bg-zinc-900 rounded-full overflow-hidden flex">
+                <div className="bg-green-500 h-full transition-all duration-500" style={{ width: `${forPercentage}%` }} />
+                <div className="bg-red-500 h-full transition-all duration-500" style={{ width: `${100 - forPercentage}%` }} />
+              </div>
+            </div>
 
-  const connectHint = zh ? '请先连接钱包以激活投票权' : 'Connect wallet to activate voting';
-  const shortAddress = publicKey
-    ? `${publicKey.toBase58().slice(0, 4)}...${publicKey.toBase58().slice(-4)}`
-    : null;
+            {/* Quorum 进度 */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-[10px] font-mono text-zinc-500">
+                <span>{isZh ? '当前投票总量' : 'Current Casted'}: {totalVotes.toLocaleString()}</span>
+                <span>{isZh ? '法定通过票数(Quorum)' : 'Quorum Require'}: {activeProposal.quorum.toLocaleString()} ({quorumPercentage.toFixed(1)}%)</span>
+              </div>
+              <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden">
+                <div className="bg-purple-500 h-full transition-all duration-500" style={{ width: `${quorumPercentage}%` }} />
+              </div>
+            </div>
+          </div>
 
-  const trackConfig = [
-    {
-      icon: Users,
-      border: 'border-green-400/20 bg-green-400/5',
-      titleColor: 'text-green-400',
-      leftBorder: 'border-green-400/30',
-      thresholdColor: 'text-green-300/90',
-      barColor: 'bg-green-400',
-      pct: 51,
-      title: c.track1Title,
-      scope: c.track1Scope,
-      threshold: c.track1Threshold,
-    },
-    {
-      icon: Zap,
-      border: 'border-orange-400/20 bg-orange-400/5',
-      titleColor: 'text-orange-400',
-      leftBorder: 'border-orange-400/30',
-      thresholdColor: 'text-orange-300/90',
-      barColor: 'bg-orange-400',
-      pct: 66,
-      title: c.track2Title,
-      scope: c.track2Scope,
-      threshold: c.track2Threshold,
-    },
-  ];
+          {/* 交互控制台 */}
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <button
+              onClick={() => handleVote(activeProposal.id, 'YES')}
+              disabled={hasVotedMap[activeProposal.id] || isProcessing || activeProposal.status !== 'ACTIVE_VOTING'}
+              className={`flex-1 py-2.5 rounded font-mono font-bold text-xs uppercase tracking-wider border transition-all flex items-center justify-center gap-2 ${
+                currentVoteType === 'FOR'
+                  ? 'bg-green-500/10 border-green-500/40 text-green-400'
+                  : hasVoted
+                  ? 'bg-zinc-950 border-zinc-900 text-zinc-600 cursor-not-allowed'
+                  : 'bg-zinc-900 hover:bg-zinc-850 border-zinc-800 hover:border-green-500/30 text-green-400'
+              }`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              {isZh ? '投赞成票' : 'Vote For'} {currentVoteType === 'FOR' && '✓'}
+            </button>
 
-  return (
-    <section className="space-y-8">
-      <div className="flex items-center gap-3">
-        <Vote className="w-5 h-5 text-green-400" />
-        <h3 className="text-lg font-bold text-zinc-200 font-mono tracking-wide">{c.heading}</h3>
-      </div>
+            <button
+              onClick={() => handleVote(activeProposal.id, 'NO')}
+              disabled={hasVotedMap[activeProposal.id] || isProcessing || activeProposal.status !== 'ACTIVE_VOTING'}
+              className={`flex-1 py-2.5 rounded font-mono font-bold text-xs uppercase tracking-wider border transition-all flex items-center justify-center gap-2 ${
+                currentVoteType === 'AGAINST'
+                  ? 'bg-red-500/10 border-red-500/40 text-red-400'
+                  : hasVoted
+                  ? 'bg-zinc-950 border-zinc-900 text-zinc-600 cursor-not-allowed'
+                  : 'bg-zinc-900 hover:bg-zinc-850 border-zinc-800 hover:border-red-500/30 text-red-400'
+              }`}
+            >
+              <XCircle className="w-3.5 h-3.5" />
+              {isZh ? '投反对票' : 'Vote Against'} {currentVoteType === 'AGAINST' && '✓'}
+            </button>
 
-      <div
-        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border font-mono text-xs transition-colors ${
-          connected ? 'border-green-400/30 bg-green-400/5 text-green-400' : 'border-zinc-800 bg-zinc-950 text-zinc-500'
-        }`}
-      >
-        <Wallet className="w-3.5 h-3.5 flex-shrink-0" />
-        {connected && shortAddress ? (
-          <span>
-            {zh ? '治理账户' : 'Governance Account'}: <span className="font-bold tabular-nums">{shortAddress}</span>
-          </span>
-        ) : (
-          <span>{connectHint}</span>
+            {/* 如果达到了 Quorum 且尚未执行，开放执行按钮模拟 */}
+            {totalVotes >= activeProposal.quorum && activeProposal.status === 'ACTIVE_VOTING' && (
+              <button
+                onClick={handleExecute}
+                disabled={isProcessing}
+                className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 border border-purple-500 text-white font-mono font-bold text-xs uppercase tracking-wider rounded transition-all animate-pulse flex items-center justify-center gap-1.5"
+              >
+                <Award className="w-3.5 h-3.5" />
+                {isZh ? '执行提案' : 'Execute'}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 投票权力状态卡片 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="bg-zinc-950/40 border border-zinc-900 rounded-lg p-4 flex items-center justify-between">
+            <div>
+              <p className="text-zinc-600 font-mono text-[9px] uppercase tracking-widest mb-0.5">{isZh ? '你的当前治理权重' : 'Your Voting Weight'}</p>
+              <p className="text-base font-black font-mono text-purple-400 tabular-nums">
+                {proposalWeight.toLocaleString()} <span className="text-zinc-600 text-xs">ve-α</span>
+              </p>
+            </div>
+            <ShieldAlert className="w-5 h-5 text-purple-500/40" />
+          </div>
+
+          <div className="bg-zinc-950/40 border border-zinc-900 rounded-lg p-4 flex items-center justify-between">
+            <div>
+              <p className="text-zinc-600 font-mono text-[9px] uppercase tracking-widest mb-0.5">{isZh ? '提案治理通过率阈值' : 'Governance Threshold'}</p>
+              <p className="text-base font-black font-mono text-zinc-400 tabular-nums">
+                &gt; 66.7% <span className="text-zinc-600 text-xs">Supermajority</span>
+              </p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-zinc-700" />
+          </div>
+        </div>
+
+        {/* 交互日志输出终端 */}
+        {(voteError || txLog.length > 0) && (
+          <div className="border border-purple-900/30 bg-black rounded-lg p-3 font-mono text-[11px] space-y-1">
+            <p className="text-purple-400 font-bold border-b border-purple-900/20 pb-1 mb-1.5 uppercase tracking-widest text-[9px]">
+              {isZh ? '🏛️ 治理多签调用日志' : '🏛️ Governance Multisig Call Log'}
+            </p>
+            {voteError && <div className="text-red-400 break-all leading-relaxed">{voteError}</div>}
+            {txLog.map((log, index) => (
+              <div key={index} className="text-zinc-300 break-all leading-relaxed">
+                {log}
+              </div>
+            ))}
+          </div>
         )}
       </div>
-
-      {/* 1. Matrix */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-2 border-b border-zinc-800 pb-2">
-          <Shield className="w-4 h-4 text-zinc-500" />
-          <h4 className="text-sm font-bold text-zinc-100 font-mono">1. {c.matrixTitle}</h4>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {trackConfig.map((tr) => {
-            const Icon = tr.icon;
-            return (
-              <div key={tr.title} className={`border ${tr.border} rounded-xl p-5 space-y-3`}>
-                <div className="flex items-center gap-2">
-                  <Icon className={`w-4 h-4 ${tr.titleColor}`} />
-                  <p className={`text-sm font-bold ${tr.titleColor} font-mono`}>{tr.title}</p>
-                </div>
-                <div className={`pl-3 border-l-2 ${tr.leftBorder} space-y-2`}>
-                  <p className="text-xs text-zinc-400 font-mono">{tr.scope}</p>
-                  <p className={`text-xs ${tr.thresholdColor} font-mono font-semibold`}>{tr.threshold}</p>
-                </div>
-                <div className="relative h-2 bg-zinc-800 rounded-full overflow-hidden">
-                  <div className={`absolute top-0 bottom-0 w-0.5 ${tr.barColor}/80`} style={{ left: `${tr.pct}%` }} />
-                  <div className={`h-full ${tr.barColor}/20 rounded-full`} style={{ width: `${tr.pct}%` }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 2. Quadratic Voting — DAO 003 */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-2 border-b border-zinc-800 pb-2">
-          <Vote className="w-4 h-4 text-green-400" />
-          <h4 className="text-sm font-bold text-zinc-100 font-mono">2. {c.votingTitle}</h4>
-        </div>
-        <QuadraticVotingPanel
-          lang={lang}
-          connected={connected}
-          connectHint={connectHint}
-          voteAmount={voteAmount}
-          setVoteAmount={setVoteAmount}
-        />
-      </div>
-
-      <RoleElectionDashboard lang={lang} connected={connected} connectHint={connectHint} voteAmount={voteAmount} />
-
-      <GenesisParameterConsole lang={lang} />
-
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 border-b border-zinc-800 pb-2">
-          <Lock className="w-4 h-4 text-zinc-500" />
-          <h4 className="text-sm font-bold text-zinc-100 font-mono">6. {c.verifiabilityTitle}</h4>
-        </div>
-        <div className="border border-zinc-700/50 bg-zinc-900/50 rounded-xl p-4 flex items-start gap-3">
-          <Shield className="w-4 h-4 text-zinc-400 flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-zinc-400 font-mono leading-relaxed">{c.verifiabilityText}</p>
-        </div>
-      </div>
-    </section>
+    </div>
   );
 }

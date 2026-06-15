@@ -1,0 +1,25 @@
+{
+  "auditId": "AUDIT-466616272",
+  "timestamp": 1780395397,
+  "chainState": {
+    "currentSlot": 466616272,
+    "blockHash": "DevnetFinalizedBlockhashStub",
+    "pdaAddress": "8UVQ1SMYZmcKLGwBcoJJFKkFPtBAw1A9sR77s8GZQeJo"
+  },
+  "financialLedger": {
+    "totalInflow": 0,
+    "allocatedPools": {
+      "relief": 0,
+      "burn": 0,
+      "payroll": 0,
+      "ecosystem": 0
+    },
+    "onChainBalances": {
+      "usdc": 0,
+      "alpha": 0
+    }
+  },
+  "anomalyReport": {
+    "status": "MATCHED"
+  }
+}

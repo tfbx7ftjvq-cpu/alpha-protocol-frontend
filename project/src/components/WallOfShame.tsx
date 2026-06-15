@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useWallet } from '@solana/wallet-adapter-react';
+import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import { PublicKey, Transaction } from '@solana/web3.js';
+import { getAssociatedTokenAddress, createAssociatedTokenAccountInstruction, createTransferCheckedInstruction, getMint } from '@solana/spl-token';
 import {
   BadgeCheck,
   ExternalLink,
@@ -72,6 +74,11 @@ const certifiedData = [
   { name: 'Aegis Liquidity', chain: 'SOL', contribution: '1,800', date: '2026-05-24', rating: 'AA', ratingZh: '良好' },
 ];
 
+const ALPHA_TOKEN_MINT = new PublicKey('6VXo4Ut8wNyhFvHSiXVtnJwZfcoRg8FyNFjMgjokSMu8');
+const ALPHA_THRESHOLD = 100000;
+const TREASURY_PDA = new PublicKey('2yVkP9w21w78tD6vSAtmfbpukWN5u8VmsZxF8bUSyWhv');
+const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+
 function statusBadge(status: ExposureProject['status'], zh: boolean) {
   const map = {
     exposed: { label: zh ? '已曝光' : 'EXPOSED', class: 'text-red-400 border-red-400/40 bg-red-400/10' },
@@ -84,7 +91,9 @@ function statusBadge(status: ExposureProject['status'], zh: boolean) {
 export default function WallOfShame({ lang }: Props) {
   const tr = t[lang];
   const zh = lang === 'zh';
-  const { publicKey, connected } = useWallet();
+  const { connection } = useConnection();
+  const { publicKey, connected, sendTransaction } = useWallet();
+
 
   const [activeTab, setActiveTab] = useState<0 | 1>(0);
   const [exposures, setExposures] = useState<ExposureProject[]>(INITIAL_EXPOSURES);
@@ -93,6 +102,8 @@ export default function WallOfShame({ lang }: Props) {
   const [newProject, setNewProject] = useState('');
   const [newLoss, setNewLoss] = useState('');
   const [newChain, setNewChain] = useState('SOL');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const shortAddress = publicKey
     ? `${publicKey.toBase58().slice(0, 4)}...${publicKey.toBase58().slice(-4)}`
@@ -117,25 +128,112 @@ export default function WallOfShame({ lang }: Props) {
     setJoinedIds((prev) => new Set(prev).add(projectId));
   }
 
-  function submitNewFraud() {
-    if (!connected || !newProject.trim()) return;
-    const id = `custom-${Date.now()}`;
-    setExposures((prev) => [
-      {
-        id,
-        project: newProject.trim(),
-        rugDate: new Date().toISOString().slice(0, 7),
-        amountUsd: newLoss.trim() ? `$${newLoss.trim()}` : '$0',
-        coSigners: 1,
-        chain: newChain,
-        status: 'exposed',
-      },
-      ...prev,
-    ]);
-    if (connected) setJoinedIds((prev) => new Set(prev).add(id));
-    setNewProject('');
-    setNewLoss('');
-    setShowReportForm(false);
+  async function submitComplianceDeposit() {
+    if (!connected || !publicKey) return;
+    if (isProcessing) return;
+    setIsProcessing(true);
+    setSubmitError('');
+
+    try {
+      const owner = publicKey;
+      const alphaAccounts = await connection.getParsedTokenAccountsByOwner(owner, { mint: ALPHA_TOKEN_MINT });
+      const alphaBalance = alphaAccounts.value.reduce((sum, account) => {
+        const amount = account.account.data.parsed.info.tokenAmount.uiAmount ?? 0;
+        return sum + amount;
+      }, 0);
+      const alphaMintInfo = await getMint(connection, ALPHA_TOKEN_MINT);
+      const alphaDecimals = alphaMintInfo.decimals;
+      const usdcDecimals = 6;
+
+      if (alphaBalance < ALPHA_THRESHOLD) {
+        throw new Error('持仓未达标：必须至少持有 100,000 枚 $α');
+      }
+
+      const usdcOwnerAta = await getAssociatedTokenAddress(USDC_MINT, owner);
+      const alphaOwnerAta = await getAssociatedTokenAddress(ALPHA_TOKEN_MINT, owner);
+      const treasuryUsdcAta = await getAssociatedTokenAddress(USDC_MINT, TREASURY_PDA, true);
+      const treasuryAlphaAta = await getAssociatedTokenAddress(ALPHA_TOKEN_MINT, TREASURY_PDA, true);
+
+      const [usdcInfo, alphaInfo, treasuryUsdcInfo, treasuryAlphaInfo] = await Promise.all([
+        connection.getAccountInfo(usdcOwnerAta),
+        connection.getAccountInfo(alphaOwnerAta),
+        connection.getAccountInfo(treasuryUsdcAta),
+        connection.getAccountInfo(treasuryAlphaAta),
+      ]);
+
+      const transaction = new Transaction();
+
+      if (!treasuryUsdcInfo) {
+        transaction.add(createAssociatedTokenAccountInstruction(owner, treasuryUsdcAta, TREASURY_PDA, USDC_MINT));
+      }
+
+      if (!treasuryAlphaInfo) {
+        transaction.add(createAssociatedTokenAccountInstruction(owner, treasuryAlphaAta, TREASURY_PDA, ALPHA_TOKEN_MINT));
+      }
+
+      if (!usdcInfo) throw new Error('USDC ATA 不存在');
+      if (!alphaInfo) throw new Error('$α ATA 不存在');
+
+      const usdcAmount = 500 * 10 ** usdcDecimals;
+      const alphaAmount = 100000 * 10 ** alphaDecimals;
+
+      transaction.add(
+        createTransferCheckedInstruction(
+          usdcOwnerAta,
+          USDC_MINT,
+          treasuryUsdcAta,
+          owner,
+          usdcAmount,
+          usdcDecimals
+        ),
+        createTransferCheckedInstruction(
+          alphaOwnerAta,
+          ALPHA_TOKEN_MINT,
+          treasuryAlphaAta,
+          owner,
+          alphaAmount,
+          alphaDecimals
+        )
+      );
+
+      const { blockhash } = await connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = owner;
+
+      try {
+        const simulation = await connection.simulateTransaction(transaction);
+        const simulationLogs = simulation.value.logs ?? [];
+        if (simulation.value.err) {
+          const errText = typeof simulation.value.err === 'string' ? simulation.value.err : JSON.stringify(simulation.value.err);
+          const classification = /insufficient|balance/i.test(errText)
+            ? 'BALANCE_OR_FUNDS'
+            : /owner|signer|authority/i.test(errText)
+              ? 'SIGNER_OR_AUTHORITY'
+              : /account|ata|associated/i.test(errText)
+                ? 'ATA_OR_ACCOUNT'
+                : /instruction|program/i.test(errText)
+                  ? 'INSTRUCTION_MISMATCH'
+                  : 'UNKNOWN';
+          console.error('❌ [DEBUG] 交易模拟失败:', simulation.value.err);
+          console.error('❌ [DEBUG] 模拟日志:', simulationLogs);
+          console.error('❌ [DEBUG] 模拟分类:', classification);
+          alert('交易模拟失败，请检查控制台 (F12)');
+          return;
+        }
+        console.log('✅ [DEBUG] 交易模拟通过，准备发送...', { logs: simulationLogs });
+      } catch (simError) {
+        console.error('❌ [DEBUG] 模拟过程中发生异常:', simError);
+      }
+
+      const signature = await sendTransaction(transaction, connection, { skipPreflight: true });
+      console.log('✅ [DEBUG] 交易已发送:', signature);
+    } catch (error) {
+      console.error('❌ [DEBUG] submitComplianceDeposit 发送失败:', error);
+      setSubmitError(error instanceof Error ? error.message : '提交失败');
+      alert(error instanceof Error ? error.message : '提交失败，请查看控制台');
+    } finally {
+      setIsProcessing(false);
+    }
   }
 
   return (
@@ -393,14 +491,15 @@ export default function WallOfShame({ lang }: Props) {
             <div className="p-4 border-t border-zinc-800">
               <button
                 type="button"
-                disabled={!connected}
+                onClick={submitComplianceDeposit}
+                disabled={!connected || isProcessing}
                 className={`w-full py-2.5 rounded-lg border text-xs font-mono font-bold uppercase tracking-wider transition-all ${
                   connected
                     ? 'border-green-500/50 text-green-400 bg-green-500/10 hover:bg-green-500/20'
                     : 'border-zinc-700 text-zinc-500 cursor-not-allowed opacity-50'
                 }`}
               >
-                {connected ? tr.card1Btn : connectReportHint}
+                {isProcessing ? (zh ? '处理中...' : 'Processing...') : connected ? tr.card1Btn : connectReportHint}
               </button>
             </div>
           </div>
