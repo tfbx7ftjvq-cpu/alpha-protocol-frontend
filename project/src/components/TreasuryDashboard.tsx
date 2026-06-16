@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
+import { type Wallet as AnchorWallet } from '@coral-xyz/anchor';
+import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { Flame, Activity, Clock, Calculator, Terminal, Radio, CheckCircle, Wallet } from 'lucide-react';
 import { Lang } from '../translations';
 import { TOTAL_NETWORK_POINTS, getDaysMultiplier, pad } from '../utils/staking';
+import { PROGRAM_ID, createAlphaProgram, getTreasuryStatePda } from '../lib/alphaProgram';
 import ProtocolArchitecture from './ProtocolArchitecture';
 import DAOGovernance from './DAOGovernance';
 
@@ -15,6 +18,7 @@ import DAOGovernance from './DAOGovernance';
   const EPOCH_DURATION_HOURS = 72;
   const BUYBACK_TRIGGER_USDC = 200;
   const AUDIT_MISMATCH_TOLERANCE_USDC = 50000;
+  const TREASURY_STATE_PDA = getTreasuryStatePda();
 
   // 当后端尚未输出总流水时，前端默认按 0 展示，避免写死假数据
   const BASE_REVENUE = 0;
@@ -174,10 +178,17 @@ import DAOGovernance from './DAOGovernance';
   // ─── Main Dashboard ────────────────────────────────────────────────────────────
   export default function TreasuryDashboard({ lang, walletConnected, walletBalance }: Props) {
     const isZh = lang === 'zh';
+    const { connection } = useConnection();
+    const wallet = useWallet();
+    const { connected, publicKey, signAllTransactions, signTransaction } = wallet;
     const [isReliefUnlocked, setIsReliefUnlocked] = useState(false);
     const [hasClaimedRelief, setHasClaimedRelief] = useState(false);
     const [auditSnapshot, setAuditSnapshot] = useState<AuditSnapshot | null>(null);
     const [localForfeitRevenue, setLocalForfeitRevenue] = useState(0);
+    const [chainReadStatus, setChainReadStatus] = useState<ChainReadStatus>('idle');
+    const [chainTreasuryState, setChainTreasuryState] = useState<ChainTreasuryState | null>(null);
+    const [chainReadError, setChainReadError] = useState<string | null>(null);
+    const [chainLastSync, setChainLastSync] = useState<Date | null>(null);
     const liveRevenue = useLiveTicker(BASE_REVENUE);
 
     const [staked, setStaked] = useState('');
@@ -194,6 +205,77 @@ import DAOGovernance from './DAOGovernance';
     const dynamicRevenue = (auditSnapshot?.financialLedger?.totalInflow ?? BASE_REVENUE) + localForfeitRevenue;
     const epochPool = dynamicRevenue * 0.50;
     const dividendPool = dynamicRevenue * 0.10;
+
+    useEffect(() => {
+      let mounted = true;
+
+      if (!walletConnected || !connected || !publicKey) {
+        setChainReadStatus('idle');
+        setChainTreasuryState(null);
+        setChainReadError(null);
+        setChainLastSync(null);
+        return () => {
+          mounted = false;
+        };
+      }
+
+      const fetchChainTreasuryState = async () => {
+        setChainReadStatus('loading');
+        setChainReadError(null);
+
+        try {
+          const program = createAlphaProgram(connection, {
+            publicKey,
+            signAllTransactions,
+            signTransaction,
+          } as unknown as AnchorWallet);
+          const accountClient = (program.account as unknown as {
+            treasuryState: {
+              fetchNullable(address: typeof TREASURY_STATE_PDA): Promise<AnchorTreasuryState | null>;
+            };
+          }).treasuryState;
+          const treasuryState = await accountClient.fetchNullable(TREASURY_STATE_PDA);
+
+          if (!mounted) return;
+
+          if (!treasuryState) {
+            setChainTreasuryState(null);
+            setChainReadStatus('missing');
+            setChainLastSync(new Date());
+            return;
+          }
+
+          setChainTreasuryState({
+            totalInflow: formatU64(treasuryState.totalInflow),
+            reliefPool: formatU64(treasuryState.reliefPool),
+            buybackPool: formatU64(treasuryState.buybackPool),
+            payrollPool: formatU64(treasuryState.payrollPool),
+            stakingPool: formatU64(treasuryState.stakingPool),
+          });
+          setChainReadStatus('ready');
+          setChainLastSync(new Date());
+        } catch (err) {
+          if (!mounted) return;
+
+          const message = err instanceof Error ? err.message : String(err);
+          if (message.toLowerCase().includes('account does not exist')) {
+            setChainTreasuryState(null);
+            setChainReadStatus('missing');
+          } else {
+            setChainTreasuryState(null);
+            setChainReadStatus('error');
+            setChainReadError(message);
+          }
+          setChainLastSync(new Date());
+        }
+      };
+
+      fetchChainTreasuryState();
+
+      return () => {
+        mounted = false;
+      };
+    }, [connected, connection, publicKey, signAllTransactions, signTransaction, walletConnected]);
 
     useEffect(() => {
       let mounted = true;
@@ -334,6 +416,28 @@ import DAOGovernance from './DAOGovernance';
     }
 
     const tick = useCountdown(47, 32, 18, EPOCH_DURATION_HOURS);
+    const chainStatusMeta: Record<ChainReadStatus, { label: string; className: string }> = {
+      idle: {
+        label: isZh ? '等待钱包连接' : 'Wallet Required',
+        className: 'text-zinc-400 border-zinc-700 bg-zinc-800/40',
+      },
+      loading: {
+        label: isZh ? '读取中' : 'Reading',
+        className: 'text-yellow-400 border-yellow-400/30 bg-yellow-400/10 animate-pulse',
+      },
+      ready: {
+        label: isZh ? '已同步' : 'Synced',
+        className: 'text-green-400 border-green-400/30 bg-green-400/10',
+      },
+      missing: {
+        label: isZh ? '未初始化' : 'Not Initialized',
+        className: 'text-orange-400 border-orange-400/30 bg-orange-400/10',
+      },
+      error: {
+        label: isZh ? '读取失败' : 'Read Failed',
+        className: 'text-red-400 border-red-400/40 bg-red-400/15',
+      },
+    };
 
     return (
       <div className="space-y-8">
@@ -351,6 +455,84 @@ import DAOGovernance from './DAOGovernance';
               WALLET SOL: {walletBalance.toFixed(4)}
             </div>
           )}
+        </div>
+
+        {/* Devnet Anchor State */}
+        <div className="border border-cyan-400/20 bg-cyan-400/5 rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-cyan-400/10 bg-zinc-950/70">
+            <div className="flex items-center gap-2">
+              <Radio className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+              <p className="text-zinc-200 font-mono text-xs font-bold uppercase tracking-widest">
+                {isZh ? 'Devnet Anchor 国库状态' : 'Devnet Anchor Treasury State'}
+              </p>
+            </div>
+            <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${chainStatusMeta[chainReadStatus].className}`}>
+              {chainStatusMeta[chainReadStatus].label}
+            </span>
+          </div>
+
+          <div className="p-5 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="border border-zinc-800 bg-zinc-950/60 rounded-lg px-3 py-2">
+                <p className="text-zinc-600 font-mono text-[9px] uppercase tracking-widest mb-1">Program ID</p>
+                <p className="text-cyan-400 font-mono text-[11px] font-bold break-all">{PROGRAM_ID.toBase58()}</p>
+              </div>
+              <div className="border border-zinc-800 bg-zinc-950/60 rounded-lg px-3 py-2">
+                <p className="text-zinc-600 font-mono text-[9px] uppercase tracking-widest mb-1">treasuryState PDA</p>
+                <p className="text-cyan-400 font-mono text-[11px] font-bold break-all">{TREASURY_STATE_PDA.toBase58()}</p>
+              </div>
+            </div>
+
+            {chainReadStatus === 'idle' && (
+              <div className="text-zinc-500 font-mono text-xs border border-zinc-800 bg-zinc-950/50 rounded-lg px-3 py-2">
+                {isZh ? '连接钱包后读取真实 Devnet treasuryState PDA。' : 'Connect a wallet to read the live Devnet treasuryState PDA.'}
+              </div>
+            )}
+
+            {chainReadStatus === 'loading' && (
+              <div className="text-yellow-400 font-mono text-xs border border-yellow-400/20 bg-yellow-400/5 rounded-lg px-3 py-2">
+                {isZh ? '正在读取链上 treasuryState PDA...' : 'Reading treasuryState PDA from Devnet...'}
+              </div>
+            )}
+
+            {chainReadStatus === 'missing' && (
+              <div className="text-orange-400 font-mono text-xs border border-orange-400/20 bg-orange-400/5 rounded-lg px-3 py-2">
+                {isZh ? '链上国库尚未初始化' : 'On-chain treasury is not initialized'}
+              </div>
+            )}
+
+            {chainReadStatus === 'error' && (
+              <div className="text-red-400 font-mono text-xs border border-red-400/30 bg-red-400/10 rounded-lg px-3 py-2 break-words">
+                {isZh ? 'Devnet 读取失败：' : 'Devnet read failed: '}
+                <span className="text-red-300">{chainReadError ?? 'Unknown error'}</span>
+              </div>
+            )}
+
+            {chainReadStatus === 'ready' && chainTreasuryState && (
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                {[
+                  ['totalInflow', chainTreasuryState.totalInflow, 'text-green-400'],
+                  ['reliefPool', chainTreasuryState.reliefPool, 'text-emerald-400'],
+                  ['buybackPool', chainTreasuryState.buybackPool, 'text-red-400'],
+                  ['payrollPool', chainTreasuryState.payrollPool, 'text-blue-400'],
+                  ['stakingPool', chainTreasuryState.stakingPool, 'text-yellow-400'],
+                ].map(([label, value, color]) => (
+                  <div key={label} className="border border-zinc-800 bg-zinc-950/60 rounded-lg p-3 text-center">
+                    <p className="text-zinc-600 font-mono text-[9px] uppercase tracking-widest mb-1">{label}</p>
+                    <p className={`font-mono text-sm font-black tabular-nums break-all ${color}`}>{value}</p>
+                    <p className="text-zinc-600 font-mono text-[9px] mt-1">raw u64</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {chainLastSync && (
+              <p className="text-zinc-600 font-mono text-[10px] text-right">
+                {isZh ? '上次同步：' : 'Last sync: '}
+                {chainLastSync.toLocaleTimeString()}
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Grid Status Cards */}
@@ -666,4 +848,34 @@ import DAOGovernance from './DAOGovernance';
         </div>
       </div>
     );
+  }
+
+  type ChainReadStatus = 'idle' | 'loading' | 'ready' | 'missing' | 'error';
+
+  interface ChainTreasuryState {
+    totalInflow: string;
+    reliefPool: string;
+    buybackPool: string;
+    payrollPool: string;
+    stakingPool: string;
+  }
+
+  interface AnchorTreasuryState {
+    totalInflow: unknown;
+    reliefPool: unknown;
+    buybackPool: unknown;
+    payrollPool: unknown;
+    stakingPool: unknown;
+  }
+
+  function formatU64(value: unknown): string {
+    const raw = value && typeof value === 'object' && 'toString' in value
+      ? value.toString()
+      : String(value ?? 0);
+
+    try {
+      return BigInt(raw).toLocaleString('en-US');
+    } catch {
+      return raw;
+    }
   }
