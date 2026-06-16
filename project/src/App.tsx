@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { type WalletError } from '@solana/wallet-adapter-base';
 import { ConnectionProvider, WalletProvider, useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletModalProvider, WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
@@ -11,9 +12,12 @@ import WallOfShame from './components/WallOfShame';
 import VictimRelief from './components/VictimRelief';
 
 type Tab = 'treasury' | 'shame' | 'relief';
+type RpcStatus = 'checking' | 'ok' | 'error';
 
 const endpoint = "https://api.devnet.solana.com";
 const wallets = [new PhantomWalletAdapter()];
+const RPC_UNAVAILABLE_MESSAGE = 'Devnet RPC 暂时不可用';
+const WALLET_REJECTED_MESSAGE = '用户取消连接';
 
 const HERO = {
   en: {
@@ -36,7 +40,12 @@ const HERO = {
   },
 };
 
-function AppContent() {
+interface AppContentProps {
+  walletNotice: string | null;
+  onClearWalletNotice: () => void;
+}
+
+function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
   const { connection } = useConnection();
   const { publicKey, connected: walletConnected } = useWallet();
   const [lang, setLang] = useState<Lang>('zh');
@@ -44,19 +53,67 @@ function AppContent() {
   
   // ── 新增核心状态：负责存放钱包余额 ──
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [rpcStatus, setRpcStatus] = useState<RpcStatus>('checking');
+  const [rpcMessage, setRpcMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (walletConnected) {
+      onClearWalletNotice();
+    }
+  }, [onClearWalletNotice, walletConnected]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function checkRpcHealth(showChecking = false) {
+      if (showChecking) {
+        setRpcStatus('checking');
+      }
+
+      try {
+        await connection.getLatestBlockhash('confirmed');
+        if (!mounted) return;
+
+        setRpcStatus('ok');
+        setRpcMessage(null);
+      } catch {
+        if (!mounted) return;
+
+        setRpcStatus('error');
+        setRpcMessage(RPC_UNAVAILABLE_MESSAGE);
+      }
+    }
+
+    checkRpcHealth(true);
+    const interval = setInterval(() => checkRpcHealth(false), 30000);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [connection]);
 
   // ── 新增核心副作用：动态监听钱包并抓取 Devnet 余额 ──
   useEffect(() => {
+    let mounted = true;
+
     async function fetchBalance() {
       if (walletConnected && publicKey) {
         try {
           // 向 Devnet 发起 RPC 请求数钱
           const lamports = await connection.getBalance(publicKey);
+          if (!mounted) return;
+
           // 转换成人类能看懂的 SOL 数量
           setWalletBalance(lamports / LAMPORTS_PER_SOL);
-        } catch (error) {
-          console.error("Failed to fetch balance from Devnet:", error);
-          setWalletBalance(0);
+          setRpcStatus('ok');
+          setRpcMessage(null);
+        } catch {
+          if (!mounted) return;
+
+          setWalletBalance(null);
+          setRpcStatus('error');
+          setRpcMessage(RPC_UNAVAILABLE_MESSAGE);
         }
       } else {
         // 钱包断开时，强制归零
@@ -68,10 +125,30 @@ function AppContent() {
     
     // 设置一个 10 秒定时自动对账，防止链上数据变动前端不知道
     const interval = setInterval(fetchBalance, 10000);
-    return () => clearInterval(interval);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
   }, [walletConnected, publicKey, connection]);
 
   const h = HERO[lang];
+  const rpcStatusMeta: Record<RpcStatus, { label: string; className: string; dotClassName: string }> = {
+    checking: {
+      label: 'RPC: CHECKING',
+      className: 'border-yellow-400/20 bg-yellow-400/5 text-yellow-400',
+      dotClassName: 'bg-yellow-400',
+    },
+    ok: {
+      label: 'RPC: OK',
+      className: 'border-green-500/20 bg-green-500/5 text-green-400',
+      dotClassName: 'bg-green-400',
+    },
+    error: {
+      label: 'RPC: ERROR',
+      className: 'border-red-400/30 bg-red-400/10 text-red-400',
+      dotClassName: 'bg-red-400',
+    },
+  };
 
   const tabs: {
     key: Tab;
@@ -103,12 +180,25 @@ function AppContent() {
             </span>
             <span>SLOT: #284,723,019</span>
             <span className="hidden sm:block">BASE FEE: 0.000025 SOL</span>
+            <span className={`flex items-center gap-1 px-2 py-0.5 rounded border font-bold text-[9px] ${rpcStatusMeta[rpcStatus].className}`}>
+              <span className={`w-1.5 h-1.5 rounded-full inline-block ${rpcStatusMeta[rpcStatus].dotClassName} ${rpcStatus === 'checking' ? 'animate-pulse' : ''}`} />
+              {rpcStatus === 'error' ? RPC_UNAVAILABLE_MESSAGE : rpcStatusMeta[rpcStatus].label}
+            </span>
             
             {/* ── 核心 UI 焊入：钱包余额监控通道 ── */}
             {walletConnected && (
               <span className="flex items-center gap-1 px-2 py-0.5 rounded border border-green-500/20 bg-green-500/5 text-green-400 font-bold text-[9px] animate-fade-in">
                 <Wallet className="w-2.5 h-2.5" />
-                BALANCE: {walletBalance !== null ? `${walletBalance.toFixed(4)} SOL` : 'LOADING...'}
+                BALANCE: {rpcStatus === 'error'
+                  ? (rpcMessage ?? RPC_UNAVAILABLE_MESSAGE)
+                  : walletBalance !== null
+                    ? `${walletBalance.toFixed(4)} SOL`
+                    : 'LOADING...'}
+              </span>
+            )}
+            {walletNotice && (
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded border border-yellow-400/20 bg-yellow-400/5 text-yellow-400 font-bold text-[9px] animate-fade-in">
+                {walletNotice}
               </span>
             )}
           </div>
@@ -221,12 +311,28 @@ function AppContent() {
   );
 }
 
+function isUserRejectedWalletError(error: WalletError): boolean {
+  const nested = error.error instanceof Error ? error.error.message : String(error.error ?? '');
+  const text = `${error.name} ${error.message} ${nested}`.toLowerCase();
+
+  return text.includes('user rejected')
+    || text.includes('reject')
+    || text.includes('decline')
+    || text.includes('cancel');
+}
+
 export default function App() {
+  const [walletNotice, setWalletNotice] = useState<string | null>(null);
+  const clearWalletNotice = useCallback(() => setWalletNotice(null), []);
+  const handleWalletError = useCallback((error: WalletError) => {
+    setWalletNotice(isUserRejectedWalletError(error) ? WALLET_REJECTED_MESSAGE : '钱包连接暂时不可用');
+  }, []);
+
   return (
     <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect>
+      <WalletProvider wallets={wallets} autoConnect onError={handleWalletError}>
         <WalletModalProvider>
-          <AppContent />
+          <AppContent walletNotice={walletNotice} onClearWalletNotice={clearWalletNotice} />
         </WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
