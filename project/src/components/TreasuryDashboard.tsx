@@ -4,7 +4,7 @@ import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { Flame, Activity, Clock, Calculator, Terminal, Radio, CheckCircle, Wallet } from 'lucide-react';
 import { Lang } from '../translations';
 import { TOTAL_NETWORK_POINTS, getDaysMultiplier, pad } from '../utils/staking';
-import { PROGRAM_ID, createAlphaProgram, getTreasuryStatePda } from '../lib/alphaProgram';
+import { PROGRAM_ID, createAlphaProgram, getTreasuryStatePda, initializeTreasuryState } from '../lib/alphaProgram';
 import ProtocolArchitecture from './ProtocolArchitecture';
 import DAOGovernance from './DAOGovernance';
 
@@ -189,6 +189,9 @@ import DAOGovernance from './DAOGovernance';
     const [chainTreasuryState, setChainTreasuryState] = useState<ChainTreasuryState | null>(null);
     const [chainReadError, setChainReadError] = useState<string | null>(null);
     const [chainLastSync, setChainLastSync] = useState<Date | null>(null);
+    const [chainRefreshNonce, setChainRefreshNonce] = useState(0);
+    const [initializeStatus, setInitializeStatus] = useState<InitializeStatus>('idle');
+    const [initializeMessage, setInitializeMessage] = useState<string | null>(null);
     const liveRevenue = useLiveTicker(BASE_REVENUE);
 
     const [staked, setStaked] = useState('');
@@ -214,6 +217,8 @@ import DAOGovernance from './DAOGovernance';
         setChainTreasuryState(null);
         setChainReadError(null);
         setChainLastSync(null);
+        setInitializeStatus('idle');
+        setInitializeMessage(null);
         return () => {
           mounted = false;
         };
@@ -275,7 +280,51 @@ import DAOGovernance from './DAOGovernance';
       return () => {
         mounted = false;
       };
-    }, [connected, connection, publicKey, signAllTransactions, signTransaction, walletConnected]);
+    }, [chainRefreshNonce, connected, connection, publicKey, signAllTransactions, signTransaction, walletConnected]);
+
+    async function handleInitializeTreasury() {
+      if (initializeStatus === 'loading') return;
+
+      if (!walletConnected || !connected || !publicKey) {
+        setInitializeStatus('error');
+        setInitializeMessage(isZh ? '请先连接钱包' : 'Connect your wallet first');
+        return;
+      }
+
+      if (!signTransaction || !signAllTransactions) {
+        setInitializeStatus('error');
+        setInitializeMessage(isZh ? '当前钱包不支持交易签名' : 'Current wallet does not support transaction signing');
+        return;
+      }
+
+      setInitializeStatus('loading');
+      setInitializeMessage(null);
+      setChainReadError(null);
+
+      try {
+        const signature = await initializeTreasuryState(
+          connection,
+          {
+            publicKey,
+            signAllTransactions,
+            signTransaction,
+          } as unknown as AnchorWallet,
+          publicKey,
+        );
+
+        setInitializeStatus('success');
+        setInitializeMessage(
+          isZh
+            ? `链上国库初始化成功：${signature}`
+            : `On-chain treasury initialized: ${signature}`,
+        );
+        setChainReadStatus('loading');
+        setChainRefreshNonce((value) => value + 1);
+      } catch (err) {
+        setInitializeStatus('error');
+        setInitializeMessage(getReadableErrorMessage(err));
+      }
+    }
 
     useEffect(() => {
       let mounted = true;
@@ -496,8 +545,18 @@ import DAOGovernance from './DAOGovernance';
             )}
 
             {chainReadStatus === 'missing' && (
-              <div className="text-orange-400 font-mono text-xs border border-orange-400/20 bg-orange-400/5 rounded-lg px-3 py-2">
-                {isZh ? '链上国库尚未初始化' : 'On-chain treasury is not initialized'}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-orange-400 font-mono text-xs border border-orange-400/20 bg-orange-400/5 rounded-lg px-3 py-3">
+                <span>{isZh ? '链上国库尚未初始化' : 'On-chain treasury is not initialized'}</span>
+                <button
+                  type="button"
+                  onClick={handleInitializeTreasury}
+                  disabled={initializeStatus === 'loading'}
+                  className="shrink-0 px-3 py-2 rounded border border-orange-400/40 bg-orange-400/10 text-orange-300 hover:bg-orange-400/15 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-bold"
+                >
+                  {initializeStatus === 'loading'
+                    ? (isZh ? '初始化中...' : 'Initializing...')
+                    : (isZh ? '初始化链上国库' : 'Initialize Treasury')}
+                </button>
               </div>
             )}
 
@@ -505,6 +564,20 @@ import DAOGovernance from './DAOGovernance';
               <div className="text-red-400 font-mono text-xs border border-red-400/30 bg-red-400/10 rounded-lg px-3 py-2 break-words">
                 {isZh ? 'Devnet 读取失败：' : 'Devnet read failed: '}
                 <span className="text-red-300">{chainReadError ?? 'Unknown error'}</span>
+              </div>
+            )}
+
+            {initializeMessage && (
+              <div
+                className={`font-mono text-xs rounded-lg px-3 py-2 break-words border ${
+                  initializeStatus === 'success'
+                    ? 'text-green-400 border-green-400/20 bg-green-400/5'
+                    : initializeStatus === 'error'
+                      ? 'text-red-400 border-red-400/30 bg-red-400/10'
+                      : 'text-zinc-400 border-zinc-800 bg-zinc-950/50'
+                }`}
+              >
+                {initializeMessage}
               </div>
             )}
 
@@ -851,6 +924,7 @@ import DAOGovernance from './DAOGovernance';
   }
 
   type ChainReadStatus = 'idle' | 'loading' | 'ready' | 'missing' | 'error';
+  type InitializeStatus = 'idle' | 'loading' | 'success' | 'error';
 
   interface ChainTreasuryState {
     totalInflow: string;
@@ -878,4 +952,12 @@ import DAOGovernance from './DAOGovernance';
     } catch {
       return raw;
     }
+  }
+
+  function getReadableErrorMessage(err: unknown): string {
+    if (err instanceof Error) {
+      return err.message;
+    }
+
+    return String(err);
   }
