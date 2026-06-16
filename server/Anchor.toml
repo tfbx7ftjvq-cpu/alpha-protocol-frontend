@@ -8,9 +8,12 @@ skip-lint = false
 [programs.localnet]
 my_first_solana_program = "HrLBQxUD3XHkB3KABjHXTiBHuAe6jVP2UPqiwmpmH8EY"
 
+[programs.devnet]
+my_first_solana_program = "HrLBQxUD3XHkB3KABjHXTiBHuAe6jVP2UPqiwmpmH8EY"
+
 [provider]
-cluster = "localnet"
-wallet = '~\.config\solana\id.json'
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "cargo test"
