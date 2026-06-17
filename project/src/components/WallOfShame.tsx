@@ -1,20 +1,23 @@
 import { useEffect, useState } from 'react';
-import { useConnection, useWallet } from '@solana/wallet-adapter-react';
-import { PublicKey, Transaction } from '@solana/web3.js';
-import { getAssociatedTokenAddress, createAssociatedTokenAccountInstruction, createTransferCheckedInstruction, getMint } from '@solana/spl-token';
+import { useWallet } from '@solana/wallet-adapter-react';
 import {
+  ArrowRight,
   BadgeCheck,
+  Banknote,
   ExternalLink,
   FileText,
+  Flag,
   Gavel,
+  HandHeart,
   PlusCircle,
   Shield,
   Users,
+  Vote,
   Wallet,
   X,
   Zap,
 } from 'lucide-react';
-import { t, Lang } from '../translations';
+import { type Lang } from '../translations';
 
 interface Props {
   lang: Lang;
@@ -70,31 +73,94 @@ const INITIAL_EXPOSURES: ExposureProject[] = [
 ];
 
 const certifiedData = [
-  { name: 'SolNexus Matrix', chain: 'SOL', contribution: '2,500', date: '2026-05-20', rating: 'AAA', ratingZh: '极佳' },
+  { name: 'SolNexus Matrix', chain: 'SOL', contribution: '2,500', date: '2026-05-20', rating: 'AAA', ratingZh: '优秀' },
   { name: 'Aegis Liquidity', chain: 'SOL', contribution: '1,800', date: '2026-05-24', rating: 'AA', ratingZh: '良好' },
 ];
 
-const ALPHA_TOKEN_MINT = new PublicKey('6VXo4Ut8wNyhFvHSiXVtnJwZfcoRg8FyNFjMgjokSMu8');
-const ALPHA_THRESHOLD = 100000;
-const TREASURY_PDA = new PublicKey('2yVkP9w21w78tD6vSAtmfbpukWN5u8VmsZxF8bUSyWhv');
-const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+const DAO_USES = [
+  '赔付申请审核',
+  '绿标认证',
+  '风险项目曝光',
+  '重大国库支出',
+  '协议参数升级',
+  '贡献者激励审批',
+];
 
-function statusBadge(status: ExposureProject['status'], zh: boolean) {
+const PROPOSAL_FLOW = [
+  'Draft 草案',
+  'Active 投票中',
+  'Passed 已通过',
+  'Rejected 已拒绝',
+  'Queued 待执行',
+  'Executed 已执行',
+];
+
+const MOCK_DAO_PROPOSALS = [
+  {
+    title: '赔付申请：某项目跑路受害者赔付申请',
+    type: '赔付申请',
+    status: 'Active 投票中',
+    icon: HandHeart,
+    color: 'text-emerald-400 border-emerald-400/25 bg-emerald-400/5',
+  },
+  {
+    title: '绿标认证：某项目申请 Alpha Green Label',
+    type: '绿标认证',
+    status: 'Draft 草案',
+    icon: BadgeCheck,
+    color: 'text-cyan-400 border-cyan-400/25 bg-cyan-400/5',
+  },
+  {
+    title: '风险曝光：某高风险项目社区曝光提案',
+    type: '风险曝光',
+    status: 'Passed 已通过',
+    icon: Flag,
+    color: 'text-red-400 border-red-400/25 bg-red-400/5',
+  },
+  {
+    title: '国库支出：安全审计费用支出提案',
+    type: '国库支出',
+    status: 'Queued 待执行',
+    icon: Banknote,
+    color: 'text-blue-400 border-blue-400/25 bg-blue-400/5',
+  },
+  {
+    title: '贡献者激励：前端开发任务赏金提案',
+    type: '贡献者激励',
+    status: 'Draft 草案',
+    icon: Users,
+    color: 'text-violet-400 border-violet-400/25 bg-violet-400/5',
+  },
+];
+
+const BUILDER_USES = [
+  '协议开发',
+  '安全审计',
+  '前端设计',
+  '社区运营',
+  '风险项目调查',
+  '赔付案件资料整理',
+  '绿标认证尽调',
+  '文档与多语言建设',
+  '社区治理工具建设',
+];
+
+const BUILDER_FLOW = ['任务发布', '社区认领', '里程碑验收', 'DAO 审核', '激励发放'];
+
+const GREEN_LABEL_FLOW = ['项目提交申请', '社区尽调', 'DAO 投票', '获得绿标', '持续监督', '必要时撤销认证'];
+
+function statusBadge(status: ExposureProject['status']) {
   const map = {
-    exposed: { label: zh ? '已曝光' : 'EXPOSED', class: 'text-red-400 border-red-400/40 bg-red-400/10' },
-    hearing: { label: zh ? '听证中' : 'HEARING', class: 'text-yellow-400 border-yellow-400/40 bg-yellow-400/10' },
-    dao_pending: { label: zh ? '待 DAO 表决' : 'DAO PENDING', class: 'text-green-400 border-green-400/40 bg-green-400/10' },
+    exposed: { label: '已曝光', className: 'text-red-400 border-red-400/40 bg-red-400/10' },
+    hearing: { label: '听证中', className: 'text-yellow-400 border-yellow-400/40 bg-yellow-400/10' },
+    dao_pending: { label: '待 DAO 表决', className: 'text-green-400 border-green-400/40 bg-green-400/10' },
   };
   return map[status];
 }
 
 export default function WallOfShame({ lang }: Props) {
-  const tr = t[lang];
-  const zh = lang === 'zh';
-  const { connection } = useConnection();
-  const { publicKey, connected, sendTransaction } = useWallet();
-
-
+  const locale = lang === 'zh' ? 'zh-CN' : 'en-US';
+  const { publicKey, connected } = useWallet();
   const [activeTab, setActiveTab] = useState<0 | 1>(0);
   const [exposures, setExposures] = useState<ExposureProject[]>(INITIAL_EXPOSURES);
   const [joinedIds, setJoinedIds] = useState<Set<string>>(new Set());
@@ -102,16 +168,10 @@ export default function WallOfShame({ lang }: Props) {
   const [newProject, setNewProject] = useState('');
   const [newLoss, setNewLoss] = useState('');
   const [newChain, setNewChain] = useState('SOL');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [submitError, setSubmitError] = useState('');
 
   const shortAddress = publicKey
     ? `${publicKey.toBase58().slice(0, 4)}...${publicKey.toBase58().slice(-4)}`
     : null;
-
-  const connectReportHint = zh
-    ? '连接钱包后方可发起链上欺诈归集提案'
-    : 'Connect wallet to submit on-chain fraud aggregation proposal';
 
   useEffect(() => {
     document.body.style.overflow = showReportForm ? 'hidden' : '';
@@ -128,127 +188,40 @@ export default function WallOfShame({ lang }: Props) {
     setJoinedIds((prev) => new Set(prev).add(projectId));
   }
 
-  async function submitComplianceDeposit() {
-    if (!connected || !publicKey) return;
-    if (isProcessing) return;
-    setIsProcessing(true);
-    setSubmitError('');
+  function submitNewFraud() {
+    if (!newProject.trim()) return;
 
-    try {
-      const owner = publicKey;
-      const alphaAccounts = await connection.getParsedTokenAccountsByOwner(owner, { mint: ALPHA_TOKEN_MINT });
-      const alphaBalance = alphaAccounts.value.reduce((sum, account) => {
-        const amount = account.account.data.parsed.info.tokenAmount.uiAmount ?? 0;
-        return sum + amount;
-      }, 0);
-      const alphaMintInfo = await getMint(connection, ALPHA_TOKEN_MINT);
-      const alphaDecimals = alphaMintInfo.decimals;
-      const usdcDecimals = 6;
+    const now = new Date();
+    const newExposure: ExposureProject = {
+      id: `${newProject.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${now.getTime()}`,
+      project: newProject.trim(),
+      rugDate: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
+      amountUsd: newLoss.trim() ? `$${newLoss.trim()}` : '$0',
+      coSigners: connected ? 1 : 0,
+      chain: newChain.trim() || 'SOL',
+      status: 'dao_pending',
+    };
 
-      if (alphaBalance < ALPHA_THRESHOLD) {
-        throw new Error('持仓未达标：必须至少持有 100,000 枚 $α');
-      }
-
-      const usdcOwnerAta = await getAssociatedTokenAddress(USDC_MINT, owner);
-      const alphaOwnerAta = await getAssociatedTokenAddress(ALPHA_TOKEN_MINT, owner);
-      const treasuryUsdcAta = await getAssociatedTokenAddress(USDC_MINT, TREASURY_PDA, true);
-      const treasuryAlphaAta = await getAssociatedTokenAddress(ALPHA_TOKEN_MINT, TREASURY_PDA, true);
-
-      const [usdcInfo, alphaInfo, treasuryUsdcInfo, treasuryAlphaInfo] = await Promise.all([
-        connection.getAccountInfo(usdcOwnerAta),
-        connection.getAccountInfo(alphaOwnerAta),
-        connection.getAccountInfo(treasuryUsdcAta),
-        connection.getAccountInfo(treasuryAlphaAta),
-      ]);
-
-      const transaction = new Transaction();
-
-      if (!treasuryUsdcInfo) {
-        transaction.add(createAssociatedTokenAccountInstruction(owner, treasuryUsdcAta, TREASURY_PDA, USDC_MINT));
-      }
-
-      if (!treasuryAlphaInfo) {
-        transaction.add(createAssociatedTokenAccountInstruction(owner, treasuryAlphaAta, TREASURY_PDA, ALPHA_TOKEN_MINT));
-      }
-
-      if (!usdcInfo) throw new Error('USDC ATA 不存在');
-      if (!alphaInfo) throw new Error('$α ATA 不存在');
-
-      const usdcAmount = 500 * 10 ** usdcDecimals;
-      const alphaAmount = 100000 * 10 ** alphaDecimals;
-
-      transaction.add(
-        createTransferCheckedInstruction(
-          usdcOwnerAta,
-          USDC_MINT,
-          treasuryUsdcAta,
-          owner,
-          usdcAmount,
-          usdcDecimals
-        ),
-        createTransferCheckedInstruction(
-          alphaOwnerAta,
-          ALPHA_TOKEN_MINT,
-          treasuryAlphaAta,
-          owner,
-          alphaAmount,
-          alphaDecimals
-        )
-      );
-
-      const { blockhash } = await connection.getLatestBlockhash();
-      transaction.recentBlockhash = blockhash;
-      transaction.feePayer = owner;
-
-      try {
-        const simulation = await connection.simulateTransaction(transaction);
-        const simulationLogs = simulation.value.logs ?? [];
-        if (simulation.value.err) {
-          const errText = typeof simulation.value.err === 'string' ? simulation.value.err : JSON.stringify(simulation.value.err);
-          const classification = /insufficient|balance/i.test(errText)
-            ? 'BALANCE_OR_FUNDS'
-            : /owner|signer|authority/i.test(errText)
-              ? 'SIGNER_OR_AUTHORITY'
-              : /account|ata|associated/i.test(errText)
-                ? 'ATA_OR_ACCOUNT'
-                : /instruction|program/i.test(errText)
-                  ? 'INSTRUCTION_MISMATCH'
-                  : 'UNKNOWN';
-          console.error('❌ [DEBUG] 交易模拟失败:', simulation.value.err);
-          console.error('❌ [DEBUG] 模拟日志:', simulationLogs);
-          console.error('❌ [DEBUG] 模拟分类:', classification);
-          alert('交易模拟失败，请检查控制台 (F12)');
-          return;
-        }
-        console.log('✅ [DEBUG] 交易模拟通过，准备发送...', { logs: simulationLogs });
-      } catch (simError) {
-        console.error('❌ [DEBUG] 模拟过程中发生异常:', simError);
-      }
-
-      const signature = await sendTransaction(transaction, connection, { skipPreflight: true });
-      console.log('✅ [DEBUG] 交易已发送:', signature);
-    } catch (error) {
-      console.error('❌ [DEBUG] submitComplianceDeposit 发送失败:', error);
-      setSubmitError(error instanceof Error ? error.message : '提交失败');
-      alert(error instanceof Error ? error.message : '提交失败，请查看控制台');
-    } finally {
-      setIsProcessing(false);
-    }
+    setExposures((prev) => [newExposure, ...prev]);
+    setJoinedIds((prev) => connected ? new Set(prev).add(newExposure.id) : prev);
+    setNewProject('');
+    setNewLoss('');
+    setNewChain('SOL');
+    setShowReportForm(false);
   }
 
   return (
     <>
       <div className="space-y-6">
-        {/* Header row */}
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <Gavel className="w-6 h-6 text-green-400 flex-shrink-0" />
             <div>
               <h2 className="text-xl font-black text-zinc-100 font-mono tracking-wide uppercase">
-                {zh ? '链上欺诈弹劾归集面板' : 'On-Chain Fraud Impeachment Registry'}
+                链上法庭与 DAO 治理
               </h2>
               <p className="text-zinc-600 font-mono text-[10px] mt-0.5 uppercase tracking-widest">
-                WALL_OF_SHAME · CLASS_ACTION_AGGREGATOR
+                WALL_OF_SHAME · DAO_GOVERNANCE_ROADMAP · {new Date().toLocaleDateString(locale)}
               </p>
             </div>
           </div>
@@ -264,11 +237,10 @@ export default function WallOfShame({ lang }: Props) {
             }`}
           >
             <PlusCircle className="w-4 h-4" />
-            {!connected ? connectReportHint : zh ? '发起新项目欺诈清算' : 'Initiate Fraud Liquidation'}
+            {!connected ? '请先连接钱包' : '发起风险项目曝光'}
           </button>
         </div>
 
-        {/* Wallet strip */}
         <div
           className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border font-mono text-xs transition-colors ${
             connected ? 'border-green-400/30 bg-green-400/5 text-green-400' : 'border-zinc-800 bg-zinc-950 text-zinc-500'
@@ -277,29 +249,98 @@ export default function WallOfShame({ lang }: Props) {
           <Wallet className="w-3.5 h-3.5 flex-shrink-0" />
           {connected && shortAddress ? (
             <span>
-              {zh ? '链上身份' : 'On-chain ID'}: <span className="font-bold tabular-nums">{shortAddress}</span>
+              当前钱包：<span className="font-bold tabular-nums">{shortAddress}</span>
             </span>
           ) : (
-            <span>{connectReportHint}</span>
+            <span>钱包未连接</span>
           )}
         </div>
 
-        {/* Global notice */}
         <div className="border border-green-400/30 bg-green-400/5 rounded-xl px-4 py-3 relative overflow-hidden">
           <div className="absolute top-0 left-0 w-1 h-full bg-green-400/60" />
           <p className="text-green-400 font-mono text-xs leading-relaxed pl-2">
-            ⚖️{' '}
-            {zh
-              ? '互助法庭前哨：此墙所列之欺诈项目，一旦通过社区联署并经 DAO 投票表决（10% 常驻治理），将自动激活 50% 国库公池实施精准定向救济分发。'
-              : 'Mutual Court Outpost: fraud listings here, once co-signed and passed by DAO vote (10% governance), trigger 50% treasury pool for targeted victim relief.'}
+            当前版本为 Devnet Alpha 测试网原型。风险曝光、受害者联署、绿标名录和 DAO 提案卡片均为路线图展示，不代表已开放真实链上 DAO 投票交易。
           </p>
         </div>
 
-        {/* Tabs */}
+        <div className="border border-cyan-400/20 bg-cyan-400/5 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-cyan-400/10 bg-zinc-950/70 flex items-center gap-2">
+            <Vote className="w-4 h-4 text-cyan-400" />
+            <div>
+              <h3 className="text-zinc-100 font-mono text-sm font-black uppercase tracking-widest">
+                DAO Governance / 治理中心
+              </h3>
+              <p className="text-zinc-500 font-mono text-[10px] mt-0.5">
+                DAO 是 Alpha Protocol 的核心公共决策层。
+              </p>
+            </div>
+          </div>
+          <div className="p-5 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {DAO_USES.map((item) => (
+                <div key={item} className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-xs font-mono font-bold text-zinc-300">
+                  {item}
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-lg border border-yellow-400/25 bg-yellow-400/5 px-4 py-3 text-xs font-mono leading-relaxed text-yellow-100">
+              质押分红是自动机制，不需要 DAO 逐笔投票。DAO 最多负责未来调整质押规则或协议参数。
+            </div>
+            <div className="rounded-lg border border-cyan-400/25 bg-cyan-400/5 px-4 py-3 text-xs font-mono leading-relaxed text-cyan-100">
+              DAO 链上投票模块将在后续合约版本中开放。
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {PROPOSAL_FLOW.map((status, index) => (
+                <div key={status} className="flex items-center gap-2">
+                  <span className="rounded border border-zinc-800 bg-zinc-950/80 px-2.5 py-1 text-[11px] font-mono font-bold text-zinc-300">
+                    {status}
+                  </span>
+                  {index < PROPOSAL_FLOW.length - 1 && <ArrowRight className="h-3.5 w-3.5 text-zinc-700" />}
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {MOCK_DAO_PROPOSALS.map((proposal) => {
+                const Icon = proposal.icon;
+                return (
+                  <article key={proposal.title} className={`rounded-lg border p-4 ${proposal.color}`}>
+                    <div className="flex items-start gap-3">
+                      <div className="rounded border border-current/30 bg-black/20 p-2">
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <span className="rounded border border-current/30 bg-black/20 px-2 py-0.5 text-[10px] font-mono font-bold">
+                            {proposal.type}
+                          </span>
+                          <span className="rounded border border-zinc-700 bg-zinc-950/70 px-2 py-0.5 text-[10px] font-mono font-bold text-zinc-300">
+                            {proposal.status}
+                          </span>
+                        </div>
+                        <h4 className="text-sm font-black text-zinc-100 font-mono">{proposal.title}</h4>
+                        <button
+                          type="button"
+                          disabled
+                          className="mt-3 w-full rounded border border-zinc-700 bg-zinc-900/70 px-3 py-2 text-xs font-mono font-bold text-zinc-500 disabled:cursor-not-allowed"
+                        >
+                          DAO 治理合约开发中
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
         <div className="flex gap-1 bg-zinc-950 p-1 rounded-xl border border-zinc-800 w-full max-w-xl">
           {[
-            { label: zh ? '🔴 黑客曝光墙' : '🔴 Exposure Wall', i: 0 as const },
-            { label: zh ? '🟢 绿标合规名录' : '🟢 Certified', i: 1 as const },
+            { label: '黑客曝光墙 / 受害者联署', i: 0 as const },
+            { label: 'Alpha Green Label 绿标名录', i: 1 as const },
           ].map(({ label, i }) => (
             <button
               key={i}
@@ -307,9 +348,7 @@ export default function WallOfShame({ lang }: Props) {
               onClick={() => setActiveTab(i)}
               className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-mono font-bold transition-all duration-200 ${
                 activeTab === i
-                  ? i === 0
-                    ? 'bg-green-500/15 text-green-400 border border-green-500/40'
-                    : 'bg-green-500/15 text-green-400 border border-green-500/40'
+                  ? 'bg-green-500/15 text-green-400 border border-green-500/40'
                   : 'text-zinc-600 hover:text-zinc-400'
               }`}
             >
@@ -318,26 +357,20 @@ export default function WallOfShame({ lang }: Props) {
           ))}
         </div>
 
-        {/* Tab 0: Exposure Wall */}
         {activeTab === 0 && (
           <div className="space-y-4">
-            {/* Matrix scanline header */}
             <div className="flex items-center gap-2 text-[10px] font-mono text-green-400/70 uppercase tracking-[0.2em]">
-              <Zap className="w-3 h-3 animate-pulse" />
-              <span>{zh ? '实时链上证据归集流' : 'LIVE ON-CHAIN EVIDENCE STREAM'}</span>
-              <span className="ml-auto text-zinc-600 tabular-nums">{exposures.length} NODES</span>
+              <Zap className="w-3 h-3" />
+              <span>Devnet Alpha 风险项目展示</span>
+              <span className="ml-auto text-zinc-600 tabular-nums">{exposures.length} CASES</span>
             </div>
 
-            {/* Desktop table */}
             <div className="hidden md:block border border-green-400/20 rounded-xl overflow-hidden bg-zinc-950/80 backdrop-blur-sm">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm font-mono">
                   <thead>
                     <tr className="border-b border-green-400/15 bg-green-400/5">
-                      {(zh
-                        ? ['曝光项目', 'Rug 时间', '涉案金额', '联署人数', '链', '状态', '操作']
-                        : ['Project', 'Rug Date', 'Amount', 'Co-signers', 'Chain', 'Status', 'Action']
-                      ).map((col) => (
+                      {['曝光项目', '事件时间', '涉及金额', '联署人数', '链', '状态', '操作'].map((col) => (
                         <th
                           key={col}
                           className="text-left px-4 py-3 text-green-400/80 uppercase tracking-widest text-[10px] font-bold whitespace-nowrap"
@@ -350,7 +383,7 @@ export default function WallOfShame({ lang }: Props) {
                   <tbody>
                     {exposures.map((row) => {
                       const joined = joinedIds.has(row.id);
-                      const badge = statusBadge(row.status, zh);
+                      const badge = statusBadge(row.status);
                       const isFeatured = row.id === 'proj-x';
                       return (
                         <tr
@@ -363,20 +396,15 @@ export default function WallOfShame({ lang }: Props) {
                             <span className="text-zinc-100 font-bold">{row.project}</span>
                             {isFeatured && (
                               <span className="ml-2 text-[9px] text-green-400 border border-green-400/40 px-1.5 py-0.5 rounded">
-                                DAO 003
+                                DEMO
                               </span>
                             )}
                           </td>
                           <td className="px-4 py-3 text-zinc-500">{row.rugDate}</td>
                           <td className="px-4 py-3 text-red-400 font-bold tabular-nums">{row.amountUsd}</td>
                           <td className="px-4 py-3">
-                            <span
-                              className={`text-green-400 font-bold tabular-nums transition-all duration-300 ${
-                                joined ? 'scale-105 text-green-300' : ''
-                              }`}
-                            >
-                              {row.coSigners.toLocaleString()}
-                              {zh ? ' 人' : ''}
+                            <span className={`text-green-400 font-bold tabular-nums transition-all duration-300 ${joined ? 'scale-105 text-green-300' : ''}`}>
+                              {row.coSigners.toLocaleString()} 人
                             </span>
                           </td>
                           <td className="px-4 py-3">
@@ -385,7 +413,7 @@ export default function WallOfShame({ lang }: Props) {
                             </span>
                           </td>
                           <td className="px-4 py-3">
-                            <span className={`text-[10px] px-2 py-0.5 rounded border font-bold ${badge.class}`}>
+                            <span className={`text-[10px] px-2 py-0.5 rounded border font-bold ${badge.className}`}>
                               {badge.label}
                             </span>
                           </td>
@@ -393,8 +421,6 @@ export default function WallOfShame({ lang }: Props) {
                             <ExposureActions
                               joined={joined}
                               connected={connected}
-                              connectHint={zh ? '请先连接钱包' : 'Connect wallet'}
-                              zh={zh}
                               onJoin={() => joinClassAction(row.id)}
                             />
                           </td>
@@ -406,11 +432,10 @@ export default function WallOfShame({ lang }: Props) {
               </div>
             </div>
 
-            {/* Mobile cards */}
             <div className="md:hidden space-y-3">
               {exposures.map((row) => {
                 const joined = joinedIds.has(row.id);
-                const badge = statusBadge(row.status, zh);
+                const badge = statusBadge(row.status);
                 return (
                   <div
                     key={row.id}
@@ -420,33 +445,27 @@ export default function WallOfShame({ lang }: Props) {
                   >
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-zinc-100 font-bold font-mono">{row.project}</p>
-                      <span className={`text-[10px] px-2 py-0.5 rounded border ${badge.class}`}>{badge.label}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded border ${badge.className}`}>{badge.label}</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
                       <div>
-                        <p className="text-zinc-600">{zh ? 'Rug 时间' : 'Rug'}</p>
+                        <p className="text-zinc-600">事件时间</p>
                         <p className="text-zinc-400">{row.rugDate}</p>
                       </div>
                       <div>
-                        <p className="text-zinc-600">{zh ? '涉案金额' : 'Loss'}</p>
+                        <p className="text-zinc-600">涉及金额</p>
                         <p className="text-red-400 font-bold">{row.amountUsd}</p>
                       </div>
                       <div>
-                        <p className="text-zinc-600">{zh ? '联署' : 'Co-signers'}</p>
+                        <p className="text-zinc-600">联署人数</p>
                         <p className="text-green-400 font-bold tabular-nums">{row.coSigners.toLocaleString()}</p>
                       </div>
                       <div>
-                        <p className="text-zinc-600">{zh ? '链' : 'Chain'}</p>
+                        <p className="text-zinc-600">链</p>
                         <p className="text-cyan-400">{row.chain}</p>
                       </div>
                     </div>
-                    <ExposureActions
-                      joined={joined}
-                      connected={connected}
-                      connectHint={zh ? '请先连接钱包' : 'Connect wallet'}
-                      zh={zh}
-                      onJoin={() => joinClassAction(row.id)}
-                    />
+                    <ExposureActions joined={joined} connected={connected} onJoin={() => joinClassAction(row.id)} />
                   </div>
                 );
               })}
@@ -454,20 +473,34 @@ export default function WallOfShame({ lang }: Props) {
           </div>
         )}
 
-        {/* Tab 1: Green registry (compact) */}
         {activeTab === 1 && (
           <div className="border border-green-400/20 rounded-xl overflow-hidden bg-zinc-950/80">
             <div className="px-4 py-3 border-b border-green-400/15 bg-green-400/5 flex items-center gap-2">
               <BadgeCheck className="w-4 h-4 text-green-400" />
               <span className="text-green-400 font-mono text-xs font-bold uppercase tracking-widest">
-                {zh ? '绿标合规名录' : 'Certified Whitelist'}
+                Alpha Green Label 绿标认证路线图
               </span>
             </div>
-            <div className="overflow-x-auto">
+            <div className="p-4 space-y-4">
+              <p className="text-zinc-400 font-mono text-xs leading-relaxed">
+                项目方未来可申请 Alpha Protocol 绿标认证。绿标认证由 DAO 治理投票决定，当前显示为路线图功能。
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {GREEN_LABEL_FLOW.map((step, index) => (
+                  <div key={step} className="flex items-center gap-2">
+                    <span className="rounded border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-[11px] font-mono font-bold text-zinc-300">
+                      {step}
+                    </span>
+                    {index < GREEN_LABEL_FLOW.length - 1 && <ArrowRight className="h-3.5 w-3.5 text-zinc-700" />}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="overflow-x-auto border-t border-zinc-800">
               <table className="w-full text-sm font-mono">
                 <thead>
                   <tr className="border-b border-zinc-800">
-                    {(zh ? ['项目', '链', '贡献', '评级'] : ['Project', 'Chain', 'Fee', 'Rating']).map((col) => (
+                    {['项目', '链', '贡献记录', '日期', '评级'].map((col) => (
                       <th key={col} className="text-left px-4 py-2 text-zinc-500 text-[10px] uppercase font-bold">
                         {col}
                       </th>
@@ -475,14 +508,13 @@ export default function WallOfShame({ lang }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {certifiedData.map((row, i) => (
-                    <tr key={i} className="border-b border-zinc-800/50 hover:bg-green-400/5">
-                      <td className="px-4 py-3 text-zinc-200 font-bold">
-                        {row.name}
-                      </td>
+                  {certifiedData.map((row) => (
+                    <tr key={row.name} className="border-b border-zinc-800/50 hover:bg-green-400/5">
+                      <td className="px-4 py-3 text-zinc-200 font-bold">{row.name}</td>
                       <td className="px-4 py-3 text-cyan-400">{row.chain}</td>
                       <td className="px-4 py-3 text-green-400">{row.contribution} USDC</td>
-                      <td className="px-4 py-3 text-green-400">{zh ? row.ratingZh : row.rating}</td>
+                      <td className="px-4 py-3 text-zinc-500">{row.date}</td>
+                      <td className="px-4 py-3 text-green-400">{row.ratingZh}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -491,22 +523,67 @@ export default function WallOfShame({ lang }: Props) {
             <div className="p-4 border-t border-zinc-800">
               <button
                 type="button"
-                onClick={submitComplianceDeposit}
-                disabled={!connected || isProcessing}
-                className={`w-full py-2.5 rounded-lg border text-xs font-mono font-bold uppercase tracking-wider transition-all ${
-                  connected
-                    ? 'border-green-500/50 text-green-400 bg-green-500/10 hover:bg-green-500/20'
-                    : 'border-zinc-700 text-zinc-500 cursor-not-allowed opacity-50'
-                }`}
+                disabled
+                className="w-full py-2.5 rounded-lg border border-zinc-700 text-zinc-500 bg-zinc-900/70 cursor-not-allowed text-xs font-mono font-bold uppercase tracking-wider"
               >
-                {isProcessing ? (zh ? '处理中...' : 'Processing...') : connected ? tr.card1Btn : connectReportHint}
+                绿标认证模块开发中
               </button>
             </div>
           </div>
         )}
+
+        <div className="border border-blue-400/20 bg-blue-400/5 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-blue-400/10 bg-zinc-950/70 flex items-center gap-2">
+            <Users className="w-4 h-4 text-blue-400" />
+            <div>
+              <h3 className="text-zinc-100 font-mono text-sm font-black uppercase tracking-widest">
+                Community Builders / 社区建设者
+              </h3>
+              <p className="text-zinc-500 font-mono text-[10px] mt-0.5">
+                DAO 贡献者 / 生态建设池来自协议收入的 20%，用于支持 Alpha Protocol 的长期建设。
+              </p>
+            </div>
+          </div>
+          <div className="p-5 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {BUILDER_USES.map((item) => (
+                <div key={item} className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-xs font-mono font-bold text-zinc-300">
+                  {item}
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-4">
+              <p className="mb-3 text-zinc-100 font-mono text-xs font-black uppercase tracking-widest">
+                未来共建流程
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {BUILDER_FLOW.map((step, index) => (
+                  <div key={step} className="flex items-center gap-2">
+                    <span className="rounded border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-[11px] font-mono font-bold text-zinc-300">
+                      {step}
+                    </span>
+                    {index < BUILDER_FLOW.length - 1 && <ArrowRight className="h-3.5 w-3.5 text-zinc-700" />}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              disabled
+              className="w-full md:w-auto rounded border border-zinc-700 bg-zinc-900/70 px-4 py-2 text-xs font-mono font-bold text-zinc-500 disabled:cursor-not-allowed"
+            >
+              社区共建入口即将开放
+            </button>
+
+            <div className="rounded-lg border border-blue-400/25 bg-blue-400/5 px-4 py-3 text-xs font-mono leading-relaxed text-blue-100">
+              Alpha Protocol 将采用渐进式去中心化路线，早期由创始团队完成基础框架，随后通过 DAO 治理和贡献者激励池逐步开放社区共建。
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* New fraud report modal */}
       {showReportForm && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -522,19 +599,21 @@ export default function WallOfShame({ lang }: Props) {
                 <div className="flex items-center gap-2">
                   <FileText className="w-5 h-5 text-green-400" />
                   <h3 className="text-green-400 font-mono font-bold uppercase tracking-wider text-sm">
-                    {zh ? '发起链上欺诈归集提案' : 'Submit Fraud Aggregation'}
+                    发起风险项目曝光
                   </h3>
                 </div>
                 <button type="button" onClick={() => setShowReportForm(false)} className="text-zinc-600 hover:text-zinc-300">
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <p className="text-zinc-500 font-mono text-[11px] leading-relaxed">{tr.reportDesc}</p>
+              <p className="text-zinc-500 font-mono text-[11px] leading-relaxed">
+                当前表单仅保存到前端演示列表。真实链上 DAO 提案提交将在后续合约版本中开放。
+              </p>
               <input
                 type="text"
                 value={newProject}
                 onChange={(e) => setNewProject(e.target.value)}
-                placeholder={tr.projectPlaceholder}
+                placeholder="项目名称"
                 className="w-full bg-zinc-950 border border-green-400/25 rounded-lg px-3 py-2.5 text-sm font-mono text-zinc-200 focus:outline-none focus:border-green-400/60"
               />
               <div className="grid grid-cols-2 gap-3">
@@ -542,14 +621,14 @@ export default function WallOfShame({ lang }: Props) {
                   type="text"
                   value={newLoss}
                   onChange={(e) => setNewLoss(e.target.value)}
-                  placeholder={tr.lossPlaceholder}
+                  placeholder="损失金额"
                   className="w-full bg-zinc-950 border border-green-400/25 rounded-lg px-3 py-2.5 text-sm font-mono text-zinc-200 focus:outline-none focus:border-green-400/60"
                 />
                 <input
                   type="text"
                   value={newChain}
                   onChange={(e) => setNewChain(e.target.value)}
-                  placeholder={zh ? '链 (SOL/ETH)' : 'Chain'}
+                  placeholder="链（SOL/ETH）"
                   className="w-full bg-zinc-950 border border-green-400/25 rounded-lg px-3 py-2.5 text-sm font-mono text-zinc-200 focus:outline-none focus:border-green-400/60"
                 />
               </div>
@@ -557,9 +636,9 @@ export default function WallOfShame({ lang }: Props) {
                 type="button"
                 onClick={submitNewFraud}
                 disabled={!newProject.trim()}
-                className="w-full py-3 bg-green-500/20 hover:bg-green-500/30 border border-green-500/50 text-green-400 font-mono font-bold uppercase tracking-wider rounded-lg text-sm transition-all"
+                className="w-full py-3 bg-green-500/20 hover:bg-green-500/30 border border-green-500/50 text-green-400 font-mono font-bold uppercase tracking-wider rounded-lg text-sm transition-all disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {tr.reportBtn}
+                加入演示列表
               </button>
             </div>
           </div>
@@ -572,14 +651,10 @@ export default function WallOfShame({ lang }: Props) {
 function ExposureActions({
   joined,
   connected,
-  connectHint,
-  zh,
   onJoin,
 }: {
   joined: boolean;
   connected: boolean;
-  connectHint: string;
-  zh: boolean;
   onJoin: () => void;
 }) {
   return (
@@ -598,28 +673,21 @@ function ExposureActions({
           }`}
         >
           <Users className="w-3 h-3" />
-          {joined
-            ? zh
-              ? '已联署'
-              : 'Joined'
-            : !connected
-              ? connectHint
-              : zh
-                ? '参与受害者联署'
-                : 'Join Class Action'}
+          {joined ? '已联署' : connected ? '参与受害者联署' : '请先连接钱包'}
         </button>
         <button
           type="button"
-          className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-cyan-400 transition-colors"
+          disabled
+          className="inline-flex items-center gap-1 text-xs text-zinc-500 cursor-not-allowed"
         >
           <ExternalLink className="w-3 h-3" />
-          {zh ? '证据' : 'Evidence'}
+          证据入口开发中
         </button>
       </div>
       {joined && (
         <p className="text-[10px] font-mono text-green-400 leading-snug flex items-start gap-1 animate-pulse">
           <Shield className="w-3 h-3 flex-shrink-0 mt-0.5" />
-          {zh ? '已用当前钱包地址参与链上证据留存' : 'Wallet recorded on-chain for evidence co-signing'}
+          当前钱包已加入 Devnet Alpha 演示联署列表，真实链上提案将在后续开放。
         </p>
       )}
     </div>

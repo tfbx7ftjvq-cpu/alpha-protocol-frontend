@@ -6,7 +6,7 @@ import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import '@solana/wallet-adapter-react-ui/styles.css';
 import { Globe, ShieldCheck, BookOpen, LayoutDashboard, Hexagon, Wallet } from 'lucide-react';
-import { Lang } from './translations';
+import { type Lang } from './translations';
 import TreasuryDashboard from './components/TreasuryDashboard';
 import WallOfShame from './components/WallOfShame';
 import VictimRelief from './components/VictimRelief';
@@ -14,29 +14,27 @@ import VictimRelief from './components/VictimRelief';
 type Tab = 'treasury' | 'shame' | 'relief';
 type RpcStatus = 'checking' | 'ok' | 'error';
 
-const endpoint = "https://api.devnet.solana.com";
+const endpoint = 'https://api.devnet.solana.com';
 const wallets = [new PhantomWalletAdapter()];
 const RPC_UNAVAILABLE_MESSAGE = 'Devnet RPC 暂时不可用';
 const WALLET_REJECTED_MESSAGE = '用户取消连接';
 
 const HERO = {
   en: {
-    tagline: 'Fully Decentralized, Code-Enforced Retail Haven & On-Chain Court',
-    sub: 'Permissionless streaming router for all Solana participants. No whitelist. No admin private keys. 50/20/20/10 automated splits.',
-    tabTreasury: 'Treasury Router',
-    tabShame: 'On-Chain Court & DAO',
-    tabRelief: 'Staking & Dividends',
-    protocolBadge: 'α Protocol',
-    permissionless: 'PERMISSIONLESS',
+    tagline: 'DAO 驱动的链上国库、赔付救济、自动质押分红、项目认证与社区共建协议',
+    sub: '当前版本为 Devnet Alpha 测试网原型，链上国库分流账本已在 Devnet 验证。DAO、赔付、质押、绿标认证和社区共建模块将在后续合约版本中逐步开放。',
+    tabTreasury: '国库分流账本',
+    tabShame: '链上法庭与 DAO 治理',
+    tabRelief: '资产质押与分红',
+    protocolBadge: 'Alpha Protocol / α 协议',
   },
   zh: {
-    tagline: '完全去中心化、代码强制执行的散户避风港与链上法庭',
-    sub: '对全体 Solana 用户无需许可开放。无白名单限制，无管理员私钥。50/20/20/10 资金流自动化实时拆分。',
+    tagline: 'DAO 驱动的链上国库、赔付救济、自动质押分红、项目认证与社区共建协议',
+    sub: '当前版本为 Devnet Alpha 测试网原型，链上国库分流账本已在 Devnet 验证。DAO、赔付、质押、绿标认证和社区共建模块将在后续合约版本中逐步开放。',
     tabTreasury: '国库分流账本',
-    tabShame: '链上法庭与DAO治理',
+    tabShame: '链上法庭与 DAO 治理',
     tabRelief: '资产质押与分红',
-    protocolBadge: 'α 协议',
-    permissionless: '无许可',
+    protocolBadge: 'Alpha Protocol / α 协议',
   },
 };
 
@@ -50,8 +48,6 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
   const { publicKey, connected: walletConnected } = useWallet();
   const [lang, setLang] = useState<Lang>('zh');
   const [activeTab, setActiveTab] = useState<Tab>('treasury');
-  
-  // ── 新增核心状态：负责存放钱包余额 ──
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [rpcStatus, setRpcStatus] = useState<RpcStatus>('checking');
   const [rpcMessage, setRpcMessage] = useState<string | null>(null);
@@ -93,18 +89,15 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
     };
   }, [connection]);
 
-  // ── 新增核心副作用：动态监听钱包并抓取 Devnet 余额 ──
   useEffect(() => {
     let mounted = true;
 
     async function fetchBalance() {
       if (walletConnected && publicKey) {
         try {
-          // 向 Devnet 发起 RPC 请求数钱
           const lamports = await connection.getBalance(publicKey);
           if (!mounted) return;
 
-          // 转换成人类能看懂的 SOL 数量
           setWalletBalance(lamports / LAMPORTS_PER_SOL);
           setRpcStatus('ok');
           setRpcMessage(null);
@@ -116,15 +109,13 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
           setRpcMessage(RPC_UNAVAILABLE_MESSAGE);
         }
       } else {
-        // 钱包断开时，强制归零
         setWalletBalance(null);
       }
     }
 
     fetchBalance();
-    
-    // 设置一个 10 秒定时自动对账，防止链上数据变动前端不知道
     const interval = setInterval(fetchBalance, 10000);
+
     return () => {
       mounted = false;
       clearInterval(interval);
@@ -164,28 +155,24 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-200 font-mono select-none">
-      {/* Scanline overlay */}
       <div className="fixed inset-0 pointer-events-none z-0 scanlines opacity-[0.02]" />
-      {/* Grid background */}
       <div className="fixed inset-0 pointer-events-none z-0 cyber-grid opacity-[0.03]" />
 
-      {/* ── Header ── */}
       <header className="sticky top-0 z-50 border-b border-zinc-900 bg-zinc-950/90 backdrop-blur-md">
-        {/* Status bar */}
         <div className="border-b border-zinc-900 px-4 py-1 flex items-center justify-between bg-zinc-950">
           <div className="flex items-center gap-4 text-zinc-600 text-[10px]">
-            <span className="flex items-center gap-1.5 text-green-400/70 font-bold animate-pulse">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
-              LIVE MONITOR
+            <span className="flex items-center gap-1.5 text-cyan-400/80 font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 inline-block" />
+              DEVNET
             </span>
-            <span>SLOT: #284,723,019</span>
-            <span className="hidden sm:block">BASE FEE: 0.000025 SOL</span>
+            <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded border border-emerald-400/20 bg-emerald-400/5 text-emerald-400 font-bold text-[9px]">
+              Devnet Alpha
+            </span>
             <span className={`flex items-center gap-1 px-2 py-0.5 rounded border font-bold text-[9px] ${rpcStatusMeta[rpcStatus].className}`}>
               <span className={`w-1.5 h-1.5 rounded-full inline-block ${rpcStatusMeta[rpcStatus].dotClassName} ${rpcStatus === 'checking' ? 'animate-pulse' : ''}`} />
               {rpcStatus === 'error' ? RPC_UNAVAILABLE_MESSAGE : rpcStatusMeta[rpcStatus].label}
             </span>
-            
-            {/* ── 核心 UI 焊入：钱包余额监控通道 ── */}
+
             {walletConnected && (
               <span className="flex items-center gap-1 px-2 py-0.5 rounded border border-green-500/20 bg-green-500/5 text-green-400 font-bold text-[9px] animate-fade-in">
                 <Wallet className="w-2.5 h-2.5" />
@@ -203,17 +190,15 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
             )}
           </div>
           <div className="flex items-center gap-2">
-            <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded border border-zinc-900 text-zinc-600 text-[9px] uppercase tracking-widest font-black">
-              {h.permissionless}
+            <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded border border-zinc-900 text-zinc-500 text-[9px] uppercase tracking-widest font-black">
+              测试网原型
             </span>
             <WalletMultiButton className="!bg-green-500 !text-black font-mono hover:!bg-green-400 transition-all rounded-md px-4 py-2 text-sm" />
           </div>
         </div>
 
-        {/* Hero identity row */}
         <div className="px-4 sm:px-6 py-5 flex flex-col sm:flex-row sm:items-start gap-4 sm:gap-6 justify-between">
           <div className="flex items-start gap-4">
-            {/* Logo mark */}
             <div className="relative flex-shrink-0 w-12 h-12 flex items-center justify-center">
               <Hexagon className="w-12 h-12 text-green-400/10 absolute" strokeWidth={1} />
               <span
@@ -224,12 +209,11 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
               </span>
             </div>
 
-            {/* Title block */}
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-lg font-black text-zinc-100 tracking-tight leading-none">{h.protocolBadge}</h1>
                 <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-green-400/10 border border-green-400/20 text-green-400 uppercase tracking-widest">
-                  v2.1 Production
+                  Devnet Alpha
                 </span>
               </div>
               <p className="text-green-400 font-mono text-xs font-bold mt-2 leading-snug max-w-lg">{h.tagline}</p>
@@ -237,7 +221,6 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
             </div>
           </div>
 
-          {/* Language switcher */}
           <button
             type="button"
             onClick={() => setLang(lang === 'en' ? 'zh' : 'en')}
@@ -251,7 +234,6 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
           </button>
         </div>
 
-        {/* Nav tabs */}
         <nav className="px-4 sm:px-6 flex overflow-x-auto border-t border-zinc-900">
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -275,29 +257,36 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
         </nav>
       </header>
 
-      {/* ── Main content ── */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 relative z-10">
-        {/* ── 核心传递：同时将抓到的网络余额塞给子组件 ── */}
         {activeTab === 'treasury' && (
-          <TreasuryDashboard 
-            lang={lang} 
-            walletConnected={walletConnected} 
-            walletBalance={walletBalance} 
+          <TreasuryDashboard
+            lang={lang}
+            walletConnected={walletConnected}
+            walletBalance={walletBalance}
           />
         )}
         {activeTab === 'shame' && <WallOfShame lang={lang} />}
         {activeTab === 'relief' && <VictimRelief lang={lang} />}
       </main>
 
-      {/* ── Footer ── */}
       <footer className="border-t border-zinc-900 mt-24 px-6 py-8 text-center space-y-4 bg-zinc-950">
+        <div className="max-w-4xl mx-auto rounded-xl border border-red-400/25 bg-red-400/5 px-4 py-3 text-left">
+          <p className="text-red-300 text-[10px] font-mono font-bold uppercase tracking-widest mb-1">
+            Devnet Alpha 风险提示
+          </p>
+          <p className="text-red-100/80 text-[11px] font-mono leading-relaxed">
+            当前版本为 Devnet Alpha 测试网原型。
+            当前不涉及真实主网资金、真实赔付、真实质押收益或正式绿标认证。
+            ALPHA 代币相关 creator fee / developer reward 接入协议国库的机制将在后续版本中逐步公开和验证。
+            质押分红不代表固定收益，不承诺固定年化，不保证收益。
+            后续功能将通过合约升级、测试、安全审查和社区治理逐步开放。
+          </p>
+        </div>
         <p className="text-zinc-700 text-[10px] font-mono tracking-wider max-w-3xl mx-auto leading-relaxed">
-          {lang === 'en'
-            ? '© 2026 α Protocol — Code-Enforced Router Asset — Autonomous state transitions are programmatically committed via decentralized daemon nodes. Zero administrative trust.'
-            : '© 2026 α 协议 — 代码硬履约路由资产 — 自动化状态转换由去中心化守护节点机械提交，免除一切管理人信任风险。'}
+          © 2026 Alpha Protocol / α 协议 — Devnet Alpha 测试网原型。链上国库分流账本已在 Devnet 验证。
         </p>
         <div className="flex items-center justify-center gap-2 flex-wrap">
-          {['Solana Web3', 'Jupiter Swap API', 'Jito Bundles', 'Node.js Core Daemon', 'SQLite Persistent Storage'].map((item) => (
+          {['Solana Devnet', 'Anchor Program', 'TreasuryState PDA', 'React / Vite', 'Phantom Wallet'].map((item) => (
             <span
               key={item}
               className="text-[9px] text-zinc-600 border border-zinc-900 bg-zinc-950 px-2 py-0.5 rounded font-mono font-bold tracking-tight"
