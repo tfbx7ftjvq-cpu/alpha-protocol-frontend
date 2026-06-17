@@ -4,7 +4,7 @@ import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { Flame, Activity, Clock, Calculator, Terminal, Radio, CheckCircle, Wallet } from 'lucide-react';
 import { Lang } from '../translations';
 import { TOTAL_NETWORK_POINTS, getDaysMultiplier, pad } from '../utils/staking';
-import { PROGRAM_ID, createAlphaProgram, getTreasuryStatePda, initializeTreasuryState } from '../lib/alphaProgram';
+import { PROGRAM_ID, createAlphaProgram, depositToTreasuryState, getTreasuryStatePda, initializeTreasuryState } from '../lib/alphaProgram';
 import ProtocolArchitecture from './ProtocolArchitecture';
 import DAOGovernance from './DAOGovernance';
 
@@ -18,6 +18,7 @@ import DAOGovernance from './DAOGovernance';
   const EPOCH_DURATION_HOURS = 72;
   const BUYBACK_TRIGGER_USDC = 200;
   const AUDIT_MISMATCH_TOLERANCE_USDC = 50000;
+  const TEST_DEPOSIT_AMOUNT = 10000;
   const TREASURY_STATE_PDA = getTreasuryStatePda();
 
   // 当后端尚未输出总流水时，前端默认按 0 展示，避免写死假数据
@@ -192,6 +193,8 @@ import DAOGovernance from './DAOGovernance';
     const [chainRefreshNonce, setChainRefreshNonce] = useState(0);
     const [initializeStatus, setInitializeStatus] = useState<InitializeStatus>('idle');
     const [initializeMessage, setInitializeMessage] = useState<string | null>(null);
+    const [depositStatus, setDepositStatus] = useState<InitializeStatus>('idle');
+    const [depositMessage, setDepositMessage] = useState<string | null>(null);
     const liveRevenue = useLiveTicker(BASE_REVENUE);
 
     const [staked, setStaked] = useState('');
@@ -219,6 +222,8 @@ import DAOGovernance from './DAOGovernance';
         setChainLastSync(null);
         setInitializeStatus('idle');
         setInitializeMessage(null);
+        setDepositStatus('idle');
+        setDepositMessage(null);
         return () => {
           mounted = false;
         };
@@ -323,6 +328,56 @@ import DAOGovernance from './DAOGovernance';
       } catch (err) {
         setInitializeStatus('error');
         setInitializeMessage(getReadableErrorMessage(err));
+      }
+    }
+
+    async function handleTestDeposit() {
+      if (depositStatus === 'loading') return;
+
+      if (!walletConnected || !connected || !publicKey) {
+        setDepositStatus('error');
+        setDepositMessage(isZh ? '请先连接钱包' : 'Connect your wallet first');
+        return;
+      }
+
+      if (!signTransaction || !signAllTransactions) {
+        setDepositStatus('error');
+        setDepositMessage(isZh ? '当前钱包不支持交易签名' : 'Current wallet does not support transaction signing');
+        return;
+      }
+
+      if (chainReadStatus !== 'ready' || !chainTreasuryState) {
+        setDepositStatus('error');
+        setDepositMessage(isZh ? 'TreasuryState PDA 尚未初始化' : 'TreasuryState PDA is not initialized yet');
+        return;
+      }
+
+      setDepositStatus('loading');
+      setDepositMessage(null);
+      setChainReadError(null);
+
+      try {
+        const signature = await depositToTreasuryState(
+          connection,
+          {
+            publicKey,
+            signAllTransactions,
+            signTransaction,
+          } as unknown as AnchorWallet,
+          TEST_DEPOSIT_AMOUNT,
+        );
+
+        setDepositStatus('success');
+        setDepositMessage(
+          isZh
+            ? `测试入账 ${TEST_DEPOSIT_AMOUNT} 成功：${signature}`
+            : `Test deposit ${TEST_DEPOSIT_AMOUNT} succeeded: ${signature}`,
+        );
+        setChainReadStatus('loading');
+        setChainRefreshNonce((value) => value + 1);
+      } catch (err) {
+        setDepositStatus('error');
+        setDepositMessage(getReadableErrorMessage(err));
       }
     }
 
@@ -582,20 +637,49 @@ import DAOGovernance from './DAOGovernance';
             )}
 
             {chainReadStatus === 'ready' && chainTreasuryState && (
-              <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
-                {[
-                  ['totalInflow', chainTreasuryState.totalInflow, 'text-green-400'],
-                  ['reliefPool', chainTreasuryState.reliefPool, 'text-emerald-400'],
-                  ['buybackPool', chainTreasuryState.buybackPool, 'text-red-400'],
-                  ['payrollPool', chainTreasuryState.payrollPool, 'text-blue-400'],
-                  ['stakingPool', chainTreasuryState.stakingPool, 'text-yellow-400'],
-                ].map(([label, value, color]) => (
-                  <div key={label} className="border border-zinc-800 bg-zinc-950/60 rounded-lg p-3 text-center">
-                    <p className="text-zinc-600 font-mono text-[9px] uppercase tracking-widest mb-1">{label}</p>
-                    <p className={`font-mono text-sm font-black tabular-nums break-all ${color}`}>{value}</p>
-                    <p className="text-zinc-600 font-mono text-[9px] mt-1">raw u64</p>
-                  </div>
-                ))}
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                  {[
+                    ['totalInflow', chainTreasuryState.totalInflow, 'text-green-400'],
+                    ['reliefPool', chainTreasuryState.reliefPool, 'text-emerald-400'],
+                    ['buybackPool', chainTreasuryState.buybackPool, 'text-red-400'],
+                    ['payrollPool', chainTreasuryState.payrollPool, 'text-blue-400'],
+                    ['stakingPool', chainTreasuryState.stakingPool, 'text-yellow-400'],
+                  ].map(([label, value, color]) => (
+                    <div key={label} className="border border-zinc-800 bg-zinc-950/60 rounded-lg p-3 text-center">
+                      <p className="text-zinc-600 font-mono text-[9px] uppercase tracking-widest mb-1">{label}</p>
+                      <p className={`font-mono text-sm font-black tabular-nums break-all ${color}`}>{value}</p>
+                      <p className="text-zinc-600 font-mono text-[9px] mt-1">raw u64</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleTestDeposit}
+                    disabled={depositStatus === 'loading'}
+                    className="w-full sm:w-auto px-4 py-2 rounded border border-green-400/30 bg-green-400/10 text-green-300 hover:bg-green-400/15 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-mono text-xs font-bold"
+                  >
+                    {depositStatus === 'loading'
+                      ? (isZh ? '测试入账中...' : 'Depositing...')
+                      : (isZh ? '测试入账 10000' : 'Test Deposit 10000')}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {depositMessage && (
+              <div
+                className={`font-mono text-xs rounded-lg px-3 py-2 break-words border ${
+                  depositStatus === 'success'
+                    ? 'text-green-400 border-green-400/20 bg-green-400/5'
+                    : depositStatus === 'error'
+                      ? 'text-red-400 border-red-400/30 bg-red-400/10'
+                      : 'text-zinc-400 border-zinc-800 bg-zinc-950/50'
+                }`}
+              >
+                {depositMessage}
               </div>
             )}
 
@@ -948,7 +1032,7 @@ import DAOGovernance from './DAOGovernance';
       : String(value ?? 0);
 
     try {
-      return BigInt(raw).toLocaleString('en-US');
+      return BigInt(raw).toString();
     } catch {
       return raw;
     }

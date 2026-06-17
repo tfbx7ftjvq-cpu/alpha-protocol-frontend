@@ -1,4 +1,4 @@
-import { AnchorProvider, Program, type Idl, type Wallet } from '@coral-xyz/anchor';
+import { AnchorProvider, BN, Program, type Idl, type Wallet } from '@coral-xyz/anchor';
 import { PublicKey, SystemProgram, type Connection, type TransactionSignature } from '@solana/web3.js';
 import idl from '../idl/my_first_solana_program.json';
 
@@ -30,8 +30,17 @@ type InitializeProtocolBuilder = {
   };
 };
 
+type DepositBuilder = {
+  accountsStrict(accounts: {
+    treasuryState: PublicKey;
+  }): {
+    rpc(): Promise<TransactionSignature>;
+  };
+};
+
 type AlphaProgramMethods = {
   initializeProtocol(): InitializeProtocolBuilder;
+  deposit(amount: BN): DepositBuilder;
 };
 
 export function initializeTreasuryState(
@@ -48,6 +57,22 @@ export function initializeTreasuryState(
       treasuryState: getTreasuryStatePda(),
       authority,
       systemProgram: SystemProgram.programId,
+    })
+    .rpc();
+}
+
+export function depositToTreasuryState(
+  connection: Connection,
+  wallet: Wallet,
+  amount: number | bigint,
+): Promise<TransactionSignature> {
+  const program = createAlphaProgram(connection, wallet);
+  const methods = program.methods as unknown as AlphaProgramMethods;
+
+  return methods
+    .deposit(new BN(amount.toString()))
+    .accountsStrict({
+      treasuryState: getTreasuryStatePda(),
     })
     .rpc();
 }
