@@ -1,0 +1,16 @@
+{
+  "scripts": {
+    "initialize-usdc-treasury-v2": "ts-node scripts/initialize-usdc-treasury-v2.ts",
+    "deposit-usdc-revenue-v2": "ts-node scripts/deposit-usdc-revenue-v2.ts"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.32.1",
+    "@solana/spl-token": "^0.4.14",
+    "@solana/web3.js": "^1.98.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.3"
+  }
+}
