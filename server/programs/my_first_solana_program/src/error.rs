@@ -7,4 +7,16 @@ pub enum CustomError {
 
     #[msg("Invalid split config")]
     InvalidSplitConfig,
+
+    #[msg("Invalid amount")]
+    InvalidAmount,
+
+    #[msg("Invalid mint")]
+    InvalidMint,
+
+    #[msg("Invalid vault")]
+    InvalidVault,
+
+    #[msg("Invalid token account")]
+    InvalidTokenAccount,
 }

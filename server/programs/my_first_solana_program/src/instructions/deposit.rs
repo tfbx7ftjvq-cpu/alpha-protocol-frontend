@@ -90,9 +90,7 @@ pub fn calculate_treasury_split(amount: u64) -> Result<TreasurySplit> {
 }
 
 fn split_amount(amount: u64, bps: u64) -> Result<u64> {
-    let multiplied = amount
-        .checked_mul(bps)
-        .ok_or(CustomError::MathOverflow)?;
+    let multiplied = amount.checked_mul(bps).ok_or(CustomError::MathOverflow)?;
 
     let divided = multiplied
         .checked_div(BPS_DENOMINATOR)
