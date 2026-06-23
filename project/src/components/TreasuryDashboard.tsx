@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ElementType } from 'react';
 import { type Wallet as AnchorWallet } from '@coral-xyz/anchor';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import { Connection } from '@solana/web3.js';
 import {
   AlertCircle,
   ArrowDown,
@@ -23,6 +24,12 @@ import {
   getTreasuryStatePda,
   initializeTreasuryState,
 } from '../lib/alphaProgram';
+import {
+  DEVNET_RPC_ENDPOINT,
+  USDC_MINT,
+  readTreasuryV2Balances,
+  type TreasuryV2Balances,
+} from '../lib/devnetTreasuryV2';
 
 interface Props {
   lang: Lang;
@@ -72,6 +79,10 @@ export default function TreasuryDashboard({ lang, walletConnected, walletBalance
   const { connection } = useConnection();
   const wallet = useWallet();
   const { connected, publicKey, signAllTransactions, signTransaction } = wallet;
+  const devnetTreasuryConnection = useMemo(
+    () => new Connection(DEVNET_RPC_ENDPOINT, 'confirmed'),
+    [],
+  );
 
   const [chainReadStatus, setChainReadStatus] = useState<ChainReadStatus>('idle');
   const [chainTreasuryState, setChainTreasuryState] = useState<ChainTreasuryState | null>(null);
@@ -83,6 +94,10 @@ export default function TreasuryDashboard({ lang, walletConnected, walletBalance
   const [depositMessage, setDepositMessage] = useState<string | null>(null);
   const [refreshStatus, setRefreshStatus] = useState<ActionStatus>('idle');
   const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
+  const [treasuryV2Status, setTreasuryV2Status] = useState<TreasuryV2ReadStatus>('idle');
+  const [treasuryV2Balances, setTreasuryV2Balances] = useState<TreasuryV2Balances | null>(null);
+  const [treasuryV2Error, setTreasuryV2Error] = useState<string | null>(null);
+  const [treasuryV2LastSync, setTreasuryV2LastSync] = useState<Date | null>(null);
 
   const walletAddress = walletConnected && connected && publicKey ? publicKey.toBase58() : '钱包未连接';
   const walletAddressShort = walletConnected && connected && publicKey ? shortAddress(publicKey.toBase58()) : '钱包未连接';
@@ -112,6 +127,45 @@ export default function TreasuryDashboard({ lang, walletConnected, walletBalance
       className: 'text-red-400 border-red-400/40 bg-red-400/10',
     },
   }), []);
+
+  const treasuryV2StatusMeta = useMemo<Record<TreasuryV2ReadStatus, { label: string; className: string }>>(() => ({
+    idle: {
+      label: '等待读取',
+      className: 'text-zinc-400 border-zinc-700 bg-zinc-800/40',
+    },
+    loading: {
+      label: '读取中',
+      className: 'text-yellow-400 border-yellow-400/30 bg-yellow-400/10',
+    },
+    ready: {
+      label: 'Devnet 已同步',
+      className: 'text-emerald-400 border-emerald-400/30 bg-emerald-400/10',
+    },
+    error: {
+      label: '读取失败',
+      className: 'text-red-400 border-red-400/40 bg-red-400/10',
+    },
+  }), []);
+
+  const loadTreasuryV2Balances = useCallback(async () => {
+    setTreasuryV2Status('loading');
+    setTreasuryV2Error(null);
+
+    try {
+      const balances = await readTreasuryV2Balances(devnetTreasuryConnection);
+      setTreasuryV2Balances(balances);
+      setTreasuryV2Status('ready');
+      setTreasuryV2LastSync(new Date());
+    } catch (err) {
+      setTreasuryV2Status('error');
+      setTreasuryV2Error(`Devnet USDC vault 余额读取失败：${getReadableErrorMessage(err)}`);
+      setTreasuryV2LastSync(new Date());
+    }
+  }, [devnetTreasuryConnection]);
+
+  useEffect(() => {
+    void loadTreasuryV2Balances();
+  }, [loadTreasuryV2Balances]);
 
   const loadTreasuryState = useCallback(async (mode: LoadMode = 'auto') => {
     if (!walletConnected || !connected || !publicKey) {
@@ -290,12 +344,24 @@ export default function TreasuryDashboard({ lang, walletConnected, walletBalance
     await loadTreasuryState('refresh');
   }
 
+  async function handleRefreshTreasuryV2() {
+    if (treasuryV2Status === 'loading') return;
+    await loadTreasuryV2Balances();
+  }
+
   const metricCards = [
     { label: 'totalInflow', caption: '累计流入', value: chainTreasuryState?.totalInflow ?? '--', color: 'text-emerald-400' },
     { label: 'reliefPool', caption: '受害者赔付 / 救济池', value: chainTreasuryState?.reliefPool ?? '--', color: 'text-green-400' },
     { label: 'buybackPool', caption: '回购 / 销毁池', value: chainTreasuryState?.buybackPool ?? '--', color: 'text-red-400' },
     { label: 'payrollPool', caption: 'DAO 贡献者 / 生态建设池', value: chainTreasuryState?.payrollPool ?? '--', color: 'text-blue-400' },
     { label: 'stakingPool', caption: '质押分红池', value: chainTreasuryState?.stakingPool ?? '--', color: 'text-yellow-400' },
+  ];
+
+  const treasuryV2Cards = [
+    { key: 'relief', label: '赔付池 / Relief Pool', balance: treasuryV2Balances?.relief, tone: 'text-emerald-400 border-emerald-400/25 bg-emerald-400/5' },
+    { key: 'buyback', label: '回购销毁池 / Buyback & Burn Pool', balance: treasuryV2Balances?.buyback, tone: 'text-red-400 border-red-400/25 bg-red-400/5' },
+    { key: 'builders', label: 'DAO 建设者池 / Builders Pool', balance: treasuryV2Balances?.builders, tone: 'text-blue-400 border-blue-400/25 bg-blue-400/5' },
+    { key: 'staking', label: '质押奖励池 / Staking Rewards Pool', balance: treasuryV2Balances?.staking, tone: 'text-yellow-400 border-yellow-400/25 bg-yellow-400/5' },
   ];
 
   return (
@@ -343,6 +409,88 @@ export default function TreasuryDashboard({ lang, walletConnected, walletBalance
           <span className={`rounded border px-2 py-1 ${chainStatusMeta[chainReadStatus].className}`}>
             链上状态：{chainStatusMeta[chainReadStatus].label}
           </span>
+        </div>
+      </section>
+
+      <section className="space-y-5 rounded-xl border border-emerald-400/20 bg-emerald-400/5 p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <SectionHeader
+            icon={Landmark}
+            eyebrow="Devnet USDC Treasury V2"
+            title="Devnet USDC 实时国库余额"
+            description="直接读取四个真实 USDC SPL Token vault 的 Devnet 余额，不需要连接钱包即可查看。"
+          />
+          <div className="flex flex-col items-start gap-2 lg:items-end">
+            <div className="inline-flex items-center gap-2 rounded border border-orange-400/30 bg-orange-400/10 px-3 py-1.5 text-[11px] font-black text-orange-300">
+              <ShieldAlert className="h-3.5 w-3.5" />
+              Devnet Alpha / 测试网数据 / 非主网资金
+            </div>
+            <div className={`inline-flex w-fit items-center gap-2 rounded border px-3 py-1.5 text-xs font-bold ${treasuryV2StatusMeta[treasuryV2Status].className}`}>
+              {treasuryV2Status === 'loading' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {treasuryV2StatusMeta[treasuryV2Status].label}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <InfoTile icon={Coins} label="USDC Devnet Mint" value={USDC_MINT.toBase58()} tone="text-cyan-400" />
+          <InfoTile icon={Gauge} label="RPC" value={DEVNET_RPC_ENDPOINT} tone="text-emerald-400" />
+          <div className="rounded border border-emerald-400/25 bg-zinc-950/70 p-4 md:col-span-2">
+            <div className="mb-2 flex items-center gap-2">
+              <Landmark className="h-4 w-4 text-emerald-400" />
+              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Total USDC</p>
+            </div>
+            <p className="font-mono text-3xl font-black tabular-nums text-emerald-400">
+              {treasuryV2Balances ? `${treasuryV2Balances.totalUiAmountString} USDC` : '--'}
+            </p>
+            <p className="mt-1 text-[10px] text-zinc-600">
+              raw decimals: {treasuryV2Balances?.decimals ?? 6}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {treasuryV2Cards.map((vault) => (
+            <div key={vault.key} className={`rounded border p-4 ${vault.tone}`}>
+              <p className="min-h-8 text-xs font-black leading-snug text-zinc-100">{vault.label}</p>
+              <p className="mt-3 font-mono text-2xl font-black tabular-nums">
+                {vault.balance ? `${vault.balance.uiAmountString} USDC` : '--'}
+              </p>
+              <p className="mt-2 break-all font-mono text-[10px] leading-relaxed text-zinc-500">
+                {vault.balance?.address ?? 'vault address loading'}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-col gap-3 rounded border border-zinc-800 bg-zinc-950/60 p-4 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <p className="text-sm font-black text-zinc-100">Devnet vault balances</p>
+            <p className="text-xs text-zinc-500">
+              数据来自 connection.getTokenAccountBalance(vaultAddress)，仅代表 Solana Devnet 测试网 SPL Token 余额。
+            </p>
+            {treasuryV2Error && (
+              <div className="pt-2">
+                <StatusNotice tone="error" message={treasuryV2Error} />
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col items-start gap-2 md:items-end">
+            <button
+              type="button"
+              onClick={handleRefreshTreasuryV2}
+              disabled={treasuryV2Status === 'loading'}
+              className="inline-flex items-center justify-center gap-2 rounded border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-xs font-bold text-emerald-300 transition-all hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {treasuryV2Status === 'loading' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              {treasuryV2Status === 'loading' ? '读取中...' : '刷新链上余额'}
+            </button>
+            {treasuryV2LastSync && (
+              <p className="text-[10px] text-zinc-600">
+                Last vault sync: {treasuryV2LastSync.toLocaleTimeString(locale)}
+              </p>
+            )}
+          </div>
         </div>
       </section>
 
@@ -578,6 +726,7 @@ function StatusNotice({ tone, message }: { tone: NoticeTone; message: string }) 
 }
 
 type ChainReadStatus = 'idle' | 'loading' | 'ready' | 'missing' | 'error';
+type TreasuryV2ReadStatus = 'idle' | 'loading' | 'ready' | 'error';
 type ActionStatus = 'idle' | 'loading' | 'success' | 'error';
 type LoadMode = 'auto' | 'refresh' | 'after-action';
 type NoticeTone = 'neutral' | 'success' | 'warning' | 'error';
