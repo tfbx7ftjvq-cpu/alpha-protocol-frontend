@@ -2,6 +2,7 @@ import { Connection, PublicKey } from '@solana/web3.js';
 
 export const DEVNET_RPC_ENDPOINT = 'https://api.devnet.solana.com';
 export const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
+const SOLANA_EXPLORER_DEVNET = 'https://explorer.solana.com';
 
 export const USDC_TREASURY_V2_VAULTS = {
   relief: {
@@ -21,6 +22,55 @@ export const USDC_TREASURY_V2_VAULTS = {
     address: new PublicKey('9nAUb7QG3mALgEUQZ26fHRa4p9BkfvKV5xGp6NFXA8wQ'),
   },
 } as const;
+
+export const LATEST_USDC_REVENUE_SPLIT = {
+  amount: '20 USDC',
+  splitRatio: '50% / 20% / 20% / 10%',
+  status: 'Confirmed on Devnet',
+  source: 'Devnet 测试交易 / 非主网资金',
+  signature: '4i2dX2Jof77ENZndkEc9NVZ7QC52nogHoPdxn41LWgdp7R7briKmbXhRYhoKwsXtAiTMFNMMQeHuUi7NmGpQVtq9',
+  explorerUrl:
+    `${SOLANA_EXPLORER_DEVNET}/tx/4i2dX2Jof77ENZndkEc9NVZ7QC52nogHoPdxn41LWgdp7R7briKmbXhRYhoKwsXtAiTMFNMMQeHuUi7NmGpQVtq9?cluster=devnet`,
+  allocations: [
+    {
+      key: 'relief',
+      label: '赔付池',
+      vaultLabel: '赔付池 Vault',
+      amount: '10 USDC',
+      ratio: '50%',
+      tone: 'text-emerald-400 border-emerald-400/25 bg-emerald-400/5',
+    },
+    {
+      key: 'buyback',
+      label: '回购销毁池',
+      vaultLabel: '回购销毁池 Vault',
+      amount: '4 USDC',
+      ratio: '20%',
+      tone: 'text-red-400 border-red-400/25 bg-red-400/5',
+    },
+    {
+      key: 'builders',
+      label: 'DAO 建设者池',
+      vaultLabel: 'DAO 建设者池 Vault',
+      amount: '4 USDC',
+      ratio: '20%',
+      tone: 'text-blue-400 border-blue-400/25 bg-blue-400/5',
+    },
+    {
+      key: 'staking',
+      label: '质押奖励池',
+      vaultLabel: '质押奖励池 Vault',
+      amount: '2 USDC',
+      ratio: '10%',
+      tone: 'text-yellow-400 border-yellow-400/25 bg-yellow-400/5',
+    },
+  ],
+} as const;
+
+export function getDevnetExplorerAddressUrl(address: PublicKey | string): string {
+  const addressText = typeof address === 'string' ? address : address.toBase58();
+  return `${SOLANA_EXPLORER_DEVNET}/address/${addressText}?cluster=devnet`;
+}
 
 export type TreasuryV2VaultKey = keyof typeof USDC_TREASURY_V2_VAULTS;
 

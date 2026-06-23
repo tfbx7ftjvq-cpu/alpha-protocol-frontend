@@ -7,6 +7,7 @@ import {
   ArrowDown,
   CheckCircle2,
   Coins,
+  ExternalLink,
   Gauge,
   Landmark,
   Loader2,
@@ -26,7 +27,10 @@ import {
 } from '../lib/alphaProgram';
 import {
   DEVNET_RPC_ENDPOINT,
+  LATEST_USDC_REVENUE_SPLIT,
   USDC_MINT,
+  USDC_TREASURY_V2_VAULTS,
+  getDevnetExplorerAddressUrl,
   readTreasuryV2Balances,
   type TreasuryV2Balances,
 } from '../lib/devnetTreasuryV2';
@@ -461,6 +465,84 @@ export default function TreasuryDashboard({ lang, walletConnected, walletBalance
               </p>
             </div>
           ))}
+        </div>
+
+        <div className="rounded border border-zinc-800 bg-zinc-950/70 p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-400">
+                <Coins className="h-3.5 w-3.5" />
+                Latest USDC Revenue Split
+              </div>
+              <h3 className="text-lg font-black text-zinc-100">
+                最近一次 USDC 入账分流记录 / Latest USDC Revenue Split
+              </h3>
+              <p className="mt-2 text-xs leading-relaxed text-zinc-500">
+                记录已完成的 20 Devnet USDC 入账分流测试，展示真实交易签名与四个 vault 去向。
+              </p>
+            </div>
+            <a
+              href={LATEST_USDC_REVENUE_SPLIT.explorerUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex w-fit items-center justify-center gap-2 rounded border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-xs font-bold text-cyan-300 transition-all hover:bg-cyan-400/15"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              查看交易 / View on Solana Explorer
+            </a>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+            <div className="rounded border border-zinc-800 bg-zinc-950/80 p-3">
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-zinc-600">入账金额</p>
+              <p className="font-mono text-xl font-black text-emerald-400">{LATEST_USDC_REVENUE_SPLIT.amount}</p>
+            </div>
+            <div className="rounded border border-zinc-800 bg-zinc-950/80 p-3">
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-zinc-600">分流比例</p>
+              <p className="font-mono text-xl font-black text-cyan-300">{LATEST_USDC_REVENUE_SPLIT.splitRatio}</p>
+            </div>
+            <div className="rounded border border-emerald-400/25 bg-emerald-400/5 p-3">
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-zinc-600">状态</p>
+              <p className="font-mono text-sm font-black text-emerald-400">{LATEST_USDC_REVENUE_SPLIT.status}</p>
+            </div>
+            <div className="rounded border border-orange-400/25 bg-orange-400/5 p-3">
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-zinc-600">数据来源</p>
+              <p className="text-sm font-black text-orange-300">{LATEST_USDC_REVENUE_SPLIT.source}</p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {LATEST_USDC_REVENUE_SPLIT.allocations.map((allocation) => {
+              const vault = USDC_TREASURY_V2_VAULTS[allocation.key];
+              const vaultAddress = vault.address.toBase58();
+
+              return (
+                <div key={allocation.key} className={`rounded border p-3 ${allocation.tone}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-black text-zinc-100">{allocation.label}</p>
+                      <p className="mt-1 font-mono text-[10px] font-bold text-zinc-500">{allocation.ratio}</p>
+                    </div>
+                    <p className="font-mono text-lg font-black tabular-nums">{allocation.amount}</p>
+                  </div>
+                  <a
+                    href={getDevnetExplorerAddressUrl(vault.address)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-3 inline-flex max-w-full items-center gap-1.5 rounded border border-zinc-700 bg-zinc-950/60 px-2 py-1 text-[10px] font-bold text-zinc-300 transition-all hover:border-cyan-400/40 hover:text-cyan-300"
+                  >
+                    <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                    <span>{allocation.vaultLabel}</span>
+                    <span className="truncate font-mono text-zinc-500">{shortAddress(vaultAddress)}</span>
+                  </a>
+                </div>
+              );
+            })}
+          </div>
+
+          <p className="mt-4 break-all font-mono text-[10px] leading-relaxed text-zinc-600">
+            tx: {LATEST_USDC_REVENUE_SPLIT.signature}
+          </p>
         </div>
 
         <div className="flex flex-col gap-3 rounded border border-zinc-800 bg-zinc-950/60 p-4 md:flex-row md:items-center md:justify-between">
