@@ -19,4 +19,25 @@ pub enum CustomError {
 
     #[msg("Invalid token account")]
     InvalidTokenAccount,
+
+    #[msg("Invalid lock tier")]
+    InvalidLockTier,
+
+    #[msg("Lock period has not ended")]
+    LockPeriodNotEnded,
+
+    #[msg("Stake account owner mismatch")]
+    InvalidStakeOwner,
+
+    #[msg("Stake lock tier mismatch")]
+    StakeLockTierMismatch,
+
+    #[msg("Claim amount is below the minimum claim threshold")]
+    ClaimAmountTooSmall,
+
+    #[msg("Vault balance is insufficient")]
+    InsufficientVaultBalance,
+
+    #[msg("Vault balance is below the observed accounting balance")]
+    VaultBalanceBelowObserved,
 }
