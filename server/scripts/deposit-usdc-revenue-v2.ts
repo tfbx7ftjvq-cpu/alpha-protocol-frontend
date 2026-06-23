@@ -1,7 +1,8 @@
 import * as anchor from "@coral-xyz/anchor";
-import { BN, Program, type Idl } from "@coral-xyz/anchor";
+import { BN } from "@coral-xyz/anchor";
 import { getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey, Transaction, TransactionInstruction } from "@solana/web3.js";
+import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -20,26 +21,11 @@ const SEEDS = {
   vaultAuthorityV2: "vault_authority_v2",
 } as const;
 
-type IdlWithAddress = Idl & {
-  address: string;
-};
-
-type DepositUsdcRevenueMethod = (amount: BN) => {
-  accountsStrict(accounts: {
-    depositor: PublicKey;
-    depositorUsdcTokenAccount: PublicKey;
-    treasuryConfig: PublicKey;
-    treasuryUsdcState: PublicKey;
-    usdcMint: PublicKey;
-    vaultAuthority: PublicKey;
-    reliefUsdcVault: PublicKey;
-    buybackUsdcVault: PublicKey;
-    buildersUsdcVault: PublicKey;
-    stakingUsdcVault: PublicKey;
-    tokenProgram: PublicKey;
-  }): {
-    rpc(): Promise<string>;
-  };
+type RuntimeIdl = {
+  address?: string;
+  instructions: Array<{
+    name: string;
+  }>;
 };
 
 function readRequiredPublicKey(name: string): PublicKey {
@@ -73,8 +59,8 @@ function readAmount(): BN {
   return amount;
 }
 
-function loadIdl(): IdlWithAddress {
-  const idl = JSON.parse(fs.readFileSync(IDL_PATH, "utf8")) as IdlWithAddress;
+function loadIdl(): RuntimeIdl {
+  const idl = JSON.parse(fs.readFileSync(IDL_PATH, "utf8")) as RuntimeIdl;
 
   if (idl.address && idl.address !== PROGRAM_ID.toBase58()) {
     throw new Error(
@@ -84,6 +70,10 @@ function loadIdl(): IdlWithAddress {
 
   idl.address = PROGRAM_ID.toBase58();
   return idl;
+}
+
+function anchorDiscriminator(name: string): Buffer {
+  return crypto.createHash("sha256").update(`global:${name}`).digest().subarray(0, 8);
 }
 
 function derivePda(seed: string, programId: PublicKey): PublicKey {
@@ -102,6 +92,9 @@ async function main(): Promise<void> {
     idl.instructions.map((ix) => ix.name),
   );
 
+  const discriminator = anchorDiscriminator("deposit_usdc_revenue");
+  console.log("deposit_usdc_revenue discriminator hex:", discriminator.toString("hex"));
+
   const usdcMint = readRequiredPublicKey("USDC_MINT");
   const amount = readAmount();
   const programId = PROGRAM_ID;
@@ -109,7 +102,6 @@ async function main(): Promise<void> {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = new Program(idl as Idl, provider);
   const depositor = provider.wallet.publicKey;
   const depositorUsdcTokenAccount = getAssociatedTokenAddressSync(usdcMint, depositor);
 
@@ -144,33 +136,28 @@ async function main(): Promise<void> {
   console.log("builders = amount * 20 / 100 =", builders.toString());
   console.log("staking = amount * 10 / 100 =", staking.toString());
 
-  const methods = program.methods as Record<string, unknown>;
-  const depositUsdcRevenue =
-    typeof methods.depositUsdcRevenue === "function"
-      ? (methods.depositUsdcRevenue as DepositUsdcRevenueMethod)
-      : typeof methods.deposit_usdc_revenue === "function"
-        ? (methods.deposit_usdc_revenue as DepositUsdcRevenueMethod)
-        : undefined;
+  const amountBuffer = Buffer.alloc(8);
+  amountBuffer.writeBigUInt64LE(BigInt(amount.toString()));
 
-  if (!depositUsdcRevenue) {
-    throw new Error("deposit_usdc_revenue method not found in program.methods");
-  }
+  const ix = new TransactionInstruction({
+    programId,
+    keys: [
+      { pubkey: depositor, isSigner: true, isWritable: true },
+      { pubkey: depositorUsdcTokenAccount, isSigner: false, isWritable: true },
+      { pubkey: treasuryConfig, isSigner: false, isWritable: false },
+      { pubkey: treasuryUsdcState, isSigner: false, isWritable: true },
+      { pubkey: usdcMint, isSigner: false, isWritable: false },
+      { pubkey: vaultAuthority, isSigner: false, isWritable: false },
+      { pubkey: reliefUsdcVault, isSigner: false, isWritable: true },
+      { pubkey: buybackUsdcVault, isSigner: false, isWritable: true },
+      { pubkey: buildersUsdcVault, isSigner: false, isWritable: true },
+      { pubkey: stakingUsdcVault, isSigner: false, isWritable: true },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    data: Buffer.concat([discriminator, amountBuffer]),
+  });
 
-  const signature = await depositUsdcRevenue(new BN(amount.toString(), 10))
-    .accountsStrict({
-      depositor,
-      depositorUsdcTokenAccount,
-      treasuryConfig,
-      treasuryUsdcState,
-      usdcMint,
-      vaultAuthority,
-      reliefUsdcVault,
-      buybackUsdcVault,
-      buildersUsdcVault,
-      stakingUsdcVault,
-      tokenProgram: TOKEN_PROGRAM_ID,
-    })
-    .rpc();
+  const signature = await provider.sendAndConfirm(new Transaction().add(ix), []);
 
   console.log("Transaction signature:", signature);
 }
