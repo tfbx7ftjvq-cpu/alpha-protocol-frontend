@@ -4,10 +4,9 @@ import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { PublicKey, SYSVAR_RENT_PUBKEY, SystemProgram } from "@solana/web3.js";
 import * as fs from "fs";
 import * as path from "path";
-import type { MyFirstSolanaProgram } from "../target/types/my_first_solana_program";
 
 const IDL_PATH = path.resolve(__dirname, "../target/idl/my_first_solana_program.json");
-const EXPECTED_PROGRAM_ID = "HrLBQxUD3XHkB3KABjHXTiBHuAe6jVP2UPqiwmpmH8EY";
+const PROGRAM_ID = new PublicKey("HrLBQxUD3XHkB3KABjHXTiBHuAe6jVP2UPqiwmpmH8EY");
 
 const SEEDS = {
   treasuryConfigV2: "treasury_config_v2",
@@ -21,6 +20,28 @@ const SEEDS = {
 
 type IdlWithAddress = Idl & {
   address: string;
+};
+
+type InitializeUsdcTreasuryMethod = (
+  usdcMint: PublicKey,
+  alphaMint: PublicKey,
+) => {
+  accountsStrict(accounts: {
+    treasuryConfig: PublicKey;
+    treasuryUsdcState: PublicKey;
+    usdcMintAccount: PublicKey;
+    vaultAuthority: PublicKey;
+    reliefUsdcVault: PublicKey;
+    buybackUsdcVault: PublicKey;
+    buildersUsdcVault: PublicKey;
+    stakingUsdcVault: PublicKey;
+    authority: PublicKey;
+    tokenProgram: PublicKey;
+    systemProgram: PublicKey;
+    rent: PublicKey;
+  }): {
+    rpc(): Promise<string>;
+  };
 };
 
 function requireEnv(names: string[]): void {
@@ -46,12 +67,13 @@ function readRequiredPublicKey(name: string): PublicKey {
 function loadIdl(): IdlWithAddress {
   const idl = JSON.parse(fs.readFileSync(IDL_PATH, "utf8")) as IdlWithAddress;
 
-  if (idl.address !== EXPECTED_PROGRAM_ID) {
+  if (idl.address && idl.address !== PROGRAM_ID.toBase58()) {
     throw new Error(
-      `IDL program ID mismatch. Expected ${EXPECTED_PROGRAM_ID}, got ${idl.address}`,
+      `IDL program ID mismatch. Expected ${PROGRAM_ID.toBase58()}, got ${idl.address}`,
     );
   }
 
+  idl.address = PROGRAM_ID.toBase58();
   return idl;
 }
 
@@ -61,20 +83,22 @@ function derivePda(seed: string, programId: PublicKey): PublicKey {
 }
 
 async function main(): Promise<void> {
+  const idl = loadIdl();
+  console.log(
+    "Runtime IDL instruction names:",
+    idl.instructions.map((ix) => ix.name),
+  );
+
   requireEnv(["USDC_MINT", "ALPHA_MINT"]);
 
   const usdcMint = readRequiredPublicKey("USDC_MINT");
   const alphaMint = readRequiredPublicKey("ALPHA_MINT");
-  const idl = loadIdl();
-  const programId = new PublicKey(idl.address);
+  const programId = PROGRAM_ID;
 
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = new Program<MyFirstSolanaProgram>(
-    idl as unknown as MyFirstSolanaProgram,
-    provider,
-  );
+  const program = new Program(idl as Idl, provider);
   const authority = provider.wallet.publicKey;
 
   const treasuryConfig = derivePda(SEEDS.treasuryConfigV2, programId);
@@ -97,8 +121,19 @@ async function main(): Promise<void> {
   console.log("staking_usdc_vault:", stakingUsdcVault.toBase58());
   console.log("vault_authority_v2:", vaultAuthority.toBase58());
 
-  const signature = await program.methods
-    .initializeUsdcTreasury(usdcMint, alphaMint)
+  const methods = program.methods as Record<string, unknown>;
+  const initializeUsdcTreasury =
+    typeof methods.initializeUsdcTreasury === "function"
+      ? (methods.initializeUsdcTreasury as InitializeUsdcTreasuryMethod)
+      : typeof methods.initialize_usdc_treasury === "function"
+        ? (methods.initialize_usdc_treasury as InitializeUsdcTreasuryMethod)
+        : undefined;
+
+  if (!initializeUsdcTreasury) {
+    throw new Error("initialize_usdc_treasury method not found in program.methods");
+  }
+
+  const signature = await initializeUsdcTreasury(usdcMint, alphaMint)
     .accountsStrict({
       treasuryConfig,
       treasuryUsdcState,

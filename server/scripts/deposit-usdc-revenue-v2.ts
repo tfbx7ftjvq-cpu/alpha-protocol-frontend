@@ -4,11 +4,10 @@ import { getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } from "@solana/spl-tok
 import { PublicKey } from "@solana/web3.js";
 import * as fs from "fs";
 import * as path from "path";
-import type { MyFirstSolanaProgram } from "../target/types/my_first_solana_program";
 
 const IDL_PATH = path.resolve(__dirname, "../target/idl/my_first_solana_program.json");
 const DEFAULT_AMOUNT = "100000000";
-const EXPECTED_PROGRAM_ID = "HrLBQxUD3XHkB3KABjHXTiBHuAe6jVP2UPqiwmpmH8EY";
+const PROGRAM_ID = new PublicKey("HrLBQxUD3XHkB3KABjHXTiBHuAe6jVP2UPqiwmpmH8EY");
 const U64_MAX = new BN("18446744073709551615", 10);
 
 const SEEDS = {
@@ -23,6 +22,24 @@ const SEEDS = {
 
 type IdlWithAddress = Idl & {
   address: string;
+};
+
+type DepositUsdcRevenueMethod = (amount: BN) => {
+  accountsStrict(accounts: {
+    depositor: PublicKey;
+    depositorUsdcTokenAccount: PublicKey;
+    treasuryConfig: PublicKey;
+    treasuryUsdcState: PublicKey;
+    usdcMint: PublicKey;
+    vaultAuthority: PublicKey;
+    reliefUsdcVault: PublicKey;
+    buybackUsdcVault: PublicKey;
+    buildersUsdcVault: PublicKey;
+    stakingUsdcVault: PublicKey;
+    tokenProgram: PublicKey;
+  }): {
+    rpc(): Promise<string>;
+  };
 };
 
 function readRequiredPublicKey(name: string): PublicKey {
@@ -59,12 +76,13 @@ function readAmount(): BN {
 function loadIdl(): IdlWithAddress {
   const idl = JSON.parse(fs.readFileSync(IDL_PATH, "utf8")) as IdlWithAddress;
 
-  if (idl.address !== EXPECTED_PROGRAM_ID) {
+  if (idl.address && idl.address !== PROGRAM_ID.toBase58()) {
     throw new Error(
-      `IDL program ID mismatch. Expected ${EXPECTED_PROGRAM_ID}, got ${idl.address}`,
+      `IDL program ID mismatch. Expected ${PROGRAM_ID.toBase58()}, got ${idl.address}`,
     );
   }
 
+  idl.address = PROGRAM_ID.toBase58();
   return idl;
 }
 
@@ -78,18 +96,20 @@ function splitAmount(amount: BN, percentage: number): BN {
 }
 
 async function main(): Promise<void> {
+  const idl = loadIdl();
+  console.log(
+    "Runtime IDL instruction names:",
+    idl.instructions.map((ix) => ix.name),
+  );
+
   const usdcMint = readRequiredPublicKey("USDC_MINT");
   const amount = readAmount();
-  const idl = loadIdl();
-  const programId = new PublicKey(idl.address);
+  const programId = PROGRAM_ID;
 
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = new Program<MyFirstSolanaProgram>(
-    idl as unknown as MyFirstSolanaProgram,
-    provider,
-  );
+  const program = new Program(idl as Idl, provider);
   const depositor = provider.wallet.publicKey;
   const depositorUsdcTokenAccount = getAssociatedTokenAddressSync(usdcMint, depositor);
 
@@ -124,8 +144,19 @@ async function main(): Promise<void> {
   console.log("builders = amount * 20 / 100 =", builders.toString());
   console.log("staking = amount * 10 / 100 =", staking.toString());
 
-  const signature = await program.methods
-    .depositUsdcRevenue(amount)
+  const methods = program.methods as Record<string, unknown>;
+  const depositUsdcRevenue =
+    typeof methods.depositUsdcRevenue === "function"
+      ? (methods.depositUsdcRevenue as DepositUsdcRevenueMethod)
+      : typeof methods.deposit_usdc_revenue === "function"
+        ? (methods.deposit_usdc_revenue as DepositUsdcRevenueMethod)
+        : undefined;
+
+  if (!depositUsdcRevenue) {
+    throw new Error("deposit_usdc_revenue method not found in program.methods");
+  }
+
+  const signature = await depositUsdcRevenue(new BN(amount.toString(), 10))
     .accountsStrict({
       depositor,
       depositorUsdcTokenAccount,
