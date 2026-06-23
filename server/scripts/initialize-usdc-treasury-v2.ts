@@ -1,74 +1,103 @@
-import * as anchor from '@coral-xyz/anchor';
-import { Program, type Idl } from '@coral-xyz/anchor';
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
-import { PublicKey, SYSVAR_RENT_PUBKEY, SystemProgram } from '@solana/web3.js';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as anchor from "@coral-xyz/anchor";
+import { Program, type Idl } from "@coral-xyz/anchor";
+import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { PublicKey, SYSVAR_RENT_PUBKEY, SystemProgram } from "@solana/web3.js";
+import * as fs from "fs";
+import * as path from "path";
+import type { MyFirstSolanaProgram } from "../target/types/my_first_solana_program";
 
-const PROGRAM_ID = new PublicKey('HrLBQxUD3XHkB3KABjHXTiBHuAe6jVP2UPqiwmpmH8EY');
+const IDL_PATH = path.resolve(__dirname, "../target/idl/my_first_solana_program.json");
+const EXPECTED_PROGRAM_ID = "HrLBQxUD3XHkB3KABjHXTiBHuAe6jVP2UPqiwmpmH8EY";
 
 const SEEDS = {
-  treasuryConfigV2: 'treasury_config_v2',
-  treasuryUsdcStateV2: 'treasury_usdc_state_v2',
-  reliefUsdcVault: 'relief_usdc_vault',
-  buybackUsdcVault: 'buyback_usdc_vault',
-  buildersUsdcVault: 'builders_usdc_vault',
-  stakingUsdcVault: 'staking_usdc_vault',
-  vaultAuthorityV2: 'vault_authority_v2',
+  treasuryConfigV2: "treasury_config_v2",
+  treasuryUsdcStateV2: "treasury_usdc_state_v2",
+  reliefUsdcVault: "relief_usdc_vault",
+  buybackUsdcVault: "buyback_usdc_vault",
+  buildersUsdcVault: "builders_usdc_vault",
+  stakingUsdcVault: "staking_usdc_vault",
+  vaultAuthorityV2: "vault_authority_v2",
 } as const;
+
+type IdlWithAddress = Idl & {
+  address: string;
+};
+
+function requireEnv(names: string[]): void {
+  const missing = names.filter((name) => !process.env[name]);
+  if (missing.length > 0) {
+    throw new Error(`Missing required environment variable(s): ${missing.join(", ")}`);
+  }
+}
 
 function readRequiredPublicKey(name: string): PublicKey {
   const value = process.env[name];
   if (!value) {
-    throw new Error(`Missing required env var: ${name}`);
+    throw new Error(`Missing required environment variable: ${name}`);
   }
 
-  return new PublicKey(value);
+  try {
+    return new PublicKey(value);
+  } catch {
+    throw new Error(`Invalid public key in ${name}: ${value}`);
+  }
 }
 
-function derivePda(seed: string): PublicKey {
-  const [pda] = PublicKey.findProgramAddressSync([Buffer.from(seed)], PROGRAM_ID);
+function loadIdl(): IdlWithAddress {
+  const idl = JSON.parse(fs.readFileSync(IDL_PATH, "utf8")) as IdlWithAddress;
+
+  if (idl.address !== EXPECTED_PROGRAM_ID) {
+    throw new Error(
+      `IDL program ID mismatch. Expected ${EXPECTED_PROGRAM_ID}, got ${idl.address}`,
+    );
+  }
+
+  return idl;
+}
+
+function derivePda(seed: string, programId: PublicKey): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync([Buffer.from(seed)], programId);
   return pda;
 }
 
-function loadProgram(provider: anchor.AnchorProvider): Program<Idl> {
-  const idlPath = path.resolve(__dirname, '../target/idl/my_first_solana_program.json');
-  const idl = JSON.parse(fs.readFileSync(idlPath, 'utf8')) as Idl;
+async function main(): Promise<void> {
+  requireEnv(["USDC_MINT", "ALPHA_MINT"]);
 
-  return new Program(idl, provider);
-}
-
-async function main() {
-  const usdcMint = readRequiredPublicKey('USDC_MINT');
-  const alphaMint = readRequiredPublicKey('ALPHA_MINT');
+  const usdcMint = readRequiredPublicKey("USDC_MINT");
+  const alphaMint = readRequiredPublicKey("ALPHA_MINT");
+  const idl = loadIdl();
+  const programId = new PublicKey(idl.address);
 
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = loadProgram(provider);
+  const program = new Program<MyFirstSolanaProgram>(
+    idl as unknown as MyFirstSolanaProgram,
+    provider,
+  );
   const authority = provider.wallet.publicKey;
 
-  const treasuryConfig = derivePda(SEEDS.treasuryConfigV2);
-  const treasuryUsdcState = derivePda(SEEDS.treasuryUsdcStateV2);
-  const reliefUsdcVault = derivePda(SEEDS.reliefUsdcVault);
-  const buybackUsdcVault = derivePda(SEEDS.buybackUsdcVault);
-  const buildersUsdcVault = derivePda(SEEDS.buildersUsdcVault);
-  const stakingUsdcVault = derivePda(SEEDS.stakingUsdcVault);
-  const vaultAuthority = derivePda(SEEDS.vaultAuthorityV2);
+  const treasuryConfig = derivePda(SEEDS.treasuryConfigV2, programId);
+  const treasuryUsdcState = derivePda(SEEDS.treasuryUsdcStateV2, programId);
+  const reliefUsdcVault = derivePda(SEEDS.reliefUsdcVault, programId);
+  const buybackUsdcVault = derivePda(SEEDS.buybackUsdcVault, programId);
+  const buildersUsdcVault = derivePda(SEEDS.buildersUsdcVault, programId);
+  const stakingUsdcVault = derivePda(SEEDS.stakingUsdcVault, programId);
+  const vaultAuthority = derivePda(SEEDS.vaultAuthorityV2, programId);
 
-  console.log('Program ID:', PROGRAM_ID.toBase58());
-  console.log('Authority:', authority.toBase58());
-  console.log('USDC Mint:', usdcMint.toBase58());
-  console.log('ALPHA Mint:', alphaMint.toBase58());
-  console.log('treasury_config_v2:', treasuryConfig.toBase58());
-  console.log('treasury_usdc_state_v2:', treasuryUsdcState.toBase58());
-  console.log('relief_usdc_vault:', reliefUsdcVault.toBase58());
-  console.log('buyback_usdc_vault:', buybackUsdcVault.toBase58());
-  console.log('builders_usdc_vault:', buildersUsdcVault.toBase58());
-  console.log('staking_usdc_vault:', stakingUsdcVault.toBase58());
-  console.log('vault_authority_v2:', vaultAuthority.toBase58());
+  console.log("Program ID:", programId.toBase58());
+  console.log("Authority:", authority.toBase58());
+  console.log("USDC Mint:", usdcMint.toBase58());
+  console.log("ALPHA Mint:", alphaMint.toBase58());
+  console.log("treasury_config_v2:", treasuryConfig.toBase58());
+  console.log("treasury_usdc_state_v2:", treasuryUsdcState.toBase58());
+  console.log("relief_usdc_vault:", reliefUsdcVault.toBase58());
+  console.log("buyback_usdc_vault:", buybackUsdcVault.toBase58());
+  console.log("builders_usdc_vault:", buildersUsdcVault.toBase58());
+  console.log("staking_usdc_vault:", stakingUsdcVault.toBase58());
+  console.log("vault_authority_v2:", vaultAuthority.toBase58());
 
-  const signature = await (program.methods as any)
+  const signature = await program.methods
     .initializeUsdcTreasury(usdcMint, alphaMint)
     .accountsStrict({
       treasuryConfig,
@@ -86,11 +115,10 @@ async function main() {
     })
     .rpc();
 
-  console.log('Transaction signature:', signature);
-  console.log('USDC Treasury V2 初始化完成');
+  console.log("Transaction signature:", signature);
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 });

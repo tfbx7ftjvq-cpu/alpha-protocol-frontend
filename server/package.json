@@ -1,7 +1,7 @@
 {
   "scripts": {
-    "initialize-usdc-treasury-v2": "ts-node scripts/initialize-usdc-treasury-v2.ts",
-    "deposit-usdc-revenue-v2": "ts-node scripts/deposit-usdc-revenue-v2.ts"
+    "initialize-usdc-treasury-v2": "tsx scripts/initialize-usdc-treasury-v2.ts",
+    "deposit-usdc-revenue-v2": "tsx scripts/deposit-usdc-revenue-v2.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
@@ -11,6 +11,7 @@
   "devDependencies": {
     "@types/node": "^22.10.2",
     "ts-node": "^10.9.2",
+    "tsx": "^4.22.4",
     "typescript": "^5.5.3"
   }
 }
