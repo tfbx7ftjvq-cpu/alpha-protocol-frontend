@@ -84,3 +84,91 @@ pub struct UserStakeAccount {
 impl UserStakeAccount {
     pub const INIT_SPACE: usize = 256;
 }
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProposalType {
+    GreenLabelSlash,
+    GreenLabelRefund,
+    PayrollEmployeeImpeach,
+    PayrollPayout,
+    TreasuryParamChange,
+    EmergencyPause,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProposalDecision {
+    Pending,
+    Approved,
+    Rejected,
+    Partial,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExecutionStatus {
+    Queued,
+    Executed,
+    Cancelled,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ActionType {
+    Noop,
+    GreenLabelSlash,
+    GreenLabelRefund,
+    PayrollEmployeeImpeach,
+    PayrollPayout,
+    TreasuryParamChange,
+    EmergencyPause,
+}
+
+#[account]
+pub struct GovernanceConfigV1 {
+    pub authority: Pubkey,
+    pub min_execution_delay_seconds: i64,
+    pub proposal_count: u64,
+    pub emergency_guardian: Pubkey,
+    pub is_paused: bool,
+    pub bump: u8,
+}
+
+impl GovernanceConfigV1 {
+    pub const INIT_SPACE: usize = 128;
+}
+
+#[account]
+pub struct ProposalDecisionV1 {
+    pub proposal_id: u64,
+    pub proposal_type: ProposalType,
+    pub proposer: Pubkey,
+    pub decision: ProposalDecision,
+    pub yes_weight: u64,
+    pub no_weight: u64,
+    pub start_ts: i64,
+    pub end_ts: i64,
+    pub finalized_ts: i64,
+    pub bump: u8,
+}
+
+impl ProposalDecisionV1 {
+    pub const INIT_SPACE: usize = 128;
+}
+
+#[account]
+pub struct ExecutionQueueItemV1 {
+    pub proposal_id: u64,
+    pub proposer: Pubkey,
+    pub action_type: ActionType,
+    pub target_program: Pubkey,
+    pub target_account: Pubkey,
+    pub decision: ProposalDecision,
+    pub created_at: i64,
+    pub execute_after: i64,
+    pub executed_at: i64,
+    pub status: ExecutionStatus,
+    pub payload_hash: [u8; 32],
+    pub bump: u8,
+}
+
+impl ExecutionQueueItemV1 {
+    pub const INIT_SPACE: usize = 256;
+}

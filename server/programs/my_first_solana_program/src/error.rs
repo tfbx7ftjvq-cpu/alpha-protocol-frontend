@@ -40,4 +40,43 @@ pub enum CustomError {
 
     #[msg("Vault balance is below the observed accounting balance")]
     VaultBalanceBelowObserved,
+
+    #[msg("Invalid execution delay")]
+    InvalidExecutionDelay,
+
+    #[msg("Invalid proposal id")]
+    InvalidProposalId,
+
+    #[msg("Invalid proposal decision")]
+    InvalidProposalDecision,
+
+    #[msg("Invalid action for proposal type")]
+    InvalidActionForProposalType,
+
+    #[msg("Proposal is not approved for execution")]
+    ProposalNotApproved,
+
+    #[msg("Security layer is paused")]
+    SecurityLayerPaused,
+
+    #[msg("Execution delay has not been met")]
+    ExecutionDelayNotMet,
+
+    #[msg("Invalid execution status")]
+    InvalidExecutionStatus,
+
+    #[msg("Payload hash mismatch")]
+    PayloadHashMismatch,
+
+    #[msg("Unauthorized security authority")]
+    UnauthorizedSecurityAuthority,
+
+    #[msg("Unauthorized emergency guardian")]
+    UnauthorizedEmergencyGuardian,
+
+    #[msg("Invalid emergency guardian")]
+    InvalidEmergencyGuardian,
+
+    #[msg("Invalid proposal time")]
+    InvalidProposalTime,
 }

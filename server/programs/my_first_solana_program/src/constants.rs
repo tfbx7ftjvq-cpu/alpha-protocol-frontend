@@ -15,6 +15,9 @@ pub const STAKING_POOL_V1_SEED: &[u8] = b"staking_pool_v1";
 pub const ALPHA_STAKING_VAULT_SEED: &[u8] = b"alpha_staking_vault";
 pub const ALPHA_VAULT_AUTHORITY_V1_SEED: &[u8] = b"alpha_vault_authority_v1";
 pub const USER_STAKE_ACCOUNT_SEED: &[u8] = b"user_stake_account";
+pub const GOVERNANCE_CONFIG_V1_SEED: &[u8] = b"governance_config_v1";
+pub const PROPOSAL_DECISION_V1_SEED: &[u8] = b"proposal_decision_v1";
+pub const EXECUTION_QUEUE_ITEM_V1_SEED: &[u8] = b"execution_queue_item_v1";
 
 pub const BPS_DENOMINATOR: u64 = 10_000;
 pub const RELIEF_BPS: u64 = 5_000;
@@ -43,3 +46,6 @@ pub const LOCK_30_DAYS_SECONDS: i64 = 30 * SECONDS_PER_DAY;
 pub const LOCK_90_DAYS_SECONDS: i64 = 90 * SECONDS_PER_DAY;
 pub const LOCK_180_DAYS_SECONDS: i64 = 180 * SECONDS_PER_DAY;
 pub const LOCK_365_DAYS_SECONDS: i64 = 365 * SECONDS_PER_DAY;
+
+pub const MIN_EXECUTION_DELAY_SECONDS: i64 = 60;
+pub const MAX_EXECUTION_DELAY_SECONDS: i64 = 30 * SECONDS_PER_DAY;
