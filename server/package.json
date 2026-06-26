@@ -6,7 +6,14 @@
     "mint-devnet-alpha-to-wallet": "tsx scripts/mint-devnet-alpha-to-wallet.ts",
     "stake-alpha-v1": "tsx scripts/stake-alpha-v1.ts",
     "claim-usdc-rewards-v1": "tsx scripts/claim-usdc-rewards-v1.ts",
-    "unstake-alpha-v1": "tsx scripts/unstake-alpha-v1.ts"
+    "unstake-alpha-v1": "tsx scripts/unstake-alpha-v1.ts",
+    "initialize-governance-config-v1": "tsx scripts/initialize-governance-config-v1.ts",
+    "create-proposal-decision-v1": "tsx scripts/create-proposal-decision-v1.ts",
+    "queue-execution-v1": "tsx scripts/queue-execution-v1.ts",
+    "execute-queued-action-v1": "tsx scripts/execute-queued-action-v1.ts",
+    "cancel-queued-action-v1": "tsx scripts/cancel-queued-action-v1.ts",
+    "pause-security-layer-v1": "tsx scripts/pause-security-layer-v1.ts",
+    "unpause-security-layer-v1": "tsx scripts/unpause-security-layer-v1.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
