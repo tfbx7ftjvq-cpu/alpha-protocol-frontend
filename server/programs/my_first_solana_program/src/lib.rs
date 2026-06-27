@@ -128,4 +128,8 @@ pub mod my_first_solana_program {
     pub fn unpause_security_layer(ctx: Context<UnpauseSecurityLayer>) -> Result<()> {
         instructions::security_v1::unpause_security_layer_handler(ctx)
     }
+
+    pub fn initialize_green_label_config(ctx: Context<InitializeGreenLabelConfig>) -> Result<()> {
+        instructions::green_label_v1::initialize_green_label_config_handler(ctx)
+    }
 }

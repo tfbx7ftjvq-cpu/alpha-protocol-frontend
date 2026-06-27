@@ -1,13 +1,16 @@
 use anchor_lang::prelude::*;
 
 use crate::constants::{
-    BASE_BOND_REFUND_BPS, BASE_BOND_TREASURY_BPS, GREEN_LABEL_BRONZE_TIER_THRESHOLD_USDC,
-    GREEN_LABEL_CONFIG_SPACE, GREEN_LABEL_DISPUTE_SPACE, GREEN_LABEL_GOLD_TIER_THRESHOLD_USDC,
-    GREEN_LABEL_PLATINUM_TIER_THRESHOLD_USDC, GREEN_LABEL_PROJECT_SPACE,
-    GREEN_LABEL_SILVER_TIER_THRESHOLD_USDC, MAX_BPS, MIN_GREEN_LABEL_BASE_BOND_USDC,
+    BASE_BOND_REFUND_BPS, BASE_BOND_TREASURY_BPS, DEFAULT_DISPUTE_WINDOW_SECONDS,
+    DEFAULT_OBSERVATION_PERIOD_SECONDS, DEFAULT_RESPONSE_WINDOW_SECONDS,
+    GREEN_LABEL_BRONZE_TIER_THRESHOLD_USDC, GREEN_LABEL_CONFIG_RESERVED_BYTES,
+    GREEN_LABEL_CONFIG_SEED, GREEN_LABEL_CONFIG_SPACE, GREEN_LABEL_DISPUTE_SPACE,
+    GREEN_LABEL_GOLD_TIER_THRESHOLD_USDC, GREEN_LABEL_PLATINUM_TIER_THRESHOLD_USDC,
+    GREEN_LABEL_PROJECT_SPACE, GREEN_LABEL_SILVER_TIER_THRESHOLD_USDC, MAX_BPS,
+    MIN_GREEN_LABEL_BASE_BOND_USDC,
 };
 use crate::error::CustomError;
-use crate::state::{ActionType, BondTier, GreenLabelStatus};
+use crate::state::{ActionType, BondTier, GreenLabelConfigV1, GreenLabelStatus};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GreenLabelBondSplit {
@@ -23,6 +26,131 @@ pub struct GreenLabelRefundAmounts {
     pub base_refund_amount: u64,
     pub base_treasury_amount: u64,
     pub extra_refund_amount: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GreenLabelConfigInitValues {
+    pub authority: Pubkey,
+    pub usdc_mint: Pubkey,
+    pub min_base_bond_usdc: u64,
+    pub base_refund_bps: u16,
+    pub base_treasury_bps: u16,
+    pub observation_period_seconds: i64,
+    pub dispute_window_seconds: i64,
+    pub response_window_seconds: i64,
+    pub project_count: u64,
+    pub treasury_usdc_state_v2: Pubkey,
+    pub base_bond_treasury_vault: Pubkey,
+    pub relief_or_risk_vault: Pubkey,
+    pub vault_authority_v2: Pubkey,
+    pub security_governance_config: Pubkey,
+    pub is_paused: bool,
+    pub bump: u8,
+    pub reserved: [u8; GREEN_LABEL_CONFIG_RESERVED_BYTES],
+}
+
+#[derive(Accounts)]
+pub struct InitializeGreenLabelConfig<'info> {
+    #[account(
+        init,
+        payer = authority,
+        space = GREEN_LABEL_CONFIG_SPACE,
+        seeds = [GREEN_LABEL_CONFIG_SEED],
+        bump
+    )]
+    pub green_label_config: Account<'info, GreenLabelConfigV1>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    /// CHECK: Phase 1C stores the mint key only; token validation is added in later phases.
+    pub usdc_mint: UncheckedAccount<'info>,
+
+    /// CHECK: Phase 1C stores the Treasury V2 state key only.
+    pub treasury_usdc_state_v2: UncheckedAccount<'info>,
+
+    /// CHECK: Phase 1C stores the base bond treasury vault key only.
+    pub base_bond_treasury_vault: UncheckedAccount<'info>,
+
+    /// CHECK: Phase 1C stores the relief/risk vault key only.
+    pub relief_or_risk_vault: UncheckedAccount<'info>,
+
+    /// CHECK: Phase 1C stores the Treasury V2 vault authority key only.
+    pub vault_authority_v2: UncheckedAccount<'info>,
+
+    /// CHECK: Phase 1C stores the Security Layer governance config key only.
+    pub security_governance_config: UncheckedAccount<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+pub fn initialize_green_label_config_handler(
+    ctx: Context<InitializeGreenLabelConfig>,
+) -> Result<()> {
+    let values = build_default_green_label_config_values(
+        ctx.accounts.authority.key(),
+        ctx.accounts.usdc_mint.key(),
+        ctx.accounts.treasury_usdc_state_v2.key(),
+        ctx.accounts.base_bond_treasury_vault.key(),
+        ctx.accounts.relief_or_risk_vault.key(),
+        ctx.accounts.vault_authority_v2.key(),
+        ctx.accounts.security_governance_config.key(),
+        ctx.bumps.green_label_config,
+    )?;
+
+    let green_label_config = &mut ctx.accounts.green_label_config;
+    green_label_config.authority = values.authority;
+    green_label_config.usdc_mint = values.usdc_mint;
+    green_label_config.min_base_bond_usdc = values.min_base_bond_usdc;
+    green_label_config.base_refund_bps = values.base_refund_bps;
+    green_label_config.base_treasury_bps = values.base_treasury_bps;
+    green_label_config.observation_period_seconds = values.observation_period_seconds;
+    green_label_config.dispute_window_seconds = values.dispute_window_seconds;
+    green_label_config.response_window_seconds = values.response_window_seconds;
+    green_label_config.project_count = values.project_count;
+    green_label_config.treasury_usdc_state_v2 = values.treasury_usdc_state_v2;
+    green_label_config.base_bond_treasury_vault = values.base_bond_treasury_vault;
+    green_label_config.relief_or_risk_vault = values.relief_or_risk_vault;
+    green_label_config.vault_authority_v2 = values.vault_authority_v2;
+    green_label_config.security_governance_config = values.security_governance_config;
+    green_label_config.is_paused = values.is_paused;
+    green_label_config.bump = values.bump;
+    green_label_config.reserved = values.reserved;
+
+    Ok(())
+}
+
+pub fn build_default_green_label_config_values(
+    authority: Pubkey,
+    usdc_mint: Pubkey,
+    treasury_usdc_state_v2: Pubkey,
+    base_bond_treasury_vault: Pubkey,
+    relief_or_risk_vault: Pubkey,
+    vault_authority_v2: Pubkey,
+    security_governance_config: Pubkey,
+    bump: u8,
+) -> Result<GreenLabelConfigInitValues> {
+    validate_green_label_bps_config(BASE_BOND_REFUND_BPS, BASE_BOND_TREASURY_BPS)?;
+
+    Ok(GreenLabelConfigInitValues {
+        authority,
+        usdc_mint,
+        min_base_bond_usdc: MIN_GREEN_LABEL_BASE_BOND_USDC,
+        base_refund_bps: BASE_BOND_REFUND_BPS,
+        base_treasury_bps: BASE_BOND_TREASURY_BPS,
+        observation_period_seconds: DEFAULT_OBSERVATION_PERIOD_SECONDS,
+        dispute_window_seconds: DEFAULT_DISPUTE_WINDOW_SECONDS,
+        response_window_seconds: DEFAULT_RESPONSE_WINDOW_SECONDS,
+        project_count: 0,
+        treasury_usdc_state_v2,
+        base_bond_treasury_vault,
+        relief_or_risk_vault,
+        vault_authority_v2,
+        security_governance_config,
+        is_paused: false,
+        bump,
+        reserved: [0; GREEN_LABEL_CONFIG_RESERVED_BYTES],
+    })
 }
 
 pub fn validate_green_label_bps_config(base_refund_bps: u16, base_treasury_bps: u16) -> Result<()> {
@@ -215,9 +343,10 @@ fn calculate_bps_amount(amount: u64, bps: u16) -> Result<u64> {
 mod tests {
     use super::*;
     use crate::constants::{
-        ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES, GREEN_BOND_VAULT_AUTHORITY_SEED, GREEN_BOND_VAULT_SEED,
-        GREEN_LABEL_CONFIG_RESERVED_BYTES, GREEN_LABEL_CONFIG_SEED,
-        GREEN_LABEL_DISPUTE_RESERVED_BYTES, GREEN_LABEL_DISPUTE_SEED,
+        ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES, DEFAULT_DISPUTE_WINDOW_SECONDS,
+        DEFAULT_OBSERVATION_PERIOD_SECONDS, DEFAULT_RESPONSE_WINDOW_SECONDS,
+        GREEN_BOND_VAULT_AUTHORITY_SEED, GREEN_BOND_VAULT_SEED, GREEN_LABEL_CONFIG_RESERVED_BYTES,
+        GREEN_LABEL_CONFIG_SEED, GREEN_LABEL_DISPUTE_RESERVED_BYTES, GREEN_LABEL_DISPUTE_SEED,
         GREEN_LABEL_PROJECT_RESERVED_BYTES, GREEN_LABEL_PROJECT_SEED,
     };
     use crate::state::{
@@ -235,6 +364,48 @@ mod tests {
     #[test]
     fn validate_bps_config_accepts_80_20() {
         validate_green_label_bps_config(BASE_BOND_REFUND_BPS, BASE_BOND_TREASURY_BPS).unwrap();
+    }
+
+    #[test]
+    fn initialize_green_label_config_defaults_match_constants() {
+        let values = green_label_config_init_values();
+
+        assert_eq!(values.min_base_bond_usdc, MIN_GREEN_LABEL_BASE_BOND_USDC);
+        assert_eq!(values.base_refund_bps, BASE_BOND_REFUND_BPS);
+        assert_eq!(values.base_treasury_bps, BASE_BOND_TREASURY_BPS);
+        assert_eq!(
+            values.observation_period_seconds,
+            DEFAULT_OBSERVATION_PERIOD_SECONDS
+        );
+        assert_eq!(
+            values.dispute_window_seconds,
+            DEFAULT_DISPUTE_WINDOW_SECONDS
+        );
+        assert_eq!(
+            values.response_window_seconds,
+            DEFAULT_RESPONSE_WINDOW_SECONDS
+        );
+    }
+
+    #[test]
+    fn initialize_green_label_config_uses_zero_project_count() {
+        let values = green_label_config_init_values();
+
+        assert_eq!(values.project_count, 0);
+    }
+
+    #[test]
+    fn initialize_green_label_config_uses_unpaused_default() {
+        let values = green_label_config_init_values();
+
+        assert!(!values.is_paused);
+    }
+
+    #[test]
+    fn initialize_green_label_config_reserved_zeroed() {
+        let values = green_label_config_init_values();
+
+        assert_eq!(values.reserved, [0; GREEN_LABEL_CONFIG_RESERVED_BYTES]);
     }
 
     #[test]
@@ -607,6 +778,20 @@ mod tests {
             bump: 250,
             reserved: [0; GREEN_LABEL_CONFIG_RESERVED_BYTES],
         }
+    }
+
+    fn green_label_config_init_values() -> GreenLabelConfigInitValues {
+        build_default_green_label_config_values(
+            Pubkey::new_from_array([1; 32]),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::new_from_array([3; 32]),
+            Pubkey::new_from_array([4; 32]),
+            Pubkey::new_from_array([5; 32]),
+            Pubkey::new_from_array([6; 32]),
+            Pubkey::new_from_array([7; 32]),
+            250,
+        )
+        .unwrap()
     }
 
     fn green_label_project() -> GreenLabelProjectV1 {
