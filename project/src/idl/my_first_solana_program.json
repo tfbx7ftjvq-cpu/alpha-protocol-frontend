@@ -8,6 +8,103 @@
   },
   "instructions": [
     {
+      "name": "cancel_queued_action",
+      "discriminator": [
+        160,
+        182,
+        179,
+        207,
+        159,
+        138,
+        150,
+        208
+      ],
+      "accounts": [
+        {
+          "name": "governance_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  111,
+                  118,
+                  101,
+                  114,
+                  110,
+                  97,
+                  110,
+                  99,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103,
+                  95,
+                  118,
+                  49
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "execution_queue_item",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  120,
+                  101,
+                  99,
+                  117,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  113,
+                  117,
+                  101,
+                  117,
+                  101,
+                  95,
+                  105,
+                  116,
+                  101,
+                  109,
+                  95,
+                  118,
+                  49
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "proposal_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority_or_guardian",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "proposal_id",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "claim_usdc_rewards",
       "discriminator": [
         189,
@@ -134,6 +231,138 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "create_proposal_decision",
+      "discriminator": [
+        139,
+        224,
+        196,
+        148,
+        173,
+        140,
+        201,
+        28
+      ],
+      "accounts": [
+        {
+          "name": "governance_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  111,
+                  118,
+                  101,
+                  114,
+                  110,
+                  97,
+                  110,
+                  99,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103,
+                  95,
+                  118,
+                  49
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "proposal_decision",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  112,
+                  111,
+                  115,
+                  97,
+                  108,
+                  95,
+                  100,
+                  101,
+                  99,
+                  105,
+                  115,
+                  105,
+                  111,
+                  110,
+                  95,
+                  118,
+                  49
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "expected_proposal_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "expected_proposal_id",
+          "type": "u64"
+        },
+        {
+          "name": "proposal_type",
+          "type": {
+            "defined": {
+              "name": "ProposalType"
+            }
+          }
+        },
+        {
+          "name": "decision",
+          "type": {
+            "defined": {
+              "name": "ProposalDecision"
+            }
+          }
+        },
+        {
+          "name": "yes_weight",
+          "type": "u64"
+        },
+        {
+          "name": "no_weight",
+          "type": "u64"
+        },
+        {
+          "name": "start_ts",
+          "type": "i64"
+        },
+        {
+          "name": "end_ts",
+          "type": "i64"
+        }
+      ]
     },
     {
       "name": "deposit",
@@ -436,6 +665,179 @@
         {
           "name": "amount",
           "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "execute_queued_action",
+      "discriminator": [
+        46,
+        55,
+        155,
+        177,
+        172,
+        35,
+        173,
+        210
+      ],
+      "accounts": [
+        {
+          "name": "governance_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  111,
+                  118,
+                  101,
+                  114,
+                  110,
+                  97,
+                  110,
+                  99,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103,
+                  95,
+                  118,
+                  49
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "execution_queue_item",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  120,
+                  101,
+                  99,
+                  117,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  113,
+                  117,
+                  101,
+                  117,
+                  101,
+                  95,
+                  105,
+                  116,
+                  101,
+                  109,
+                  95,
+                  118,
+                  49
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "proposal_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "executor",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "proposal_id",
+          "type": "u64"
+        },
+        {
+          "name": "payload_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "initialize_governance_config",
+      "discriminator": [
+        15,
+        40,
+        42,
+        141,
+        94,
+        104,
+        27,
+        201
+      ],
+      "accounts": [
+        {
+          "name": "governance_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  111,
+                  118,
+                  101,
+                  114,
+                  110,
+                  97,
+                  110,
+                  99,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103,
+                  95,
+                  118,
+                  49
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "min_execution_delay_seconds",
+          "type": "i64"
+        },
+        {
+          "name": "emergency_guardian",
+          "type": "pubkey"
         }
       ]
     },
@@ -930,6 +1332,222 @@
       ]
     },
     {
+      "name": "pause_security_layer",
+      "discriminator": [
+        47,
+        15,
+        250,
+        109,
+        50,
+        168,
+        37,
+        166
+      ],
+      "accounts": [
+        {
+          "name": "governance_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  111,
+                  118,
+                  101,
+                  114,
+                  110,
+                  97,
+                  110,
+                  99,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103,
+                  95,
+                  118,
+                  49
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "emergency_guardian",
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "queue_execution",
+      "discriminator": [
+        112,
+        47,
+        222,
+        94,
+        168,
+        153,
+        227,
+        95
+      ],
+      "accounts": [
+        {
+          "name": "governance_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  111,
+                  118,
+                  101,
+                  114,
+                  110,
+                  97,
+                  110,
+                  99,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103,
+                  95,
+                  118,
+                  49
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "proposal_decision",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  112,
+                  111,
+                  115,
+                  97,
+                  108,
+                  95,
+                  100,
+                  101,
+                  99,
+                  105,
+                  115,
+                  105,
+                  111,
+                  110,
+                  95,
+                  118,
+                  49
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "proposal_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "execution_queue_item",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  120,
+                  101,
+                  99,
+                  117,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  113,
+                  117,
+                  101,
+                  117,
+                  101,
+                  95,
+                  105,
+                  116,
+                  101,
+                  109,
+                  95,
+                  118,
+                  49
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "proposal_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "proposal_id",
+          "type": "u64"
+        },
+        {
+          "name": "action_type",
+          "type": {
+            "defined": {
+              "name": "ActionType"
+            }
+          }
+        },
+        {
+          "name": "target_program",
+          "type": "pubkey"
+        },
+        {
+          "name": "target_account",
+          "type": "pubkey"
+        },
+        {
+          "name": "payload_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "stake_alpha",
       "discriminator": [
         222,
@@ -1085,6 +1703,59 @@
       ]
     },
     {
+      "name": "unpause_security_layer",
+      "discriminator": [
+        106,
+        97,
+        111,
+        98,
+        196,
+        198,
+        10,
+        249
+      ],
+      "accounts": [
+        {
+          "name": "governance_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  111,
+                  118,
+                  101,
+                  114,
+                  110,
+                  97,
+                  110,
+                  99,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103,
+                  95,
+                  118,
+                  49
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "unstake_alpha",
       "discriminator": [
         147,
@@ -1229,6 +1900,45 @@
   ],
   "accounts": [
     {
+      "name": "ExecutionQueueItemV1",
+      "discriminator": [
+        27,
+        25,
+        66,
+        11,
+        60,
+        169,
+        202,
+        231
+      ]
+    },
+    {
+      "name": "GovernanceConfigV1",
+      "discriminator": [
+        203,
+        20,
+        137,
+        216,
+        207,
+        141,
+        109,
+        16
+      ]
+    },
+    {
+      "name": "ProposalDecisionV1",
+      "discriminator": [
+        13,
+        13,
+        103,
+        236,
+        159,
+        187,
+        141,
+        237
+      ]
+    },
+    {
       "name": "StakingPoolV1",
       "discriminator": [
         67,
@@ -1359,9 +2069,327 @@
       "code": 6012,
       "name": "VaultBalanceBelowObserved",
       "msg": "Vault balance is below the observed accounting balance"
+    },
+    {
+      "code": 6013,
+      "name": "InvalidExecutionDelay",
+      "msg": "Invalid execution delay"
+    },
+    {
+      "code": 6014,
+      "name": "InvalidProposalId",
+      "msg": "Invalid proposal id"
+    },
+    {
+      "code": 6015,
+      "name": "InvalidProposalDecision",
+      "msg": "Invalid proposal decision"
+    },
+    {
+      "code": 6016,
+      "name": "InvalidActionForProposalType",
+      "msg": "Invalid action for proposal type"
+    },
+    {
+      "code": 6017,
+      "name": "ProposalNotApproved",
+      "msg": "Proposal is not approved for execution"
+    },
+    {
+      "code": 6018,
+      "name": "SecurityLayerPaused",
+      "msg": "Security layer is paused"
+    },
+    {
+      "code": 6019,
+      "name": "ExecutionDelayNotMet",
+      "msg": "Execution delay has not been met"
+    },
+    {
+      "code": 6020,
+      "name": "InvalidExecutionStatus",
+      "msg": "Invalid execution status"
+    },
+    {
+      "code": 6021,
+      "name": "PayloadHashMismatch",
+      "msg": "Payload hash mismatch"
+    },
+    {
+      "code": 6022,
+      "name": "UnauthorizedSecurityAuthority",
+      "msg": "Unauthorized security authority"
+    },
+    {
+      "code": 6023,
+      "name": "UnauthorizedEmergencyGuardian",
+      "msg": "Unauthorized emergency guardian"
+    },
+    {
+      "code": 6024,
+      "name": "InvalidEmergencyGuardian",
+      "msg": "Invalid emergency guardian"
+    },
+    {
+      "code": 6025,
+      "name": "InvalidProposalTime",
+      "msg": "Invalid proposal time"
     }
   ],
   "types": [
+    {
+      "name": "ActionType",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Noop"
+          },
+          {
+            "name": "GreenLabelSlash"
+          },
+          {
+            "name": "GreenLabelRefund"
+          },
+          {
+            "name": "PayrollEmployeeImpeach"
+          },
+          {
+            "name": "PayrollPayout"
+          },
+          {
+            "name": "TreasuryParamChange"
+          },
+          {
+            "name": "EmergencyPause"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ExecutionQueueItemV1",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "proposal_id",
+            "type": "u64"
+          },
+          {
+            "name": "proposer",
+            "type": "pubkey"
+          },
+          {
+            "name": "action_type",
+            "type": {
+              "defined": {
+                "name": "ActionType"
+              }
+            }
+          },
+          {
+            "name": "target_program",
+            "type": "pubkey"
+          },
+          {
+            "name": "target_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "decision",
+            "type": {
+              "defined": {
+                "name": "ProposalDecision"
+              }
+            }
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "execute_after",
+            "type": "i64"
+          },
+          {
+            "name": "executed_at",
+            "type": "i64"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "ExecutionStatus"
+              }
+            }
+          },
+          {
+            "name": "payload_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ExecutionStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Queued"
+          },
+          {
+            "name": "Executed"
+          },
+          {
+            "name": "Cancelled"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GovernanceConfigV1",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "min_execution_delay_seconds",
+            "type": "i64"
+          },
+          {
+            "name": "proposal_count",
+            "type": "u64"
+          },
+          {
+            "name": "emergency_guardian",
+            "type": "pubkey"
+          },
+          {
+            "name": "is_paused",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProposalDecision",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Pending"
+          },
+          {
+            "name": "Approved"
+          },
+          {
+            "name": "Rejected"
+          },
+          {
+            "name": "Partial"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProposalDecisionV1",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "proposal_id",
+            "type": "u64"
+          },
+          {
+            "name": "proposal_type",
+            "type": {
+              "defined": {
+                "name": "ProposalType"
+              }
+            }
+          },
+          {
+            "name": "proposer",
+            "type": "pubkey"
+          },
+          {
+            "name": "decision",
+            "type": {
+              "defined": {
+                "name": "ProposalDecision"
+              }
+            }
+          },
+          {
+            "name": "yes_weight",
+            "type": "u64"
+          },
+          {
+            "name": "no_weight",
+            "type": "u64"
+          },
+          {
+            "name": "start_ts",
+            "type": "i64"
+          },
+          {
+            "name": "end_ts",
+            "type": "i64"
+          },
+          {
+            "name": "finalized_ts",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProposalType",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "GreenLabelSlash"
+          },
+          {
+            "name": "GreenLabelRefund"
+          },
+          {
+            "name": "PayrollEmployeeImpeach"
+          },
+          {
+            "name": "PayrollPayout"
+          },
+          {
+            "name": "TreasuryParamChange"
+          },
+          {
+            "name": "EmergencyPause"
+          }
+        ]
+      }
+    },
     {
       "name": "StakingPoolV1",
       "type": {
