@@ -75,6 +75,7 @@ Green Label V1 uses a two-part Project Bond model:
 
 - Minimum Bond: 299 USDC.
 - Additional Bond: uncapped voluntary extra bond.
+- Base Bond is the configured base portion, 299 USDC in Phase 1. Any voluntary amount above the base portion must be represented as Extra Bond.
 - Base Bond refund:
   - 80% refund to the project owner.
   - 20% routed to the protocol treasury.
@@ -188,6 +189,7 @@ GreenLabelConfigV1 {
   response_window_seconds: i64,
   project_count: u64,
   treasury_usdc_state_v2: Pubkey,
+  base_bond_treasury_vault: Pubkey,
   relief_usdc_vault: Pubkey,
   builders_usdc_vault: Pubkey,
   staking_usdc_vault: Pubkey,
@@ -205,6 +207,7 @@ Notes:
 - `base_refund_bps` should default to 8000.
 - `base_treasury_bps` should default to 2000.
 - `base_refund_bps + base_treasury_bps` must equal 10000.
+- `base_bond_treasury_vault` receives the base bond 20% treasury share during refund execution.
 - `security_governance_config` links Green Label V1 to System Security Layer V1.
 - Relevant treasury vaults should point to Treasury V2-controlled accounts where possible.
 
@@ -230,6 +233,10 @@ GreenLabelProjectV1 {
   observation_end_ts: i64,
   dispute_count: u64,
   active_dispute: Option<Pubkey>,
+  terminal_action_proposal_id: Option<u64>,
+  terminal_action_proposal_decision: Option<Pubkey>,
+  terminal_action_execution_queue_item: Option<Pubkey>,
+  terminal_action_payload_hash: Option<[u8; 32]>,
   approved_at: Option<i64>,
   refunded_at: Option<i64>,
   slashed_at: Option<i64>,
@@ -244,6 +251,7 @@ Notes:
 - `bond_vault` must be an isolated Green Bond Vault for the project.
 - `bond_vault_authority` should be PDA-controlled.
 - `active_dispute` should prevent multiple simultaneous disputes in Phase 1.
+- Terminal action fields store the Security Layer decision and queue link for the final refund or slash. This also supports a no-active-dispute refund after observation while still requiring Security Layer decision, execution queue, payload hash, and timelock checks.
 - `status` drives whether refund, slash, dispute, or approval transitions are allowed.
 
 ### GreenLabelDisputeV1
@@ -342,7 +350,6 @@ DisputeStatus {
   EvidencePeriod,
   AwaitingProjectResponse,
   ReadyForDecision,
-  LinkedToSecurityDecision,
   QueuedRefund,
   QueuedSlash,
   ResolvedRefund,
@@ -431,9 +438,10 @@ Validation rules:
 
 - Config must not be paused.
 - Project owner must sign.
-- `base_bond_amount` must equal or exceed `min_base_bond_usdc`.
+- `base_bond_amount` must equal the configured base bond amount in Phase 1.
 - `extra_bond_amount` may be zero and is uncapped.
 - `total_bond_amount = base_bond_amount + extra_bond_amount`.
+- `total_bond_amount` must be at least `min_base_bond_usdc`.
 - Bond Tier must be derived from total bond amount.
 - Bond must be transferred into the project's isolated Green Bond Vault.
 - New project must start without active dispute.
@@ -535,7 +543,7 @@ Accounts:
 
 - `green_label_config`
 - `green_label_project`
-- `green_label_dispute`
+- `green_label_dispute` when linking a dispute-driven action
 - `security_governance_config`
 - `proposal_decision`
 - `execution_queue_item`
@@ -552,7 +560,9 @@ Args:
 Validation rules:
 
 - Config must not be paused.
-- Dispute must be `ReadyForDecision`.
+- For dispute-driven actions, dispute must be `ReadyForDecision`.
+- For a no-active-dispute refund path, project must be `ObservationPassed` and `active_dispute` must be empty.
+- `GreenLabelSlash` always requires a linked dispute account.
 - `proposal_decision` must belong to the configured Security Layer program.
 - `execution_queue_item` must belong to the same `proposal_id`.
 - Security decision must be approved for the requested action.
@@ -562,8 +572,9 @@ Validation rules:
 
 State transitions:
 
-- Stores `proposal_id`, `proposal_decision`, and `execution_queue_item` on the dispute.
-- If action is `GreenLabelRefund`, dispute moves to `QueuedRefund` and project moves to `QueuedRefund`.
+- Stores `proposal_id`, `proposal_decision`, `execution_queue_item`, and `payload_hash` on the project terminal action fields.
+- For dispute-driven actions, also stores `proposal_id`, `proposal_decision`, and `execution_queue_item` on the dispute.
+- If action is `GreenLabelRefund`, project moves to `QueuedRefund`; a linked dispute also moves to `QueuedRefund`.
 - If action is `GreenLabelSlash`, dispute moves to `QueuedSlash` and project moves to `QueuedSlash`.
 
 Funds movement:
@@ -580,7 +591,7 @@ Accounts:
 
 - `green_label_config`
 - `green_label_project`
-- `green_label_dispute`
+- `green_label_dispute` when refund resolves a dispute
 - `security_governance_config`
 - `proposal_decision`
 - `execution_queue_item`
@@ -593,16 +604,18 @@ Accounts:
 Args:
 
 - `project_id`
-- `dispute_id`
+- `dispute_id` when refund resolves a dispute
 - `payload_hash`
 
 Validation rules:
 
-- Config must not be paused unless a specific governance policy allows refund while paused.
+- Config must not be paused.
 - Project must be `QueuedRefund`.
-- Dispute must be `QueuedRefund`.
+- If a dispute account is supplied, dispute must be `QueuedRefund`.
+- If no dispute account is supplied, project must have no active dispute and must have passed observation.
 - Security Layer action type must be `GreenLabelRefund`.
 - Security Layer timelock must be satisfied.
+- Security Layer must not be paused or otherwise blocking execution.
 - Execution queue item must be in executable status.
 - `payload_hash` must match the canonical refund payload.
 - Bond vault balance must cover the calculated refund and treasury amounts.
@@ -610,9 +623,9 @@ Validation rules:
 State transitions:
 
 - Project status moves to `Refunded`.
-- Dispute status moves to `ResolvedRefund`.
-- Sets `refunded_at` and `resolved_at`.
-- Clears `active_dispute`.
+- If a dispute account is supplied, dispute status moves to `ResolvedRefund` and `resolved_at` is set.
+- Sets `refunded_at`.
+- Clears `active_dispute` when present.
 
 Funds movement:
 
@@ -648,11 +661,12 @@ Args:
 
 Validation rules:
 
-- Config must not be paused unless emergency governance policy explicitly allows slash execution.
+- Config must not be paused.
 - Project must be `QueuedSlash`.
 - Dispute must be `QueuedSlash`.
 - Security Layer action type must be `GreenLabelSlash`.
 - Security Layer timelock must be satisfied.
+- Security Layer must not be paused or otherwise blocking execution.
 - Execution queue item must be in executable status.
 - `payload_hash` must match the canonical slash payload.
 - `slash_amount` must not exceed bond vault balance.
@@ -759,7 +773,7 @@ Phase 1 excludes:
 - Multiple simultaneous disputes.
 - Complex risk scoring.
 - Oracle integration.
-- Cross-chain projects.
+- Cross-chain support / cross-chain projects.
 - Automatic LP lock verification.
 
 Phase 1 success means the protocol can prove a minimal Green Label control loop on Devnet:
@@ -775,7 +789,7 @@ Minimum closed-loop test:
 1. Initialize Green Label config.
 2. Submit a 299 USDC Project Bond.
 3. Verify project status is `PendingObservation`.
-4. Run the refund path after the allowed state transition and Security Layer approval.
+4. After observation, link a Security Layer `GreenLabelRefund` decision, queue the refund, and execute refund after timelock.
 5. Submit a 1299 USDC Project Bond with 299 base bond and 1000 extra bond.
 6. Open a dispute with a valid reason code and evidence hash.
 7. Link a Security Layer decision to the dispute.
