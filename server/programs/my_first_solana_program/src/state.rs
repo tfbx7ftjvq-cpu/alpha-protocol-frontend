@@ -172,3 +172,50 @@ pub struct ExecutionQueueItemV1 {
 impl ExecutionQueueItemV1 {
     pub const INIT_SPACE: usize = 256;
 }
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GreenLabelStatus {
+    PendingObservation,
+    ActiveGreenLabel,
+    Disputed,
+    RefundQueued,
+    SlashQueued,
+    Refunded,
+    Slashed,
+    Cancelled,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BondTier {
+    Base,
+    Bronze,
+    Silver,
+    Gold,
+    Platinum,
+    Custom,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RugReasonCode {
+    LiquidityRemoved,
+    DeveloperDump,
+    WebsiteOrCommunityAbandoned,
+    MintOrFreezeAuthorityAbuse,
+    TreasuryMisuse,
+    FalseDisclosure,
+    MaliciousContractUpgrade,
+    Other,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DisputeStatus {
+    Open,
+    EvidencePeriod,
+    ProjectResponsePeriod,
+    ReadyForDecision,
+    DecisionQueued,
+    ResolvedRefund,
+    ResolvedSlash,
+    Rejected,
+    Cancelled,
+}

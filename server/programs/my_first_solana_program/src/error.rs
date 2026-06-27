@@ -79,4 +79,25 @@ pub enum CustomError {
 
     #[msg("Invalid proposal time")]
     InvalidProposalTime,
+
+    #[msg("Invalid Green Label bond amount")]
+    InvalidGreenLabelBondAmount,
+
+    #[msg("Invalid Green Label BPS config")]
+    InvalidGreenLabelBpsConfig,
+
+    #[msg("Invalid Green Label status")]
+    InvalidGreenLabelStatus,
+
+    #[msg("Invalid Green Label bond split")]
+    InvalidGreenLabelBondSplit,
+
+    #[msg("Invalid Green Label slash without dispute")]
+    InvalidGreenLabelSlashWithoutDispute,
+
+    #[msg("Invalid Green Label payload hash")]
+    InvalidGreenLabelPayloadHash,
+
+    #[msg("Green Label math overflow")]
+    GreenLabelMathOverflow,
 }
