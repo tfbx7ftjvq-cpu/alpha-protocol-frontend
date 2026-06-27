@@ -1,5 +1,11 @@
 use anchor_lang::prelude::*;
 
+use crate::constants::{
+    ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES, GREEN_LABEL_CONFIG_RESERVED_BYTES,
+    GREEN_LABEL_CONFIG_SPACE, GREEN_LABEL_DISPUTE_RESERVED_BYTES, GREEN_LABEL_DISPUTE_SPACE,
+    GREEN_LABEL_PROJECT_RESERVED_BYTES, GREEN_LABEL_PROJECT_SPACE,
+};
+
 #[account]
 pub struct TreasuryState {
     pub authority: Pubkey,
@@ -218,4 +224,92 @@ pub enum DisputeStatus {
     ResolvedSlash,
     Rejected,
     Cancelled,
+}
+
+#[account]
+pub struct GreenLabelConfigV1 {
+    pub authority: Pubkey,
+    pub usdc_mint: Pubkey,
+    pub min_base_bond_usdc: u64,
+    pub base_refund_bps: u16,
+    pub base_treasury_bps: u16,
+    pub observation_period_seconds: i64,
+    pub dispute_window_seconds: i64,
+    pub response_window_seconds: i64,
+    pub project_count: u64,
+    pub treasury_usdc_state_v2: Pubkey,
+    pub base_bond_treasury_vault: Pubkey,
+    pub relief_or_risk_vault: Pubkey,
+    pub vault_authority_v2: Pubkey,
+    pub security_governance_config: Pubkey,
+    pub is_paused: bool,
+    pub bump: u8,
+    pub reserved: [u8; GREEN_LABEL_CONFIG_RESERVED_BYTES],
+}
+
+impl GreenLabelConfigV1 {
+    pub const INIT_SPACE: usize = GREEN_LABEL_CONFIG_SPACE - ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES;
+}
+
+#[account]
+pub struct GreenLabelProjectV1 {
+    pub project_id: u64,
+    pub project_owner: Pubkey,
+    pub project_name_hash: [u8; 32],
+    pub project_url_hash: [u8; 32],
+    pub token_mint: Pubkey,
+    pub project_treasury_wallet: Pubkey,
+    pub base_bond_amount: u64,
+    pub extra_bond_amount: u64,
+    pub total_bond_amount: u64,
+    pub bond_vault: Pubkey,
+    pub bond_vault_authority: Pubkey,
+    pub bond_tier: BondTier,
+    pub status: GreenLabelStatus,
+    pub submitted_at: i64,
+    pub observation_start_ts: i64,
+    pub observation_end_ts: i64,
+    pub dispute_count: u64,
+    pub active_dispute: Pubkey,
+    pub approved_at: i64,
+    pub refunded_at: i64,
+    pub slashed_at: i64,
+    pub risk_score_snapshot: u16,
+    pub terminal_proposal_id: u64,
+    pub terminal_proposal_decision: Pubkey,
+    pub terminal_execution_queue_item: Pubkey,
+    pub terminal_payload_hash: [u8; 32],
+    pub terminal_action_type: ActionType,
+    pub bump: u8,
+    pub reserved: [u8; GREEN_LABEL_PROJECT_RESERVED_BYTES],
+}
+
+impl GreenLabelProjectV1 {
+    pub const INIT_SPACE: usize = GREEN_LABEL_PROJECT_SPACE - ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES;
+}
+
+#[account]
+pub struct GreenLabelDisputeV1 {
+    pub project_id: u64,
+    pub dispute_id: u64,
+    pub project: Pubkey,
+    pub disputer: Pubkey,
+    pub reason_code: RugReasonCode,
+    pub evidence_hash: [u8; 32],
+    pub status: DisputeStatus,
+    pub opened_at: i64,
+    pub evidence_end_ts: i64,
+    pub response_end_ts: i64,
+    pub resolved_at: i64,
+    pub proposal_id: u64,
+    pub proposal_decision: Pubkey,
+    pub execution_queue_item: Pubkey,
+    pub payload_hash: [u8; 32],
+    pub action_type: ActionType,
+    pub bump: u8,
+    pub reserved: [u8; GREEN_LABEL_DISPUTE_RESERVED_BYTES],
+}
+
+impl GreenLabelDisputeV1 {
+    pub const INIT_SPACE: usize = GREEN_LABEL_DISPUTE_SPACE - ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES;
 }

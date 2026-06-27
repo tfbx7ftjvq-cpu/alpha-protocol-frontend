@@ -18,6 +18,11 @@ pub const USER_STAKE_ACCOUNT_SEED: &[u8] = b"user_stake_account";
 pub const GOVERNANCE_CONFIG_V1_SEED: &[u8] = b"governance_config_v1";
 pub const PROPOSAL_DECISION_V1_SEED: &[u8] = b"proposal_decision_v1";
 pub const EXECUTION_QUEUE_ITEM_V1_SEED: &[u8] = b"execution_queue_item_v1";
+pub const GREEN_LABEL_CONFIG_SEED: &[u8] = b"green_label_config_v1";
+pub const GREEN_LABEL_PROJECT_SEED: &[u8] = b"green_label_project_v1";
+pub const GREEN_LABEL_DISPUTE_SEED: &[u8] = b"green_label_dispute_v1";
+pub const GREEN_BOND_VAULT_SEED: &[u8] = b"green_bond_vault_v1";
+pub const GREEN_BOND_VAULT_AUTHORITY_SEED: &[u8] = b"green_bond_vault_authority_v1";
 
 pub const BPS_DENOMINATOR: u64 = 10_000;
 pub const RELIEF_BPS: u64 = 5_000;
@@ -63,3 +68,34 @@ pub const GREEN_LABEL_BRONZE_TIER_THRESHOLD_USDC: u64 = 500_000_000;
 pub const GREEN_LABEL_SILVER_TIER_THRESHOLD_USDC: u64 = 1_000_000_000;
 pub const GREEN_LABEL_GOLD_TIER_THRESHOLD_USDC: u64 = 3_000_000_000;
 pub const GREEN_LABEL_PLATINUM_TIER_THRESHOLD_USDC: u64 = 10_000_000_000;
+
+pub const ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES: usize = 8;
+pub const GREEN_LABEL_CONFIG_RESERVED_BYTES: usize = 128;
+pub const GREEN_LABEL_PROJECT_RESERVED_BYTES: usize = 160;
+pub const GREEN_LABEL_DISPUTE_RESERVED_BYTES: usize = 128;
+
+pub const GREEN_LABEL_CONFIG_SPACE: usize = ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES
+    + (32 * 7)
+    + (8 * 2)
+    + (2 * 2)
+    + (8 * 3)
+    + 1
+    + 1
+    + GREEN_LABEL_CONFIG_RESERVED_BYTES;
+
+pub const GREEN_LABEL_PROJECT_SPACE: usize = ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES
+    + (32 * 11)
+    + (8 * 12)
+    + 1
+    + 1
+    + 2
+    + 1
+    + 1
+    + GREEN_LABEL_PROJECT_RESERVED_BYTES;
+
+pub const GREEN_LABEL_DISPUTE_SPACE: usize = ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES
+    + (32 * 6)
+    + (8 * 7)
+    + 3
+    + 1
+    + GREEN_LABEL_DISPUTE_RESERVED_BYTES;

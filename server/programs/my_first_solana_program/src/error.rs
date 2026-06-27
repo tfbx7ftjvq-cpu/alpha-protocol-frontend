@@ -100,4 +100,7 @@ pub enum CustomError {
 
     #[msg("Green Label math overflow")]
     GreenLabelMathOverflow,
+
+    #[msg("Invalid Green Label action type")]
+    InvalidGreenLabelActionType,
 }

@@ -2,11 +2,12 @@ use anchor_lang::prelude::*;
 
 use crate::constants::{
     BASE_BOND_REFUND_BPS, BASE_BOND_TREASURY_BPS, GREEN_LABEL_BRONZE_TIER_THRESHOLD_USDC,
-    GREEN_LABEL_GOLD_TIER_THRESHOLD_USDC, GREEN_LABEL_PLATINUM_TIER_THRESHOLD_USDC,
+    GREEN_LABEL_CONFIG_SPACE, GREEN_LABEL_DISPUTE_SPACE, GREEN_LABEL_GOLD_TIER_THRESHOLD_USDC,
+    GREEN_LABEL_PLATINUM_TIER_THRESHOLD_USDC, GREEN_LABEL_PROJECT_SPACE,
     GREEN_LABEL_SILVER_TIER_THRESHOLD_USDC, MAX_BPS, MIN_GREEN_LABEL_BASE_BOND_USDC,
 };
 use crate::error::CustomError;
-use crate::state::{BondTier, GreenLabelStatus};
+use crate::state::{ActionType, BondTier, GreenLabelStatus};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GreenLabelBondSplit {
@@ -157,6 +158,52 @@ pub fn validate_payload_hash(payload_hash: [u8; 32]) -> Result<()> {
     Ok(())
 }
 
+pub fn expected_green_label_config_space() -> usize {
+    GREEN_LABEL_CONFIG_SPACE
+}
+
+pub fn expected_green_label_project_space() -> usize {
+    GREEN_LABEL_PROJECT_SPACE
+}
+
+pub fn expected_green_label_dispute_space() -> usize {
+    GREEN_LABEL_DISPUTE_SPACE
+}
+
+pub fn derive_bond_split_and_tier(
+    total_bond_amount: u64,
+) -> Result<(GreenLabelBondSplit, BondTier)> {
+    let split = split_green_label_bond(total_bond_amount)?;
+    let tier = calculate_bond_tier(total_bond_amount)?;
+
+    Ok((split, tier))
+}
+
+pub fn validate_terminal_action_for_refund(action_type: ActionType) -> Result<()> {
+    require!(
+        action_type == ActionType::GreenLabelRefund,
+        CustomError::InvalidGreenLabelActionType
+    );
+
+    Ok(())
+}
+
+pub fn validate_terminal_action_for_slash(
+    action_type: ActionType,
+    has_linked_dispute: bool,
+) -> Result<()> {
+    require!(
+        action_type == ActionType::GreenLabelSlash,
+        CustomError::InvalidGreenLabelActionType
+    );
+    require!(
+        has_linked_dispute,
+        CustomError::InvalidGreenLabelSlashWithoutDispute
+    );
+
+    Ok(())
+}
+
 fn calculate_bps_amount(amount: u64, bps: u16) -> Result<u64> {
     amount
         .checked_mul(bps as u64)
@@ -167,6 +214,15 @@ fn calculate_bps_amount(amount: u64, bps: u16) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::{
+        ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES, GREEN_BOND_VAULT_AUTHORITY_SEED, GREEN_BOND_VAULT_SEED,
+        GREEN_LABEL_CONFIG_RESERVED_BYTES, GREEN_LABEL_CONFIG_SEED,
+        GREEN_LABEL_DISPUTE_RESERVED_BYTES, GREEN_LABEL_DISPUTE_SEED,
+        GREEN_LABEL_PROJECT_RESERVED_BYTES, GREEN_LABEL_PROJECT_SEED,
+    };
+    use crate::state::{
+        DisputeStatus, GreenLabelConfigV1, GreenLabelDisputeV1, GreenLabelProjectV1, RugReasonCode,
+    };
 
     fn assert_error_contains(err: anchor_lang::error::Error, expected: &str) {
         let message = format!("{err:?}");
@@ -352,5 +408,261 @@ mod tests {
     #[test]
     fn payload_hash_accepts_nonzero_hash() {
         validate_payload_hash([1; 32]).unwrap();
+    }
+
+    #[test]
+    fn green_label_config_space_is_at_least_expected_minimum() {
+        let minimum = ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES
+            + (32 * 7)
+            + (8 * 2)
+            + (2 * 2)
+            + (8 * 3)
+            + 1
+            + 1
+            + GREEN_LABEL_CONFIG_RESERVED_BYTES;
+
+        assert!(expected_green_label_config_space() >= minimum);
+        assert_eq!(
+            GreenLabelConfigV1::INIT_SPACE + ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES,
+            expected_green_label_config_space()
+        );
+    }
+
+    #[test]
+    fn green_label_project_space_is_at_least_expected_minimum() {
+        let minimum = ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES
+            + (32 * 11)
+            + (8 * 12)
+            + 1
+            + 1
+            + 2
+            + 1
+            + 1
+            + GREEN_LABEL_PROJECT_RESERVED_BYTES;
+
+        assert!(expected_green_label_project_space() >= minimum);
+        assert_eq!(
+            GreenLabelProjectV1::INIT_SPACE + ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES,
+            expected_green_label_project_space()
+        );
+    }
+
+    #[test]
+    fn green_label_dispute_space_is_at_least_expected_minimum() {
+        let minimum = ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES
+            + (32 * 6)
+            + (8 * 7)
+            + 3
+            + 1
+            + GREEN_LABEL_DISPUTE_RESERVED_BYTES;
+
+        assert!(expected_green_label_dispute_space() >= minimum);
+        assert_eq!(
+            GreenLabelDisputeV1::INIT_SPACE + ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES,
+            expected_green_label_dispute_space()
+        );
+    }
+
+    #[test]
+    fn green_label_config_reserved_space_is_128() {
+        assert_eq!(
+            green_label_config().reserved.len(),
+            GREEN_LABEL_CONFIG_RESERVED_BYTES
+        );
+        assert_eq!(GREEN_LABEL_CONFIG_RESERVED_BYTES, 128);
+    }
+
+    #[test]
+    fn green_label_project_reserved_space_is_160() {
+        assert_eq!(
+            green_label_project().reserved.len(),
+            GREEN_LABEL_PROJECT_RESERVED_BYTES
+        );
+        assert_eq!(GREEN_LABEL_PROJECT_RESERVED_BYTES, 160);
+    }
+
+    #[test]
+    fn green_label_dispute_reserved_space_is_128() {
+        assert_eq!(
+            green_label_dispute().reserved.len(),
+            GREEN_LABEL_DISPUTE_RESERVED_BYTES
+        );
+        assert_eq!(GREEN_LABEL_DISPUTE_RESERVED_BYTES, 128);
+    }
+
+    #[test]
+    fn derive_bond_split_and_tier_for_299() {
+        let (split, tier) = derive_bond_split_and_tier(299_000_000).unwrap();
+
+        assert_eq!(split.base_bond_amount, 299_000_000);
+        assert_eq!(split.extra_bond_amount, 0);
+        assert_eq!(tier, BondTier::Base);
+    }
+
+    #[test]
+    fn derive_bond_split_and_tier_for_1299() {
+        let (split, tier) = derive_bond_split_and_tier(1_299_000_000).unwrap();
+
+        assert_eq!(split.base_bond_amount, 299_000_000);
+        assert_eq!(split.extra_bond_amount, 1_000_000_000);
+        assert_eq!(tier, BondTier::Silver);
+    }
+
+    #[test]
+    fn validate_terminal_refund_accepts_green_label_refund() {
+        validate_terminal_action_for_refund(ActionType::GreenLabelRefund).unwrap();
+    }
+
+    #[test]
+    fn validate_terminal_refund_rejects_green_label_slash() {
+        let err = validate_terminal_action_for_refund(ActionType::GreenLabelSlash).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelActionType");
+    }
+
+    #[test]
+    fn validate_terminal_slash_accepts_green_label_slash_with_dispute() {
+        validate_terminal_action_for_slash(ActionType::GreenLabelSlash, true).unwrap();
+    }
+
+    #[test]
+    fn validate_terminal_slash_rejects_green_label_slash_without_dispute() {
+        let err =
+            validate_terminal_action_for_slash(ActionType::GreenLabelSlash, false).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelSlashWithoutDispute");
+    }
+
+    #[test]
+    fn validate_terminal_slash_rejects_green_label_refund() {
+        let err =
+            validate_terminal_action_for_slash(ActionType::GreenLabelRefund, true).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelActionType");
+    }
+
+    #[test]
+    fn account_structs_are_clone_debug_serializable_if_possible() {
+        let mut config_data = Vec::new();
+        green_label_config()
+            .try_serialize(&mut config_data)
+            .unwrap();
+        assert!(!config_data.is_empty());
+
+        let mut project_data = Vec::new();
+        green_label_project()
+            .try_serialize(&mut project_data)
+            .unwrap();
+        assert!(!project_data.is_empty());
+
+        let mut dispute_data = Vec::new();
+        green_label_dispute()
+            .try_serialize(&mut dispute_data)
+            .unwrap();
+        assert!(!dispute_data.is_empty());
+
+        let tier = BondTier::Base;
+        let tier_copy = tier;
+        assert_eq!(format!("{tier_copy:?}"), "Base");
+    }
+
+    #[test]
+    fn pda_seed_constants_are_non_empty_and_distinct() {
+        let seeds = [
+            GREEN_LABEL_CONFIG_SEED,
+            GREEN_LABEL_PROJECT_SEED,
+            GREEN_LABEL_DISPUTE_SEED,
+            GREEN_BOND_VAULT_SEED,
+            GREEN_BOND_VAULT_AUTHORITY_SEED,
+        ];
+
+        for seed in seeds {
+            assert!(!seed.is_empty());
+        }
+
+        for (index, seed) in seeds.iter().enumerate() {
+            for other in seeds.iter().skip(index + 1) {
+                assert_ne!(seed, other);
+            }
+        }
+    }
+
+    fn green_label_config() -> GreenLabelConfigV1 {
+        GreenLabelConfigV1 {
+            authority: Pubkey::new_from_array([1; 32]),
+            usdc_mint: Pubkey::new_from_array([2; 32]),
+            min_base_bond_usdc: MIN_GREEN_LABEL_BASE_BOND_USDC,
+            base_refund_bps: BASE_BOND_REFUND_BPS,
+            base_treasury_bps: BASE_BOND_TREASURY_BPS,
+            observation_period_seconds: 30,
+            dispute_window_seconds: 7,
+            response_window_seconds: 3,
+            project_count: 0,
+            treasury_usdc_state_v2: Pubkey::new_from_array([3; 32]),
+            base_bond_treasury_vault: Pubkey::new_from_array([4; 32]),
+            relief_or_risk_vault: Pubkey::new_from_array([5; 32]),
+            vault_authority_v2: Pubkey::new_from_array([6; 32]),
+            security_governance_config: Pubkey::new_from_array([7; 32]),
+            is_paused: false,
+            bump: 250,
+            reserved: [0; GREEN_LABEL_CONFIG_RESERVED_BYTES],
+        }
+    }
+
+    fn green_label_project() -> GreenLabelProjectV1 {
+        GreenLabelProjectV1 {
+            project_id: 1,
+            project_owner: Pubkey::new_from_array([8; 32]),
+            project_name_hash: [9; 32],
+            project_url_hash: [10; 32],
+            token_mint: Pubkey::new_from_array([11; 32]),
+            project_treasury_wallet: Pubkey::new_from_array([12; 32]),
+            base_bond_amount: 299_000_000,
+            extra_bond_amount: 1_000_000_000,
+            total_bond_amount: 1_299_000_000,
+            bond_vault: Pubkey::new_from_array([13; 32]),
+            bond_vault_authority: Pubkey::new_from_array([14; 32]),
+            bond_tier: BondTier::Silver,
+            status: GreenLabelStatus::RefundQueued,
+            submitted_at: 1,
+            observation_start_ts: 2,
+            observation_end_ts: 3,
+            dispute_count: 0,
+            active_dispute: Pubkey::default(),
+            approved_at: 0,
+            refunded_at: 0,
+            slashed_at: 0,
+            risk_score_snapshot: 0,
+            terminal_proposal_id: 1,
+            terminal_proposal_decision: Pubkey::new_from_array([15; 32]),
+            terminal_execution_queue_item: Pubkey::new_from_array([16; 32]),
+            terminal_payload_hash: [17; 32],
+            terminal_action_type: ActionType::GreenLabelRefund,
+            bump: 249,
+            reserved: [0; GREEN_LABEL_PROJECT_RESERVED_BYTES],
+        }
+    }
+
+    fn green_label_dispute() -> GreenLabelDisputeV1 {
+        GreenLabelDisputeV1 {
+            project_id: 1,
+            dispute_id: 1,
+            project: Pubkey::new_from_array([18; 32]),
+            disputer: Pubkey::new_from_array([19; 32]),
+            reason_code: RugReasonCode::LiquidityRemoved,
+            evidence_hash: [20; 32],
+            status: DisputeStatus::DecisionQueued,
+            opened_at: 1,
+            evidence_end_ts: 2,
+            response_end_ts: 3,
+            resolved_at: 0,
+            proposal_id: 1,
+            proposal_decision: Pubkey::new_from_array([21; 32]),
+            execution_queue_item: Pubkey::new_from_array([22; 32]),
+            payload_hash: [23; 32],
+            action_type: ActionType::GreenLabelSlash,
+            bump: 248,
+            reserved: [0; GREEN_LABEL_DISPUTE_RESERVED_BYTES],
+        }
     }
 }
