@@ -13,7 +13,11 @@
     "execute-queued-action-v1": "tsx scripts/execute-queued-action-v1.ts",
     "cancel-queued-action-v1": "tsx scripts/cancel-queued-action-v1.ts",
     "pause-security-layer-v1": "tsx scripts/pause-security-layer-v1.ts",
-    "unpause-security-layer-v1": "tsx scripts/unpause-security-layer-v1.ts"
+    "unpause-security-layer-v1": "tsx scripts/unpause-security-layer-v1.ts",
+    "devnet:green-label:setup": "tsx scripts/devnet/green-label-v1/setup-green-label-config.ts",
+    "devnet:green-label:refund": "tsx scripts/devnet/green-label-v1/run-green-label-refund-e2e.ts",
+    "devnet:green-label:slash": "tsx scripts/devnet/green-label-v1/run-green-label-slash-e2e.ts",
+    "devnet:green-label:inspect": "tsx scripts/devnet/green-label-v1/inspect-green-label-project.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
