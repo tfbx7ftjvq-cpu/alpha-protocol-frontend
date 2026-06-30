@@ -150,4 +150,8 @@ pub mod my_first_solana_program {
             total_bond_amount,
         )
     }
+
+    pub fn initialize_green_bond_vault(ctx: Context<InitializeGreenBondVault>) -> Result<()> {
+        instructions::green_label_v1::initialize_green_bond_vault_handler(ctx)
+    }
 }

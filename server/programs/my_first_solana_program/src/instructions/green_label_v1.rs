@@ -1,13 +1,15 @@
 use anchor_lang::prelude::*;
+use anchor_spl::token::{Mint, Token, TokenAccount};
 
 use crate::constants::{
     BASE_BOND_REFUND_BPS, BASE_BOND_TREASURY_BPS, DEFAULT_DISPUTE_WINDOW_SECONDS,
     DEFAULT_OBSERVATION_PERIOD_SECONDS, DEFAULT_RESPONSE_WINDOW_SECONDS,
-    GREEN_LABEL_BRONZE_TIER_THRESHOLD_USDC, GREEN_LABEL_CONFIG_RESERVED_BYTES,
-    GREEN_LABEL_CONFIG_SEED, GREEN_LABEL_CONFIG_SPACE, GREEN_LABEL_DISPUTE_SPACE,
-    GREEN_LABEL_GOLD_TIER_THRESHOLD_USDC, GREEN_LABEL_PLATINUM_TIER_THRESHOLD_USDC,
-    GREEN_LABEL_PROJECT_RESERVED_BYTES, GREEN_LABEL_PROJECT_SEED, GREEN_LABEL_PROJECT_SPACE,
-    GREEN_LABEL_SILVER_TIER_THRESHOLD_USDC, MAX_BPS, MIN_GREEN_LABEL_BASE_BOND_USDC,
+    GREEN_BOND_VAULT_AUTHORITY_SEED, GREEN_BOND_VAULT_SEED, GREEN_LABEL_BRONZE_TIER_THRESHOLD_USDC,
+    GREEN_LABEL_CONFIG_RESERVED_BYTES, GREEN_LABEL_CONFIG_SEED, GREEN_LABEL_CONFIG_SPACE,
+    GREEN_LABEL_DISPUTE_SPACE, GREEN_LABEL_GOLD_TIER_THRESHOLD_USDC,
+    GREEN_LABEL_PLATINUM_TIER_THRESHOLD_USDC, GREEN_LABEL_PROJECT_RESERVED_BYTES,
+    GREEN_LABEL_PROJECT_SEED, GREEN_LABEL_PROJECT_SPACE, GREEN_LABEL_SILVER_TIER_THRESHOLD_USDC,
+    MAX_BPS, MIN_GREEN_LABEL_BASE_BOND_USDC,
 };
 use crate::error::CustomError;
 use crate::state::{
@@ -150,6 +152,60 @@ pub struct SubmitGreenLabelApplication<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+pub struct InitializeGreenBondVault<'info> {
+    #[account(
+        seeds = [GREEN_LABEL_CONFIG_SEED],
+        bump = green_label_config.bump
+    )]
+    pub green_label_config: Box<Account<'info, GreenLabelConfigV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            GREEN_LABEL_PROJECT_SEED,
+            &green_label_project.project_id.to_le_bytes()
+        ],
+        bump = green_label_project.bump
+    )]
+    pub green_label_project: Box<Account<'info, GreenLabelProjectV1>>,
+
+    #[account(
+        init,
+        payer = project_owner,
+        seeds = [
+            GREEN_BOND_VAULT_SEED,
+            green_label_project.key().as_ref()
+        ],
+        bump,
+        token::mint = usdc_mint,
+        token::authority = green_bond_vault_authority
+    )]
+    pub green_bond_vault: Box<Account<'info, TokenAccount>>,
+
+    /// CHECK: This PDA owns the project Green Bond Vault token account.
+    #[account(
+        seeds = [
+            GREEN_BOND_VAULT_AUTHORITY_SEED,
+            green_label_project.key().as_ref()
+        ],
+        bump
+    )]
+    pub green_bond_vault_authority: UncheckedAccount<'info>,
+
+    #[account(mut)]
+    pub project_owner: Signer<'info>,
+
+    #[account(
+        constraint = usdc_mint.key() == green_label_config.usdc_mint @ CustomError::InvalidGreenLabelMint
+    )]
+    pub usdc_mint: Box<Account<'info, Mint>>,
+
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+}
+
 pub fn initialize_green_label_config_handler(
     ctx: Context<InitializeGreenLabelConfig>,
 ) -> Result<()> {
@@ -245,6 +301,27 @@ pub fn submit_green_label_application_handler(
     Ok(())
 }
 
+pub fn initialize_green_bond_vault_handler(ctx: Context<InitializeGreenBondVault>) -> Result<()> {
+    validate_green_bond_vault_initialization(
+        ctx.accounts.green_label_config.is_paused,
+        ctx.accounts.green_label_project.project_owner,
+        ctx.accounts.project_owner.key(),
+        ctx.accounts.green_label_project.status,
+        ctx.accounts.green_label_project.bond_vault,
+        ctx.accounts.green_label_project.bond_vault_authority,
+        ctx.accounts.green_label_config.usdc_mint,
+        ctx.accounts.usdc_mint.key(),
+    )?;
+
+    record_green_bond_vault_initialization(
+        &mut ctx.accounts.green_label_project,
+        ctx.accounts.green_bond_vault.key(),
+        ctx.accounts.green_bond_vault_authority.key(),
+    );
+
+    Ok(())
+}
+
 pub fn build_default_green_label_config_values(
     authority: Pubkey,
     usdc_mint: Pubkey,
@@ -276,6 +353,52 @@ pub fn build_default_green_label_config_values(
         bump,
         reserved: [0; GREEN_LABEL_CONFIG_RESERVED_BYTES],
     })
+}
+
+pub fn validate_green_bond_vault_initialization(
+    config_is_paused: bool,
+    project_owner: Pubkey,
+    signer: Pubkey,
+    project_status: GreenLabelStatus,
+    existing_bond_vault: Pubkey,
+    existing_bond_vault_authority: Pubkey,
+    expected_usdc_mint: Pubkey,
+    provided_usdc_mint: Pubkey,
+) -> Result<()> {
+    require!(!config_is_paused, CustomError::InvalidGreenLabelStatus);
+    require_keys_eq!(
+        project_owner,
+        signer,
+        CustomError::InvalidGreenLabelProjectOwner
+    );
+    require!(
+        project_status == GreenLabelStatus::PendingBondDeposit,
+        CustomError::InvalidGreenLabelStatus
+    );
+    require!(
+        existing_bond_vault == Pubkey::default(),
+        CustomError::InvalidGreenLabelBondVaultState
+    );
+    require!(
+        existing_bond_vault_authority == Pubkey::default(),
+        CustomError::InvalidGreenLabelBondVaultState
+    );
+    require_keys_eq!(
+        expected_usdc_mint,
+        provided_usdc_mint,
+        CustomError::InvalidGreenLabelMint
+    );
+
+    Ok(())
+}
+
+pub fn record_green_bond_vault_initialization(
+    green_label_project: &mut GreenLabelProjectV1,
+    green_bond_vault: Pubkey,
+    green_bond_vault_authority: Pubkey,
+) {
+    green_label_project.bond_vault = green_bond_vault;
+    green_label_project.bond_vault_authority = green_bond_vault_authority;
 }
 
 pub fn build_pending_bond_project_values(
@@ -685,6 +808,163 @@ mod tests {
         let values = pending_bond_project_values(299_000_000);
 
         assert_eq!(values.reserved, [0; GREEN_LABEL_PROJECT_RESERVED_BYTES]);
+    }
+
+    #[test]
+    fn bond_vault_init_accepts_pending_bond_deposit_project() {
+        validate_green_bond_vault_initialization(
+            false,
+            Pubkey::new_from_array([8; 32]),
+            Pubkey::new_from_array([8; 32]),
+            GreenLabelStatus::PendingBondDeposit,
+            Pubkey::default(),
+            Pubkey::default(),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::new_from_array([2; 32]),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn bond_vault_init_rejects_paused_config() {
+        let err = try_validate_green_bond_vault_initialization(
+            true,
+            Pubkey::new_from_array([8; 32]),
+            GreenLabelStatus::PendingBondDeposit,
+            Pubkey::default(),
+            Pubkey::default(),
+            Pubkey::new_from_array([2; 32]),
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelStatus");
+    }
+
+    #[test]
+    fn bond_vault_init_rejects_wrong_project_owner() {
+        let err = try_validate_green_bond_vault_initialization(
+            false,
+            Pubkey::new_from_array([9; 32]),
+            GreenLabelStatus::PendingBondDeposit,
+            Pubkey::default(),
+            Pubkey::default(),
+            Pubkey::new_from_array([2; 32]),
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelProjectOwner");
+    }
+
+    #[test]
+    fn bond_vault_init_rejects_non_pending_bond_status() {
+        let err = try_validate_green_bond_vault_initialization(
+            false,
+            Pubkey::new_from_array([8; 32]),
+            GreenLabelStatus::PendingObservation,
+            Pubkey::default(),
+            Pubkey::default(),
+            Pubkey::new_from_array([2; 32]),
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelStatus");
+    }
+
+    #[test]
+    fn bond_vault_init_rejects_existing_bond_vault() {
+        let err = try_validate_green_bond_vault_initialization(
+            false,
+            Pubkey::new_from_array([8; 32]),
+            GreenLabelStatus::PendingBondDeposit,
+            Pubkey::new_from_array([13; 32]),
+            Pubkey::default(),
+            Pubkey::new_from_array([2; 32]),
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelBondVaultState");
+    }
+
+    #[test]
+    fn bond_vault_init_rejects_existing_bond_vault_authority() {
+        let err = try_validate_green_bond_vault_initialization(
+            false,
+            Pubkey::new_from_array([8; 32]),
+            GreenLabelStatus::PendingBondDeposit,
+            Pubkey::default(),
+            Pubkey::new_from_array([14; 32]),
+            Pubkey::new_from_array([2; 32]),
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelBondVaultState");
+    }
+
+    #[test]
+    fn bond_vault_init_rejects_wrong_usdc_mint() {
+        let err = try_validate_green_bond_vault_initialization(
+            false,
+            Pubkey::new_from_array([8; 32]),
+            GreenLabelStatus::PendingBondDeposit,
+            Pubkey::default(),
+            Pubkey::default(),
+            Pubkey::new_from_array([3; 32]),
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelMint");
+    }
+
+    #[test]
+    fn bond_vault_init_keeps_status_pending_bond_deposit() {
+        let mut project = pending_bond_project_for_vault_init();
+
+        record_green_bond_vault_initialization(
+            &mut project,
+            Pubkey::new_from_array([13; 32]),
+            Pubkey::new_from_array([14; 32]),
+        );
+
+        assert_eq!(project.status, GreenLabelStatus::PendingBondDeposit);
+    }
+
+    #[test]
+    fn bond_vault_init_does_not_start_observation() {
+        let mut project = pending_bond_project_for_vault_init();
+
+        record_green_bond_vault_initialization(
+            &mut project,
+            Pubkey::new_from_array([13; 32]),
+            Pubkey::new_from_array([14; 32]),
+        );
+
+        assert_eq!(project.observation_start_ts, 0);
+        assert_eq!(project.observation_end_ts, 0);
+    }
+
+    #[test]
+    fn bond_vault_init_does_not_change_bond_amounts() {
+        let mut project = pending_bond_project_for_vault_init();
+        let original_amounts = (
+            project.base_bond_amount,
+            project.extra_bond_amount,
+            project.total_bond_amount,
+        );
+
+        record_green_bond_vault_initialization(
+            &mut project,
+            Pubkey::new_from_array([13; 32]),
+            Pubkey::new_from_array([14; 32]),
+        );
+
+        assert_eq!(
+            original_amounts,
+            (
+                project.base_bond_amount,
+                project.extra_bond_amount,
+                project.total_bond_amount
+            )
+        );
     }
 
     #[test]
@@ -1164,6 +1444,36 @@ mod tests {
             1_717_171_717,
             249,
         )
+    }
+
+    fn try_validate_green_bond_vault_initialization(
+        config_is_paused: bool,
+        signer: Pubkey,
+        project_status: GreenLabelStatus,
+        existing_bond_vault: Pubkey,
+        existing_bond_vault_authority: Pubkey,
+        provided_usdc_mint: Pubkey,
+    ) -> Result<()> {
+        validate_green_bond_vault_initialization(
+            config_is_paused,
+            Pubkey::new_from_array([8; 32]),
+            signer,
+            project_status,
+            existing_bond_vault,
+            existing_bond_vault_authority,
+            Pubkey::new_from_array([2; 32]),
+            provided_usdc_mint,
+        )
+    }
+
+    fn pending_bond_project_for_vault_init() -> GreenLabelProjectV1 {
+        let mut project = green_label_project();
+        project.status = GreenLabelStatus::PendingBondDeposit;
+        project.bond_vault = Pubkey::default();
+        project.bond_vault_authority = Pubkey::default();
+        project.observation_start_ts = 0;
+        project.observation_end_ts = 0;
+        project
     }
 
     fn green_label_project() -> GreenLabelProjectV1 {

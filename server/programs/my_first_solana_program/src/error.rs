@@ -106,4 +106,13 @@ pub enum CustomError {
 
     #[msg("Invalid Green Label project id")]
     InvalidGreenLabelProjectId,
+
+    #[msg("Invalid Green Label project owner")]
+    InvalidGreenLabelProjectOwner,
+
+    #[msg("Invalid Green Label mint")]
+    InvalidGreenLabelMint,
+
+    #[msg("Invalid Green Label bond vault state")]
+    InvalidGreenLabelBondVaultState,
 }
