@@ -105,7 +105,10 @@ const SEEDS = {
 
 export type RuntimeIdl = {
   address?: string;
-  instructions: Array<{ name: string }>;
+  instructions: Array<{
+    name: string;
+    discriminator?: number[];
+  }>;
 };
 
 export type EnumValue = {
@@ -239,6 +242,25 @@ export function isDryRun(): boolean {
 
 export function anchorDiscriminator(name: string): Buffer {
   return crypto.createHash("sha256").update(`global:${name}`).digest().subarray(0, 8);
+}
+
+export function getInstructionDiscriminator(idl: RuntimeIdl, name: string): Buffer {
+  const instruction = idl.instructions.find((ix) => ix.name === name);
+  if (instruction?.discriminator) {
+    const discriminator = Buffer.from(instruction.discriminator);
+    if (discriminator.length !== 8) {
+      throw new Error(
+        `IDL discriminator for ${name} must be 8 bytes. Received ${discriminator.length}.`,
+      );
+    }
+    return discriminator;
+  }
+
+  return anchorDiscriminator(name);
+}
+
+export function instructionDiscriminator(name: string): Buffer {
+  return getInstructionDiscriminator(loadIdl(), name);
 }
 
 export function sha256Bytes(text: string): Buffer {
@@ -927,7 +949,7 @@ export function buildInitializeGreenLabelConfigIx(args: {
       { pubkey: args.securityGovernanceConfig, isSigner: false, isWritable: false },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
-    data: anchorDiscriminator("initialize_green_label_config"),
+    data: instructionDiscriminator("initialize_green_label_config"),
   });
 }
 
@@ -950,7 +972,7 @@ export function buildSubmitGreenLabelApplicationIx(args: {
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
     data: Buffer.concat([
-      anchorDiscriminator("submit_green_label_application"),
+      instructionDiscriminator("submit_green_label_application"),
       u64Buffer(args.projectId),
       args.projectNameHash,
       args.projectUrlHash,
@@ -979,7 +1001,7 @@ export function buildInitializeGreenBondVaultIx(args: {
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
     ],
-    data: anchorDiscriminator("initialize_green_bond_vault"),
+    data: instructionDiscriminator("initialize_green_bond_vault"),
   });
 }
 
@@ -1001,7 +1023,7 @@ export function buildLockGreenLabelBondIx(args: {
       { pubkey: args.usdcMint, isSigner: false, isWritable: false },
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
     ],
-    data: anchorDiscriminator("lock_green_label_bond"),
+    data: instructionDiscriminator("lock_green_label_bond"),
   });
 }
 
@@ -1023,7 +1045,7 @@ export function buildOpenGreenLabelDisputeIx(args: {
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
     data: Buffer.concat([
-      anchorDiscriminator("open_green_label_dispute"),
+      instructionDiscriminator("open_green_label_dispute"),
       u64Buffer(args.disputeId),
       Buffer.from([args.reasonCode.index]),
       args.evidenceHash,
@@ -1045,7 +1067,7 @@ export function buildMarkDisputeReadyForDecisionIx(args: {
       { pubkey: deriveGreenLabelDispute(project, args.disputeId), isSigner: false, isWritable: true },
       { pubkey: args.caller, isSigner: true, isWritable: false },
     ],
-    data: anchorDiscriminator("mark_dispute_ready_for_decision"),
+    data: instructionDiscriminator("mark_dispute_ready_for_decision"),
   });
 }
 
@@ -1068,7 +1090,7 @@ export function buildCreateProposalDecisionIx(args: {
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
     data: Buffer.concat([
-      anchorDiscriminator("create_proposal_decision"),
+      instructionDiscriminator("create_proposal_decision"),
       u64Buffer(args.proposalId),
       Buffer.from([args.proposalType.index]),
       Buffer.from([args.decision.index]),
@@ -1098,7 +1120,7 @@ export function buildQueueExecutionIx(args: {
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
     data: Buffer.concat([
-      anchorDiscriminator("queue_execution"),
+      instructionDiscriminator("queue_execution"),
       u64Buffer(args.proposalId),
       Buffer.from([args.actionType.index]),
       args.targetProgram.toBuffer(),
@@ -1128,7 +1150,7 @@ export function buildLinkGreenLabelSecurityDecisionIx(args: {
       { pubkey: args.linker, isSigner: true, isWritable: false },
     ],
     data: Buffer.concat([
-      anchorDiscriminator("link_green_label_security_decision"),
+      instructionDiscriminator("link_green_label_security_decision"),
       u64Buffer(args.proposalId),
       Buffer.from([args.actionType.index]),
       args.payloadHash,
@@ -1162,7 +1184,7 @@ export function buildExecuteGreenLabelRefundIx(args: {
       { pubkey: args.executor, isSigner: true, isWritable: false },
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
     ],
-    data: anchorDiscriminator("execute_green_label_refund"),
+    data: instructionDiscriminator("execute_green_label_refund"),
   });
 }
 
@@ -1190,7 +1212,7 @@ export function buildExecuteGreenLabelSlashIx(args: {
       { pubkey: args.executor, isSigner: true, isWritable: false },
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
     ],
-    data: anchorDiscriminator("execute_green_label_slash"),
+    data: instructionDiscriminator("execute_green_label_slash"),
   });
 }
 
