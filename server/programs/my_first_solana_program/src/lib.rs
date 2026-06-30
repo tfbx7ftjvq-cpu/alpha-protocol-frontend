@@ -132,4 +132,22 @@ pub mod my_first_solana_program {
     pub fn initialize_green_label_config(ctx: Context<InitializeGreenLabelConfig>) -> Result<()> {
         instructions::green_label_v1::initialize_green_label_config_handler(ctx)
     }
+
+    pub fn submit_green_label_application(
+        ctx: Context<SubmitGreenLabelApplication>,
+        expected_project_id: u64,
+        project_name_hash: [u8; 32],
+        project_url_hash: [u8; 32],
+        project_treasury_wallet: Pubkey,
+        total_bond_amount: u64,
+    ) -> Result<()> {
+        instructions::green_label_v1::submit_green_label_application_handler(
+            ctx,
+            expected_project_id,
+            project_name_hash,
+            project_url_hash,
+            project_treasury_wallet,
+            total_bond_amount,
+        )
+    }
 }

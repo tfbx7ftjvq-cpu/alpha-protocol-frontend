@@ -6,11 +6,13 @@ use crate::constants::{
     GREEN_LABEL_BRONZE_TIER_THRESHOLD_USDC, GREEN_LABEL_CONFIG_RESERVED_BYTES,
     GREEN_LABEL_CONFIG_SEED, GREEN_LABEL_CONFIG_SPACE, GREEN_LABEL_DISPUTE_SPACE,
     GREEN_LABEL_GOLD_TIER_THRESHOLD_USDC, GREEN_LABEL_PLATINUM_TIER_THRESHOLD_USDC,
-    GREEN_LABEL_PROJECT_SPACE, GREEN_LABEL_SILVER_TIER_THRESHOLD_USDC, MAX_BPS,
-    MIN_GREEN_LABEL_BASE_BOND_USDC,
+    GREEN_LABEL_PROJECT_RESERVED_BYTES, GREEN_LABEL_PROJECT_SEED, GREEN_LABEL_PROJECT_SPACE,
+    GREEN_LABEL_SILVER_TIER_THRESHOLD_USDC, MAX_BPS, MIN_GREEN_LABEL_BASE_BOND_USDC,
 };
 use crate::error::CustomError;
-use crate::state::{ActionType, BondTier, GreenLabelConfigV1, GreenLabelStatus};
+use crate::state::{
+    ActionType, BondTier, GreenLabelConfigV1, GreenLabelProjectV1, GreenLabelStatus,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GreenLabelBondSplit {
@@ -49,6 +51,39 @@ pub struct GreenLabelConfigInitValues {
     pub reserved: [u8; GREEN_LABEL_CONFIG_RESERVED_BYTES],
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GreenLabelProjectInitValues {
+    pub project_id: u64,
+    pub project_owner: Pubkey,
+    pub project_name_hash: [u8; 32],
+    pub project_url_hash: [u8; 32],
+    pub token_mint: Pubkey,
+    pub project_treasury_wallet: Pubkey,
+    pub base_bond_amount: u64,
+    pub extra_bond_amount: u64,
+    pub total_bond_amount: u64,
+    pub bond_vault: Pubkey,
+    pub bond_vault_authority: Pubkey,
+    pub bond_tier: BondTier,
+    pub status: GreenLabelStatus,
+    pub submitted_at: i64,
+    pub observation_start_ts: i64,
+    pub observation_end_ts: i64,
+    pub dispute_count: u64,
+    pub active_dispute: Pubkey,
+    pub approved_at: i64,
+    pub refunded_at: i64,
+    pub slashed_at: i64,
+    pub risk_score_snapshot: u16,
+    pub terminal_proposal_id: u64,
+    pub terminal_proposal_decision: Pubkey,
+    pub terminal_execution_queue_item: Pubkey,
+    pub terminal_payload_hash: [u8; 32],
+    pub terminal_action_type: ActionType,
+    pub bump: u8,
+    pub reserved: [u8; GREEN_LABEL_PROJECT_RESERVED_BYTES],
+}
+
 #[derive(Accounts)]
 pub struct InitializeGreenLabelConfig<'info> {
     #[account(
@@ -80,6 +115,37 @@ pub struct InitializeGreenLabelConfig<'info> {
 
     /// CHECK: Phase 1C stores the Security Layer governance config key only.
     pub security_governance_config: UncheckedAccount<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(expected_project_id: u64)]
+pub struct SubmitGreenLabelApplication<'info> {
+    #[account(
+        mut,
+        seeds = [GREEN_LABEL_CONFIG_SEED],
+        bump = green_label_config.bump
+    )]
+    pub green_label_config: Account<'info, GreenLabelConfigV1>,
+
+    #[account(
+        init,
+        payer = project_owner,
+        space = GREEN_LABEL_PROJECT_SPACE,
+        seeds = [
+            GREEN_LABEL_PROJECT_SEED,
+            &expected_project_id.to_le_bytes()
+        ],
+        bump
+    )]
+    pub green_label_project: Account<'info, GreenLabelProjectV1>,
+
+    #[account(mut)]
+    pub project_owner: Signer<'info>,
+
+    /// CHECK: Phase 1D-1 stores the mint key only; token validation is added in later phases.
+    pub token_mint: UncheckedAccount<'info>,
 
     pub system_program: Program<'info, System>,
 }
@@ -120,6 +186,65 @@ pub fn initialize_green_label_config_handler(
     Ok(())
 }
 
+pub fn submit_green_label_application_handler(
+    ctx: Context<SubmitGreenLabelApplication>,
+    expected_project_id: u64,
+    project_name_hash: [u8; 32],
+    project_url_hash: [u8; 32],
+    project_treasury_wallet: Pubkey,
+    total_bond_amount: u64,
+) -> Result<()> {
+    let clock = Clock::get()?;
+    let values = build_pending_bond_project_values(
+        ctx.accounts.green_label_config.is_paused,
+        ctx.accounts.green_label_config.project_count,
+        expected_project_id,
+        ctx.accounts.project_owner.key(),
+        project_name_hash,
+        project_url_hash,
+        ctx.accounts.token_mint.key(),
+        project_treasury_wallet,
+        total_bond_amount,
+        clock.unix_timestamp,
+        ctx.bumps.green_label_project,
+    )?;
+
+    let green_label_project = &mut ctx.accounts.green_label_project;
+    green_label_project.project_id = values.project_id;
+    green_label_project.project_owner = values.project_owner;
+    green_label_project.project_name_hash = values.project_name_hash;
+    green_label_project.project_url_hash = values.project_url_hash;
+    green_label_project.token_mint = values.token_mint;
+    green_label_project.project_treasury_wallet = values.project_treasury_wallet;
+    green_label_project.base_bond_amount = values.base_bond_amount;
+    green_label_project.extra_bond_amount = values.extra_bond_amount;
+    green_label_project.total_bond_amount = values.total_bond_amount;
+    green_label_project.bond_vault = values.bond_vault;
+    green_label_project.bond_vault_authority = values.bond_vault_authority;
+    green_label_project.bond_tier = values.bond_tier;
+    green_label_project.status = values.status;
+    green_label_project.submitted_at = values.submitted_at;
+    green_label_project.observation_start_ts = values.observation_start_ts;
+    green_label_project.observation_end_ts = values.observation_end_ts;
+    green_label_project.dispute_count = values.dispute_count;
+    green_label_project.active_dispute = values.active_dispute;
+    green_label_project.approved_at = values.approved_at;
+    green_label_project.refunded_at = values.refunded_at;
+    green_label_project.slashed_at = values.slashed_at;
+    green_label_project.risk_score_snapshot = values.risk_score_snapshot;
+    green_label_project.terminal_proposal_id = values.terminal_proposal_id;
+    green_label_project.terminal_proposal_decision = values.terminal_proposal_decision;
+    green_label_project.terminal_execution_queue_item = values.terminal_execution_queue_item;
+    green_label_project.terminal_payload_hash = values.terminal_payload_hash;
+    green_label_project.terminal_action_type = values.terminal_action_type;
+    green_label_project.bump = values.bump;
+    green_label_project.reserved = values.reserved;
+
+    ctx.accounts.green_label_config.project_count = values.project_id;
+
+    Ok(())
+}
+
 pub fn build_default_green_label_config_values(
     authority: Pubkey,
     usdc_mint: Pubkey,
@@ -150,6 +275,64 @@ pub fn build_default_green_label_config_values(
         is_paused: false,
         bump,
         reserved: [0; GREEN_LABEL_CONFIG_RESERVED_BYTES],
+    })
+}
+
+pub fn build_pending_bond_project_values(
+    is_config_paused: bool,
+    current_project_count: u64,
+    expected_project_id: u64,
+    project_owner: Pubkey,
+    project_name_hash: [u8; 32],
+    project_url_hash: [u8; 32],
+    token_mint: Pubkey,
+    project_treasury_wallet: Pubkey,
+    total_bond_amount: u64,
+    submitted_at: i64,
+    bump: u8,
+) -> Result<GreenLabelProjectInitValues> {
+    require!(!is_config_paused, CustomError::InvalidGreenLabelStatus);
+
+    let next_project_id = current_project_count
+        .checked_add(1)
+        .ok_or(CustomError::GreenLabelMathOverflow)?;
+    require!(
+        expected_project_id == next_project_id,
+        CustomError::InvalidGreenLabelProjectId
+    );
+
+    let (split, bond_tier) = derive_bond_split_and_tier(total_bond_amount)?;
+
+    Ok(GreenLabelProjectInitValues {
+        project_id: expected_project_id,
+        project_owner,
+        project_name_hash,
+        project_url_hash,
+        token_mint,
+        project_treasury_wallet,
+        base_bond_amount: split.base_bond_amount,
+        extra_bond_amount: split.extra_bond_amount,
+        total_bond_amount: split.total_bond_amount,
+        bond_vault: Pubkey::default(),
+        bond_vault_authority: Pubkey::default(),
+        bond_tier,
+        status: GreenLabelStatus::PendingBondDeposit,
+        submitted_at,
+        observation_start_ts: 0,
+        observation_end_ts: 0,
+        dispute_count: 0,
+        active_dispute: Pubkey::default(),
+        approved_at: 0,
+        refunded_at: 0,
+        slashed_at: 0,
+        risk_score_snapshot: 0,
+        terminal_proposal_id: 0,
+        terminal_proposal_decision: Pubkey::default(),
+        terminal_execution_queue_item: Pubkey::default(),
+        terminal_payload_hash: [0; 32],
+        terminal_action_type: ActionType::Noop,
+        bump,
+        reserved: [0; GREEN_LABEL_PROJECT_RESERVED_BYTES],
     })
 }
 
@@ -415,6 +598,93 @@ mod tests {
         let values = green_label_config_init_values();
 
         assert_eq!(values.reserved, [0; GREEN_LABEL_CONFIG_RESERVED_BYTES]);
+    }
+
+    #[test]
+    fn submit_project_defaults_to_pending_bond_deposit() {
+        let values = pending_bond_project_values(299_000_000);
+
+        assert_eq!(values.status, GreenLabelStatus::PendingBondDeposit);
+    }
+
+    #[test]
+    fn submit_project_does_not_start_observation_period() {
+        let values = pending_bond_project_values(299_000_000);
+
+        assert_eq!(values.observation_start_ts, 0);
+        assert_eq!(values.observation_end_ts, 0);
+    }
+
+    #[test]
+    fn submit_project_uses_default_empty_bond_vault() {
+        let values = pending_bond_project_values(299_000_000);
+
+        assert_eq!(values.bond_vault, Pubkey::default());
+        assert_eq!(values.bond_vault_authority, Pubkey::default());
+    }
+
+    #[test]
+    fn submit_project_sets_base_and_extra_for_299() {
+        let values = pending_bond_project_values(299_000_000);
+
+        assert_eq!(values.base_bond_amount, 299_000_000);
+        assert_eq!(values.extra_bond_amount, 0);
+        assert_eq!(values.total_bond_amount, 299_000_000);
+    }
+
+    #[test]
+    fn submit_project_sets_base_and_extra_for_1299() {
+        let values = pending_bond_project_values(1_299_000_000);
+
+        assert_eq!(values.base_bond_amount, 299_000_000);
+        assert_eq!(values.extra_bond_amount, 1_000_000_000);
+        assert_eq!(values.total_bond_amount, 1_299_000_000);
+    }
+
+    #[test]
+    fn submit_project_sets_bond_tier() {
+        let values = pending_bond_project_values(1_299_000_000);
+
+        assert_eq!(values.bond_tier, BondTier::Silver);
+    }
+
+    #[test]
+    fn submit_project_rejects_bond_below_299() {
+        let err = try_pending_bond_project_values(false, 0, 1, 298_999_999).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelBondAmount");
+    }
+
+    #[test]
+    fn submit_project_requires_next_project_id() {
+        let err = try_pending_bond_project_values(false, 0, 2, 299_000_000).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelProjectId");
+    }
+
+    #[test]
+    fn submit_project_rejects_when_config_paused() {
+        let err = try_pending_bond_project_values(true, 0, 1, 299_000_000).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelStatus");
+    }
+
+    #[test]
+    fn submit_project_terminal_fields_are_empty() {
+        let values = pending_bond_project_values(299_000_000);
+
+        assert_eq!(values.terminal_proposal_id, 0);
+        assert_eq!(values.terminal_proposal_decision, Pubkey::default());
+        assert_eq!(values.terminal_execution_queue_item, Pubkey::default());
+        assert_eq!(values.terminal_payload_hash, [0; 32]);
+        assert_eq!(values.terminal_action_type, ActionType::Noop);
+    }
+
+    #[test]
+    fn submit_project_reserved_zeroed() {
+        let values = pending_bond_project_values(299_000_000);
+
+        assert_eq!(values.reserved, [0; GREEN_LABEL_PROJECT_RESERVED_BYTES]);
     }
 
     #[test]
@@ -869,6 +1139,31 @@ mod tests {
             250,
         )
         .unwrap()
+    }
+
+    fn pending_bond_project_values(total_bond_amount: u64) -> GreenLabelProjectInitValues {
+        try_pending_bond_project_values(false, 0, 1, total_bond_amount).unwrap()
+    }
+
+    fn try_pending_bond_project_values(
+        is_config_paused: bool,
+        current_project_count: u64,
+        expected_project_id: u64,
+        total_bond_amount: u64,
+    ) -> Result<GreenLabelProjectInitValues> {
+        build_pending_bond_project_values(
+            is_config_paused,
+            current_project_count,
+            expected_project_id,
+            Pubkey::new_from_array([8; 32]),
+            [9; 32],
+            [10; 32],
+            Pubkey::new_from_array([11; 32]),
+            Pubkey::new_from_array([12; 32]),
+            total_bond_amount,
+            1_717_171_717,
+            249,
+        )
     }
 
     fn green_label_project() -> GreenLabelProjectV1 {

@@ -103,4 +103,7 @@ pub enum CustomError {
 
     #[msg("Invalid Green Label action type")]
     InvalidGreenLabelActionType,
+
+    #[msg("Invalid Green Label project id")]
+    InvalidGreenLabelProjectId,
 }
