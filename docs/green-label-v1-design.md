@@ -290,6 +290,7 @@ The following enum lists are design sketches, not formal code.
 
 ```text
 GreenLabelStatus {
+  PendingBondDeposit,
   PendingObservation,
   ObservationPassed,
   Disputed,
@@ -304,6 +305,7 @@ GreenLabelStatus {
 
 Suggested meaning:
 
+- `PendingBondDeposit`: project record exists, but Project Bond has not been locked into the Green Bond Vault.
 - `PendingObservation`: project submitted bond and is inside observation period.
 - `ObservationPassed`: observation period passed without active dispute.
 - `Disputed`: at least one active dispute exists.
@@ -313,6 +315,8 @@ Suggested meaning:
 - `Refunded`: final refund executed.
 - `Slashed`: final slash executed.
 - `Cancelled`: application cancelled before final approval where allowed.
+
+`PendingBondDeposit` is not a Green Label state and must not be displayed as Green Label approval. It must not start the observation countdown, refund, slash, or enter dispute flow. Only successful Green Bond Vault creation and Project Bond / Risk Bond transfer can move a project from `PendingBondDeposit` to `PendingObservation`.
 
 ### BondTier
 
@@ -411,6 +415,7 @@ Funds movement:
 Purpose:
 
 - Register a project and lock its Project Bond in an isolated Green Bond Vault.
+- If submit is implemented as two phases, Phase 1D-1 creates only the project account and Phase 1D-2 creates the Green Bond Vault and transfers the Project Bond / Risk Bond.
 
 Accounts:
 
@@ -445,17 +450,22 @@ Validation rules:
 - Bond Tier must be derived from total bond amount.
 - Bond must be transferred into the project's isolated Green Bond Vault.
 - New project must start without active dispute.
+- In a two-phase submit flow, Phase 1D-1 must not require a bond vault and must not transfer USDC.
+- In a two-phase submit flow, Phase 1D-2 must verify the bond vault and transfer before observation can begin.
 
 State transitions:
 
-- Creates `GreenLabelProjectV1`.
-- Sets status to `PendingObservation`.
-- Sets `submitted_at`, `observation_start_ts`, and `observation_end_ts`.
+- Phase 1D-1 creates `GreenLabelProjectV1`.
+- Phase 1D-1 sets status to `PendingBondDeposit`.
+- Phase 1D-1 sets `submitted_at`, but must not set or start `observation_start_ts` / `observation_end_ts`.
+- Phase 1D-2 moves status from `PendingBondDeposit` to `PendingObservation` after the Green Bond Vault exists and the Project Bond / Risk Bond is locked.
+- Phase 1D-2 sets `observation_start_ts` and `observation_end_ts`.
 - Increments `project_count`.
 
 Funds movement:
 
-- `project_owner_usdc_ata -> bond_vault`.
+- Phase 1D-1: none.
+- Phase 1D-2: `project_owner_usdc_ata -> bond_vault`.
 
 ### open_green_label_dispute
 

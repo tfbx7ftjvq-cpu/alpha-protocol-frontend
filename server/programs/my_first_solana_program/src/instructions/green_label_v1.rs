@@ -248,13 +248,22 @@ pub fn validate_green_label_status_transition(
         return err!(CustomError::InvalidGreenLabelStatus);
     }
 
-    if to == GreenLabelStatus::SlashQueued && !has_linked_dispute {
+    if from == GreenLabelStatus::Disputed
+        && to == GreenLabelStatus::SlashQueued
+        && !has_linked_dispute
+    {
         return err!(CustomError::InvalidGreenLabelSlashWithoutDispute);
     }
 
     let is_valid = matches!(
         (from, to),
         (
+            GreenLabelStatus::PendingBondDeposit,
+            GreenLabelStatus::PendingObservation
+        ) | (
+            GreenLabelStatus::PendingBondDeposit,
+            GreenLabelStatus::Cancelled
+        ) | (
             GreenLabelStatus::PendingObservation,
             GreenLabelStatus::ActiveGreenLabel
         ) | (
@@ -517,6 +526,74 @@ mod tests {
         let err = calculate_bond_tier(298_999_999).unwrap_err();
 
         assert_error_contains(err, "InvalidGreenLabelBondAmount");
+    }
+
+    #[test]
+    fn status_transition_pending_bond_deposit_to_pending_observation() {
+        validate_green_label_status_transition(
+            GreenLabelStatus::PendingBondDeposit,
+            GreenLabelStatus::PendingObservation,
+            false,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn status_transition_pending_bond_deposit_to_cancelled() {
+        validate_green_label_status_transition(
+            GreenLabelStatus::PendingBondDeposit,
+            GreenLabelStatus::Cancelled,
+            false,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn status_transition_pending_bond_deposit_rejects_refund_queued() {
+        let err = validate_green_label_status_transition(
+            GreenLabelStatus::PendingBondDeposit,
+            GreenLabelStatus::RefundQueued,
+            false,
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelStatus");
+    }
+
+    #[test]
+    fn status_transition_pending_bond_deposit_rejects_slash_queued() {
+        let err = validate_green_label_status_transition(
+            GreenLabelStatus::PendingBondDeposit,
+            GreenLabelStatus::SlashQueued,
+            true,
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelStatus");
+    }
+
+    #[test]
+    fn status_transition_pending_bond_deposit_rejects_active_green_label() {
+        let err = validate_green_label_status_transition(
+            GreenLabelStatus::PendingBondDeposit,
+            GreenLabelStatus::ActiveGreenLabel,
+            false,
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelStatus");
+    }
+
+    #[test]
+    fn status_transition_pending_bond_deposit_rejects_disputed() {
+        let err = validate_green_label_status_transition(
+            GreenLabelStatus::PendingBondDeposit,
+            GreenLabelStatus::Disputed,
+            false,
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelStatus");
     }
 
     #[test]

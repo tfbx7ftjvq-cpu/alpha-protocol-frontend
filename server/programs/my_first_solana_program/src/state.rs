@@ -181,6 +181,7 @@ impl ExecutionQueueItemV1 {
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GreenLabelStatus {
+    PendingBondDeposit,
     PendingObservation,
     ActiveGreenLabel,
     Disputed,
