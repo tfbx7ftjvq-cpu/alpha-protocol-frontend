@@ -349,6 +349,68 @@ pub struct LinkGreenLabelSecurityDecision<'info> {
     pub linker: Signer<'info>,
 }
 
+#[derive(Accounts)]
+pub struct ExecuteGreenLabelRefund<'info> {
+    #[account(
+        seeds = [GREEN_LABEL_CONFIG_SEED],
+        bump = green_label_config.bump
+    )]
+    pub green_label_config: Box<Account<'info, GreenLabelConfigV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            GREEN_LABEL_PROJECT_SEED,
+            &green_label_project.project_id.to_le_bytes()
+        ],
+        bump = green_label_project.bump
+    )]
+    pub green_label_project: Box<Account<'info, GreenLabelProjectV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            GREEN_LABEL_DISPUTE_SEED,
+            green_label_project.key().as_ref(),
+            &green_label_dispute.dispute_id.to_le_bytes()
+        ],
+        bump = green_label_dispute.bump
+    )]
+    pub green_label_dispute: Box<Account<'info, GreenLabelDisputeV1>>,
+
+    pub proposal_decision: Box<Account<'info, ProposalDecisionV1>>,
+
+    pub execution_queue_item: Box<Account<'info, ExecutionQueueItemV1>>,
+
+    #[account(mut)]
+    pub green_bond_vault: Box<Account<'info, TokenAccount>>,
+
+    /// CHECK: This PDA signs transfers from the project Green Bond Vault.
+    #[account(
+        seeds = [
+            GREEN_BOND_VAULT_AUTHORITY_SEED,
+            green_label_project.key().as_ref()
+        ],
+        bump
+    )]
+    pub green_bond_vault_authority: UncheckedAccount<'info>,
+
+    #[account(mut)]
+    pub project_owner_usdc_ata: Box<Account<'info, TokenAccount>>,
+
+    #[account(mut)]
+    pub base_bond_treasury_vault: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        constraint = usdc_mint.key() == green_label_config.usdc_mint @ CustomError::InvalidGreenLabelMint
+    )]
+    pub usdc_mint: Box<Account<'info, Mint>>,
+
+    pub executor: Signer<'info>,
+
+    pub token_program: Program<'info, Token>,
+}
+
 pub fn initialize_green_label_config_handler(
     ctx: Context<InitializeGreenLabelConfig>,
 ) -> Result<()> {
@@ -618,6 +680,115 @@ pub fn link_green_label_security_decision_handler(
         ctx.accounts.execution_queue_item.key(),
         expected_payload_hash,
         expected_action_type,
+    )
+}
+
+pub fn execute_green_label_refund_handler(ctx: Context<ExecuteGreenLabelRefund>) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let project_key = ctx.accounts.green_label_project.key();
+    let dispute_key = ctx.accounts.green_label_dispute.key();
+    let refund_amounts =
+        calculate_green_label_refund(ctx.accounts.green_label_project.total_bond_amount)?;
+
+    validate_green_label_refund_execution(
+        ctx.accounts.green_label_config.is_paused,
+        ctx.accounts.green_label_project.status,
+        ctx.accounts.green_label_project.active_dispute,
+        dispute_key,
+        ctx.accounts.green_label_project.bond_vault,
+        ctx.accounts.green_label_project.bond_vault_authority,
+        ctx.accounts.green_label_project.project_owner,
+        ctx.accounts.green_label_project.terminal_proposal_id,
+        ctx.accounts.green_label_project.terminal_proposal_decision,
+        ctx.accounts
+            .green_label_project
+            .terminal_execution_queue_item,
+        ctx.accounts.green_label_project.terminal_payload_hash,
+        ctx.accounts.green_label_project.terminal_action_type,
+        ctx.accounts.green_label_dispute.project,
+        project_key,
+        ctx.accounts.green_label_dispute.status,
+        ctx.accounts.green_label_dispute.proposal_id,
+        ctx.accounts.green_label_dispute.proposal_decision,
+        ctx.accounts.green_label_dispute.execution_queue_item,
+        ctx.accounts.green_label_dispute.payload_hash,
+        ctx.accounts.green_label_dispute.action_type,
+        ctx.accounts.proposal_decision.key(),
+        ctx.accounts.proposal_decision.proposal_id,
+        ctx.accounts.proposal_decision.decision,
+        ctx.accounts.execution_queue_item.key(),
+        ctx.accounts.execution_queue_item.proposal_id,
+        ctx.accounts.execution_queue_item.status,
+        ctx.accounts.execution_queue_item.action_type,
+        ctx.accounts.execution_queue_item.payload_hash,
+        ctx.accounts.execution_queue_item.target_program,
+        crate::ID,
+        ctx.accounts.execution_queue_item.target_account,
+        dispute_key,
+        now,
+        ctx.accounts.execution_queue_item.execute_after,
+        ctx.accounts.green_bond_vault.key(),
+        ctx.accounts.green_bond_vault.mint,
+        ctx.accounts.green_bond_vault.owner,
+        ctx.accounts.green_bond_vault_authority.key(),
+        ctx.accounts.project_owner_usdc_ata.owner,
+        ctx.accounts.project_owner_usdc_ata.mint,
+        ctx.accounts.base_bond_treasury_vault.key(),
+        ctx.accounts.base_bond_treasury_vault.mint,
+        ctx.accounts.green_label_config.base_bond_treasury_vault,
+        ctx.accounts.green_label_config.usdc_mint,
+        ctx.accounts.usdc_mint.key(),
+        ctx.accounts.usdc_mint.decimals,
+        ctx.accounts.green_bond_vault.amount,
+        refund_amounts.project_refund_amount,
+        refund_amounts.treasury_amount,
+    )?;
+
+    let green_bond_vault_authority_bump = ctx.bumps.green_bond_vault_authority;
+    let signer_seeds: &[&[&[u8]]] = &[&[
+        GREEN_BOND_VAULT_AUTHORITY_SEED,
+        project_key.as_ref(),
+        &[green_bond_vault_authority_bump],
+    ]];
+
+    let refund_to_project_accounts = TransferChecked {
+        from: ctx.accounts.green_bond_vault.to_account_info(),
+        mint: ctx.accounts.usdc_mint.to_account_info(),
+        to: ctx.accounts.project_owner_usdc_ata.to_account_info(),
+        authority: ctx.accounts.green_bond_vault_authority.to_account_info(),
+    };
+    let refund_to_project_ctx = CpiContext::new_with_signer(
+        ctx.accounts.token_program.key(),
+        refund_to_project_accounts,
+        signer_seeds,
+    );
+    transfer_checked(
+        refund_to_project_ctx,
+        refund_amounts.project_refund_amount,
+        GREEN_LABEL_USDC_DECIMALS,
+    )?;
+
+    let treasury_accounts = TransferChecked {
+        from: ctx.accounts.green_bond_vault.to_account_info(),
+        mint: ctx.accounts.usdc_mint.to_account_info(),
+        to: ctx.accounts.base_bond_treasury_vault.to_account_info(),
+        authority: ctx.accounts.green_bond_vault_authority.to_account_info(),
+    };
+    let treasury_ctx = CpiContext::new_with_signer(
+        ctx.accounts.token_program.key(),
+        treasury_accounts,
+        signer_seeds,
+    );
+    transfer_checked(
+        treasury_ctx,
+        refund_amounts.treasury_amount,
+        GREEN_LABEL_USDC_DECIMALS,
+    )?;
+
+    record_green_label_refunded(
+        &mut ctx.accounts.green_label_project,
+        Some(&mut ctx.accounts.green_label_dispute),
+        now,
     )
 }
 
@@ -1012,6 +1183,231 @@ pub fn record_green_label_security_decision_link(
     project.terminal_execution_queue_item = execution_queue_item_key;
     project.terminal_payload_hash = payload_hash;
     project.terminal_action_type = action_type;
+
+    Ok(())
+}
+
+pub fn validate_green_label_refund_execution(
+    config_is_paused: bool,
+    project_status: GreenLabelStatus,
+    project_active_dispute: Pubkey,
+    dispute_key: Pubkey,
+    project_bond_vault: Pubkey,
+    project_bond_vault_authority: Pubkey,
+    project_owner: Pubkey,
+    project_terminal_proposal_id: u64,
+    project_terminal_proposal_decision: Pubkey,
+    project_terminal_execution_queue_item: Pubkey,
+    project_terminal_payload_hash: [u8; 32],
+    project_terminal_action_type: ActionType,
+    dispute_project: Pubkey,
+    project_key: Pubkey,
+    dispute_status: DisputeStatus,
+    dispute_proposal_id: u64,
+    dispute_proposal_decision: Pubkey,
+    dispute_execution_queue_item: Pubkey,
+    dispute_payload_hash: [u8; 32],
+    dispute_action_type: ActionType,
+    proposal_decision_key: Pubkey,
+    proposal_decision_proposal_id: u64,
+    proposal_decision: ProposalDecision,
+    execution_queue_item_key: Pubkey,
+    queue_proposal_id: u64,
+    queue_status: ExecutionStatus,
+    queue_action_type: ActionType,
+    queue_payload_hash: [u8; 32],
+    queue_target_program: Pubkey,
+    expected_program_id: Pubkey,
+    queue_target_account: Pubkey,
+    expected_target_account: Pubkey,
+    now: i64,
+    queue_execute_after: i64,
+    provided_bond_vault: Pubkey,
+    green_bond_vault_mint: Pubkey,
+    green_bond_vault_owner: Pubkey,
+    provided_bond_vault_authority: Pubkey,
+    project_owner_ata_owner: Pubkey,
+    project_owner_ata_mint: Pubkey,
+    provided_treasury_vault: Pubkey,
+    treasury_vault_mint: Pubkey,
+    expected_treasury_vault: Pubkey,
+    expected_usdc_mint: Pubkey,
+    provided_usdc_mint: Pubkey,
+    usdc_decimals: u8,
+    vault_balance: u64,
+    project_refund_amount: u64,
+    treasury_amount: u64,
+) -> Result<()> {
+    require!(!config_is_paused, CustomError::InvalidGreenLabelStatus);
+    require!(
+        project_status == GreenLabelStatus::RefundQueued,
+        CustomError::InvalidGreenLabelStatus
+    );
+    require_keys_eq!(
+        project_active_dispute,
+        dispute_key,
+        CustomError::InvalidGreenLabelActiveDispute
+    );
+    require!(
+        project_bond_vault != Pubkey::default()
+            && project_bond_vault_authority != Pubkey::default(),
+        CustomError::InvalidGreenLabelBondVaultState
+    );
+    require_keys_eq!(
+        project_bond_vault,
+        provided_bond_vault,
+        CustomError::InvalidGreenLabelBondVaultState
+    );
+    require_keys_eq!(
+        project_bond_vault_authority,
+        provided_bond_vault_authority,
+        CustomError::InvalidGreenLabelBondVaultState
+    );
+    require_keys_eq!(
+        dispute_project,
+        project_key,
+        CustomError::InvalidGreenLabelTargetAccount
+    );
+    require!(
+        dispute_status == DisputeStatus::DecisionQueued,
+        CustomError::InvalidGreenLabelDisputeStatus
+    );
+    validate_terminal_action_for_refund(project_terminal_action_type)?;
+    validate_payload_hash(project_terminal_payload_hash)?;
+    require!(
+        dispute_proposal_id == project_terminal_proposal_id,
+        CustomError::InvalidGreenLabelSecurityDecision
+    );
+    require_keys_eq!(
+        dispute_proposal_decision,
+        project_terminal_proposal_decision,
+        CustomError::InvalidGreenLabelSecurityDecision
+    );
+    require_keys_eq!(
+        dispute_execution_queue_item,
+        project_terminal_execution_queue_item,
+        CustomError::InvalidGreenLabelExecutionQueue
+    );
+    require!(
+        dispute_payload_hash == project_terminal_payload_hash,
+        CustomError::InvalidGreenLabelExecutionQueue
+    );
+    require!(
+        dispute_action_type == ActionType::GreenLabelRefund,
+        CustomError::InvalidGreenLabelActionType
+    );
+    require_keys_eq!(
+        proposal_decision_key,
+        project_terminal_proposal_decision,
+        CustomError::InvalidGreenLabelSecurityDecision
+    );
+    require_keys_eq!(
+        execution_queue_item_key,
+        project_terminal_execution_queue_item,
+        CustomError::InvalidGreenLabelExecutionQueue
+    );
+    require!(
+        proposal_decision_proposal_id == project_terminal_proposal_id,
+        CustomError::InvalidGreenLabelSecurityDecision
+    );
+    require!(
+        queue_proposal_id == project_terminal_proposal_id,
+        CustomError::InvalidGreenLabelExecutionQueue
+    );
+    require!(
+        proposal_decision == ProposalDecision::Approved,
+        CustomError::InvalidGreenLabelSecurityDecision
+    );
+    require!(
+        queue_status == ExecutionStatus::Queued,
+        CustomError::InvalidGreenLabelExecutionQueue
+    );
+    require!(
+        queue_action_type == ActionType::GreenLabelRefund,
+        CustomError::InvalidGreenLabelExecutionQueue
+    );
+    require!(
+        queue_payload_hash == project_terminal_payload_hash,
+        CustomError::InvalidGreenLabelExecutionQueue
+    );
+    require_keys_eq!(
+        queue_target_program,
+        expected_program_id,
+        CustomError::InvalidGreenLabelTargetProgram
+    );
+    require_keys_eq!(
+        queue_target_account,
+        expected_target_account,
+        CustomError::InvalidGreenLabelTargetAccount
+    );
+    require!(
+        now >= queue_execute_after,
+        CustomError::GreenLabelTimelockNotSatisfied
+    );
+    require_keys_eq!(
+        provided_usdc_mint,
+        expected_usdc_mint,
+        CustomError::InvalidGreenLabelMint
+    );
+    require!(
+        usdc_decimals == GREEN_LABEL_USDC_DECIMALS,
+        CustomError::InvalidGreenLabelMint
+    );
+    require_keys_eq!(
+        green_bond_vault_mint,
+        expected_usdc_mint,
+        CustomError::InvalidGreenLabelTokenAccount
+    );
+    require_keys_eq!(
+        green_bond_vault_owner,
+        project_bond_vault_authority,
+        CustomError::InvalidGreenLabelTokenAccount
+    );
+    require_keys_eq!(
+        project_owner_ata_owner,
+        project_owner,
+        CustomError::InvalidGreenLabelTokenAccount
+    );
+    require_keys_eq!(
+        project_owner_ata_mint,
+        expected_usdc_mint,
+        CustomError::InvalidGreenLabelTokenAccount
+    );
+    require_keys_eq!(
+        provided_treasury_vault,
+        expected_treasury_vault,
+        CustomError::InvalidGreenLabelTokenAccount
+    );
+    require_keys_eq!(
+        treasury_vault_mint,
+        expected_usdc_mint,
+        CustomError::InvalidGreenLabelTokenAccount
+    );
+
+    let required_vault_balance = project_refund_amount
+        .checked_add(treasury_amount)
+        .ok_or(CustomError::GreenLabelMathOverflow)?;
+    require!(
+        vault_balance >= required_vault_balance,
+        CustomError::GreenLabelInsufficientBondVaultBalance
+    );
+
+    Ok(())
+}
+
+pub fn record_green_label_refunded(
+    project: &mut GreenLabelProjectV1,
+    dispute: Option<&mut GreenLabelDisputeV1>,
+    now: i64,
+) -> Result<()> {
+    project.status = GreenLabelStatus::Refunded;
+    project.refunded_at = now;
+    project.active_dispute = Pubkey::default();
+
+    if let Some(dispute) = dispute {
+        dispute.status = DisputeStatus::ResolvedRefund;
+        dispute.resolved_at = now;
+    }
 
     Ok(())
 }
@@ -2490,6 +2886,259 @@ mod tests {
     }
 
     #[test]
+    fn refund_execution_accepts_valid_queued_refund() {
+        validate_refund_execution_fixture(RefundExecutionValidationFixture::valid()).unwrap();
+    }
+
+    #[test]
+    fn refund_execution_rejects_non_refund_queued_project() {
+        let mut fixture = RefundExecutionValidationFixture::valid();
+        fixture.project_status = GreenLabelStatus::Disputed;
+
+        let err = validate_refund_execution_fixture(fixture).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelStatus");
+    }
+
+    #[test]
+    fn refund_execution_rejects_zero_payload_hash() {
+        let mut fixture = RefundExecutionValidationFixture::valid();
+        fixture.project_terminal_payload_hash = [0; 32];
+
+        let err = validate_refund_execution_fixture(fixture).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelPayloadHash");
+    }
+
+    #[test]
+    fn refund_execution_rejects_wrong_proposal_decision_account() {
+        let mut fixture = RefundExecutionValidationFixture::valid();
+        fixture.proposal_decision_key = Pubkey::new_from_array([24; 32]);
+
+        let err = validate_refund_execution_fixture(fixture).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelSecurityDecision");
+    }
+
+    #[test]
+    fn refund_execution_rejects_wrong_queue_account() {
+        let mut fixture = RefundExecutionValidationFixture::valid();
+        fixture.execution_queue_item_key = Pubkey::new_from_array([24; 32]);
+
+        let err = validate_refund_execution_fixture(fixture).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelExecutionQueue");
+    }
+
+    #[test]
+    fn refund_execution_rejects_wrong_proposal_id() {
+        let mut fixture = RefundExecutionValidationFixture::valid();
+        fixture.proposal_decision_proposal_id = 8;
+
+        let err = validate_refund_execution_fixture(fixture).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelSecurityDecision");
+    }
+
+    #[test]
+    fn refund_execution_rejects_non_approved_decision() {
+        let mut fixture = RefundExecutionValidationFixture::valid();
+        fixture.proposal_decision = ProposalDecision::Rejected;
+
+        let err = validate_refund_execution_fixture(fixture).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelSecurityDecision");
+    }
+
+    #[test]
+    fn refund_execution_rejects_non_queued_status() {
+        let mut fixture = RefundExecutionValidationFixture::valid();
+        fixture.queue_status = ExecutionStatus::Cancelled;
+
+        let err = validate_refund_execution_fixture(fixture).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelExecutionQueue");
+    }
+
+    #[test]
+    fn refund_execution_rejects_wrong_action_type() {
+        let mut fixture = RefundExecutionValidationFixture::valid();
+        fixture.queue_action_type = ActionType::GreenLabelSlash;
+
+        let err = validate_refund_execution_fixture(fixture).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelExecutionQueue");
+    }
+
+    #[test]
+    fn refund_execution_rejects_payload_hash_mismatch() {
+        let mut fixture = RefundExecutionValidationFixture::valid();
+        fixture.queue_payload_hash = [24; 32];
+
+        let err = validate_refund_execution_fixture(fixture).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelExecutionQueue");
+    }
+
+    #[test]
+    fn refund_execution_rejects_wrong_target_program() {
+        let mut fixture = RefundExecutionValidationFixture::valid();
+        fixture.queue_target_program = Pubkey::new_from_array([24; 32]);
+
+        let err = validate_refund_execution_fixture(fixture).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelTargetProgram");
+    }
+
+    #[test]
+    fn refund_execution_rejects_wrong_target_account() {
+        let mut fixture = RefundExecutionValidationFixture::valid();
+        fixture.queue_target_account = Pubkey::new_from_array([24; 32]);
+
+        let err = validate_refund_execution_fixture(fixture).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelTargetAccount");
+    }
+
+    #[test]
+    fn refund_execution_rejects_timelock_not_satisfied() {
+        let mut fixture = RefundExecutionValidationFixture::valid();
+        fixture.now = fixture.queue_execute_after - 1;
+
+        let err = validate_refund_execution_fixture(fixture).unwrap_err();
+
+        assert_error_contains(err, "GreenLabelTimelockNotSatisfied");
+    }
+
+    #[test]
+    fn refund_execution_rejects_missing_bond_vault() {
+        let mut fixture = RefundExecutionValidationFixture::valid();
+        fixture.project_bond_vault = Pubkey::default();
+
+        let err = validate_refund_execution_fixture(fixture).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelBondVaultState");
+    }
+
+    #[test]
+    fn refund_execution_rejects_wrong_bond_vault_account() {
+        let mut fixture = RefundExecutionValidationFixture::valid();
+        fixture.provided_bond_vault = Pubkey::new_from_array([24; 32]);
+
+        let err = validate_refund_execution_fixture(fixture).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelBondVaultState");
+    }
+
+    #[test]
+    fn refund_execution_rejects_wrong_bond_vault_mint() {
+        let mut fixture = RefundExecutionValidationFixture::valid();
+        fixture.green_bond_vault_mint = Pubkey::new_from_array([24; 32]);
+
+        let err = validate_refund_execution_fixture(fixture).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelTokenAccount");
+    }
+
+    #[test]
+    fn refund_execution_rejects_wrong_bond_vault_owner() {
+        let mut fixture = RefundExecutionValidationFixture::valid();
+        fixture.green_bond_vault_owner = Pubkey::new_from_array([24; 32]);
+
+        let err = validate_refund_execution_fixture(fixture).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelTokenAccount");
+    }
+
+    #[test]
+    fn refund_execution_rejects_wrong_project_owner_ata() {
+        let mut fixture = RefundExecutionValidationFixture::valid();
+        fixture.project_owner_ata_owner = Pubkey::new_from_array([24; 32]);
+
+        let err = validate_refund_execution_fixture(fixture).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelTokenAccount");
+    }
+
+    #[test]
+    fn refund_execution_rejects_wrong_treasury_vault() {
+        let mut fixture = RefundExecutionValidationFixture::valid();
+        fixture.provided_treasury_vault = Pubkey::new_from_array([24; 32]);
+
+        let err = validate_refund_execution_fixture(fixture).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelTokenAccount");
+    }
+
+    #[test]
+    fn refund_execution_rejects_insufficient_vault_balance() {
+        let mut fixture = RefundExecutionValidationFixture::valid();
+        fixture.vault_balance = 1_298_999_999;
+
+        let err = validate_refund_execution_fixture(fixture).unwrap_err();
+
+        assert_error_contains(err, "GreenLabelInsufficientBondVaultBalance");
+    }
+
+    #[test]
+    fn record_refunded_sets_project_refunded() {
+        let (mut project, mut dispute) = refund_record_accounts();
+
+        record_green_label_refunded(&mut project, Some(&mut dispute), 3_000).unwrap();
+
+        assert_eq!(project.status, GreenLabelStatus::Refunded);
+    }
+
+    #[test]
+    fn record_refunded_sets_refunded_at() {
+        let (mut project, mut dispute) = refund_record_accounts();
+
+        record_green_label_refunded(&mut project, Some(&mut dispute), 3_000).unwrap();
+
+        assert_eq!(project.refunded_at, 3_000);
+    }
+
+    #[test]
+    fn record_refunded_clears_active_dispute() {
+        let (mut project, mut dispute) = refund_record_accounts();
+
+        record_green_label_refunded(&mut project, Some(&mut dispute), 3_000).unwrap();
+
+        assert_eq!(project.active_dispute, Pubkey::default());
+    }
+
+    #[test]
+    fn record_refunded_sets_dispute_resolved_refund() {
+        let (mut project, mut dispute) = refund_record_accounts();
+
+        record_green_label_refunded(&mut project, Some(&mut dispute), 3_000).unwrap();
+
+        assert_eq!(dispute.status, DisputeStatus::ResolvedRefund);
+        assert_eq!(dispute.resolved_at, 3_000);
+    }
+
+    #[test]
+    fn record_refunded_does_not_change_bond_amounts() {
+        let (mut project, mut dispute) = refund_record_accounts();
+        let original_bond_amounts = (
+            project.base_bond_amount,
+            project.extra_bond_amount,
+            project.total_bond_amount,
+        );
+
+        record_green_label_refunded(&mut project, Some(&mut dispute), 3_000).unwrap();
+
+        assert_eq!(
+            original_bond_amounts,
+            (
+                project.base_bond_amount,
+                project.extra_bond_amount,
+                project.total_bond_amount
+            )
+        );
+    }
+
+    #[test]
     fn validate_bps_config_rejects_invalid_sum() {
         let err = validate_green_label_bps_config(8_000, 1_000).unwrap_err();
 
@@ -2522,7 +3171,7 @@ mod tests {
     }
 
     #[test]
-    fn refund_calculation_for_299() {
+    fn refund_amounts_for_299_still_match_80_20() {
         let amounts = calculate_green_label_refund(299_000_000).unwrap();
 
         assert_eq!(amounts.base_refund_amount, 239_200_000);
@@ -2533,7 +3182,7 @@ mod tests {
     }
 
     #[test]
-    fn refund_calculation_for_1299() {
+    fn refund_amounts_for_1299_refund_extra_100_percent() {
         let amounts = calculate_green_label_refund(1_299_000_000).unwrap();
 
         assert_eq!(amounts.base_refund_amount, 239_200_000);
@@ -3166,6 +3815,181 @@ mod tests {
         )
     }
 
+    #[derive(Clone, Copy)]
+    struct RefundExecutionValidationFixture {
+        config_is_paused: bool,
+        project_status: GreenLabelStatus,
+        project_active_dispute: Pubkey,
+        dispute_key: Pubkey,
+        project_bond_vault: Pubkey,
+        project_bond_vault_authority: Pubkey,
+        project_owner: Pubkey,
+        project_terminal_proposal_id: u64,
+        project_terminal_proposal_decision: Pubkey,
+        project_terminal_execution_queue_item: Pubkey,
+        project_terminal_payload_hash: [u8; 32],
+        project_terminal_action_type: ActionType,
+        dispute_project: Pubkey,
+        project_key: Pubkey,
+        dispute_status: DisputeStatus,
+        dispute_proposal_id: u64,
+        dispute_proposal_decision: Pubkey,
+        dispute_execution_queue_item: Pubkey,
+        dispute_payload_hash: [u8; 32],
+        dispute_action_type: ActionType,
+        proposal_decision_key: Pubkey,
+        proposal_decision_proposal_id: u64,
+        proposal_decision: ProposalDecision,
+        execution_queue_item_key: Pubkey,
+        queue_proposal_id: u64,
+        queue_status: ExecutionStatus,
+        queue_action_type: ActionType,
+        queue_payload_hash: [u8; 32],
+        queue_target_program: Pubkey,
+        expected_program_id: Pubkey,
+        queue_target_account: Pubkey,
+        expected_target_account: Pubkey,
+        now: i64,
+        queue_execute_after: i64,
+        provided_bond_vault: Pubkey,
+        green_bond_vault_mint: Pubkey,
+        green_bond_vault_owner: Pubkey,
+        provided_bond_vault_authority: Pubkey,
+        project_owner_ata_owner: Pubkey,
+        project_owner_ata_mint: Pubkey,
+        provided_treasury_vault: Pubkey,
+        treasury_vault_mint: Pubkey,
+        expected_treasury_vault: Pubkey,
+        expected_usdc_mint: Pubkey,
+        provided_usdc_mint: Pubkey,
+        usdc_decimals: u8,
+        vault_balance: u64,
+        project_refund_amount: u64,
+        treasury_amount: u64,
+    }
+
+    impl RefundExecutionValidationFixture {
+        fn valid() -> Self {
+            let project_owner = Pubkey::new_from_array([8; 32]);
+            let bond_vault = Pubkey::new_from_array([13; 32]);
+            let bond_vault_authority = Pubkey::new_from_array([14; 32]);
+            let proposal_decision_key = Pubkey::new_from_array([15; 32]);
+            let execution_queue_item_key = Pubkey::new_from_array([16; 32]);
+            let project_key = Pubkey::new_from_array([17; 32]);
+            let dispute_key = Pubkey::new_from_array([18; 32]);
+            let program_id = Pubkey::new_from_array([19; 32]);
+            let usdc_mint = Pubkey::new_from_array([2; 32]);
+            let treasury_vault = Pubkey::new_from_array([4; 32]);
+            let payload_hash = [23; 32];
+
+            Self {
+                config_is_paused: false,
+                project_status: GreenLabelStatus::RefundQueued,
+                project_active_dispute: dispute_key,
+                dispute_key,
+                project_bond_vault: bond_vault,
+                project_bond_vault_authority: bond_vault_authority,
+                project_owner,
+                project_terminal_proposal_id: 7,
+                project_terminal_proposal_decision: proposal_decision_key,
+                project_terminal_execution_queue_item: execution_queue_item_key,
+                project_terminal_payload_hash: payload_hash,
+                project_terminal_action_type: ActionType::GreenLabelRefund,
+                dispute_project: project_key,
+                project_key,
+                dispute_status: DisputeStatus::DecisionQueued,
+                dispute_proposal_id: 7,
+                dispute_proposal_decision: proposal_decision_key,
+                dispute_execution_queue_item: execution_queue_item_key,
+                dispute_payload_hash: payload_hash,
+                dispute_action_type: ActionType::GreenLabelRefund,
+                proposal_decision_key,
+                proposal_decision_proposal_id: 7,
+                proposal_decision: ProposalDecision::Approved,
+                execution_queue_item_key,
+                queue_proposal_id: 7,
+                queue_status: ExecutionStatus::Queued,
+                queue_action_type: ActionType::GreenLabelRefund,
+                queue_payload_hash: payload_hash,
+                queue_target_program: program_id,
+                expected_program_id: program_id,
+                queue_target_account: dispute_key,
+                expected_target_account: dispute_key,
+                now: 2_000,
+                queue_execute_after: 1_000,
+                provided_bond_vault: bond_vault,
+                green_bond_vault_mint: usdc_mint,
+                green_bond_vault_owner: bond_vault_authority,
+                provided_bond_vault_authority: bond_vault_authority,
+                project_owner_ata_owner: project_owner,
+                project_owner_ata_mint: usdc_mint,
+                provided_treasury_vault: treasury_vault,
+                treasury_vault_mint: usdc_mint,
+                expected_treasury_vault: treasury_vault,
+                expected_usdc_mint: usdc_mint,
+                provided_usdc_mint: usdc_mint,
+                usdc_decimals: GREEN_LABEL_USDC_DECIMALS,
+                vault_balance: 1_299_000_000,
+                project_refund_amount: 1_239_200_000,
+                treasury_amount: 59_800_000,
+            }
+        }
+    }
+
+    fn validate_refund_execution_fixture(fixture: RefundExecutionValidationFixture) -> Result<()> {
+        validate_green_label_refund_execution(
+            fixture.config_is_paused,
+            fixture.project_status,
+            fixture.project_active_dispute,
+            fixture.dispute_key,
+            fixture.project_bond_vault,
+            fixture.project_bond_vault_authority,
+            fixture.project_owner,
+            fixture.project_terminal_proposal_id,
+            fixture.project_terminal_proposal_decision,
+            fixture.project_terminal_execution_queue_item,
+            fixture.project_terminal_payload_hash,
+            fixture.project_terminal_action_type,
+            fixture.dispute_project,
+            fixture.project_key,
+            fixture.dispute_status,
+            fixture.dispute_proposal_id,
+            fixture.dispute_proposal_decision,
+            fixture.dispute_execution_queue_item,
+            fixture.dispute_payload_hash,
+            fixture.dispute_action_type,
+            fixture.proposal_decision_key,
+            fixture.proposal_decision_proposal_id,
+            fixture.proposal_decision,
+            fixture.execution_queue_item_key,
+            fixture.queue_proposal_id,
+            fixture.queue_status,
+            fixture.queue_action_type,
+            fixture.queue_payload_hash,
+            fixture.queue_target_program,
+            fixture.expected_program_id,
+            fixture.queue_target_account,
+            fixture.expected_target_account,
+            fixture.now,
+            fixture.queue_execute_after,
+            fixture.provided_bond_vault,
+            fixture.green_bond_vault_mint,
+            fixture.green_bond_vault_owner,
+            fixture.provided_bond_vault_authority,
+            fixture.project_owner_ata_owner,
+            fixture.project_owner_ata_mint,
+            fixture.provided_treasury_vault,
+            fixture.treasury_vault_mint,
+            fixture.expected_treasury_vault,
+            fixture.expected_usdc_mint,
+            fixture.provided_usdc_mint,
+            fixture.usdc_decimals,
+            fixture.vault_balance,
+            fixture.project_refund_amount,
+            fixture.treasury_amount,
+        )
+    }
+
     fn try_validate_green_bond_vault_initialization(
         config_is_paused: bool,
         signer: Pubkey,
@@ -3244,6 +4068,23 @@ mod tests {
         dispute.execution_queue_item = Pubkey::default();
         dispute.payload_hash = [0; 32];
         dispute.action_type = ActionType::Noop;
+
+        (project, dispute)
+    }
+
+    fn refund_record_accounts() -> (GreenLabelProjectV1, GreenLabelDisputeV1) {
+        let dispute_key = Pubkey::new_from_array([18; 32]);
+        let mut project = green_label_project();
+        project.status = GreenLabelStatus::RefundQueued;
+        project.active_dispute = dispute_key;
+        project.refunded_at = 0;
+        project.slashed_at = 0;
+        project.terminal_action_type = ActionType::GreenLabelRefund;
+
+        let mut dispute = green_label_dispute();
+        dispute.status = DisputeStatus::DecisionQueued;
+        dispute.resolved_at = 0;
+        dispute.action_type = ActionType::GreenLabelRefund;
 
         (project, dispute)
     }

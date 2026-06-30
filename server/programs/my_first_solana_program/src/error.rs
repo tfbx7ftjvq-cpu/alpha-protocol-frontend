@@ -145,4 +145,10 @@ pub enum CustomError {
 
     #[msg("Invalid Green Label target account")]
     InvalidGreenLabelTargetAccount,
+
+    #[msg("Green Label timelock has not been satisfied")]
+    GreenLabelTimelockNotSatisfied,
+
+    #[msg("Green Label bond vault balance is insufficient")]
+    GreenLabelInsufficientBondVaultBalance,
 }

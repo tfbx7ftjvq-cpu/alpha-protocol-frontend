@@ -192,4 +192,8 @@ pub mod my_first_solana_program {
             expected_payload_hash,
         )
     }
+
+    pub fn execute_green_label_refund(ctx: Context<ExecuteGreenLabelRefund>) -> Result<()> {
+        instructions::green_label_v1::execute_green_label_refund_handler(ctx)
+    }
 }
