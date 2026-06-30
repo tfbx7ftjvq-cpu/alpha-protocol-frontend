@@ -154,4 +154,8 @@ pub mod my_first_solana_program {
     pub fn initialize_green_bond_vault(ctx: Context<InitializeGreenBondVault>) -> Result<()> {
         instructions::green_label_v1::initialize_green_bond_vault_handler(ctx)
     }
+
+    pub fn lock_green_label_bond(ctx: Context<LockGreenLabelBond>) -> Result<()> {
+        instructions::green_label_v1::lock_green_label_bond_handler(ctx)
+    }
 }

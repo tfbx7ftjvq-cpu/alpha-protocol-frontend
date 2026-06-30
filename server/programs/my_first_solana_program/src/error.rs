@@ -115,4 +115,7 @@ pub enum CustomError {
 
     #[msg("Invalid Green Label bond vault state")]
     InvalidGreenLabelBondVaultState,
+
+    #[msg("Invalid Green Label token account")]
+    InvalidGreenLabelTokenAccount,
 }
