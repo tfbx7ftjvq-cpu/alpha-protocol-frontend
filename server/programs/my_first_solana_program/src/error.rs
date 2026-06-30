@@ -118,4 +118,31 @@ pub enum CustomError {
 
     #[msg("Invalid Green Label token account")]
     InvalidGreenLabelTokenAccount,
+
+    #[msg("Invalid Green Label dispute id")]
+    InvalidGreenLabelDisputeId,
+
+    #[msg("Invalid Green Label active dispute")]
+    InvalidGreenLabelActiveDispute,
+
+    #[msg("Invalid Green Label evidence hash")]
+    InvalidGreenLabelEvidenceHash,
+
+    #[msg("Invalid Green Label dispute status")]
+    InvalidGreenLabelDisputeStatus,
+
+    #[msg("Green Label dispute window has not ended")]
+    GreenLabelDisputeWindowNotEnded,
+
+    #[msg("Invalid Green Label security decision")]
+    InvalidGreenLabelSecurityDecision,
+
+    #[msg("Invalid Green Label execution queue")]
+    InvalidGreenLabelExecutionQueue,
+
+    #[msg("Invalid Green Label target program")]
+    InvalidGreenLabelTargetProgram,
+
+    #[msg("Invalid Green Label target account")]
+    InvalidGreenLabelTargetAccount,
 }

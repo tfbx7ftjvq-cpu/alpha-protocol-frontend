@@ -158,4 +158,38 @@ pub mod my_first_solana_program {
     pub fn lock_green_label_bond(ctx: Context<LockGreenLabelBond>) -> Result<()> {
         instructions::green_label_v1::lock_green_label_bond_handler(ctx)
     }
+
+    pub fn open_green_label_dispute(
+        ctx: Context<OpenGreenLabelDispute>,
+        expected_dispute_id: u64,
+        reason_code: RugReasonCode,
+        evidence_hash: [u8; 32],
+    ) -> Result<()> {
+        instructions::green_label_v1::open_green_label_dispute_handler(
+            ctx,
+            expected_dispute_id,
+            reason_code,
+            evidence_hash,
+        )
+    }
+
+    pub fn mark_dispute_ready_for_decision(
+        ctx: Context<MarkDisputeReadyForDecision>,
+    ) -> Result<()> {
+        instructions::green_label_v1::mark_dispute_ready_for_decision_handler(ctx)
+    }
+
+    pub fn link_green_label_security_decision(
+        ctx: Context<LinkGreenLabelSecurityDecision>,
+        expected_proposal_id: u64,
+        expected_action_type: ActionType,
+        expected_payload_hash: [u8; 32],
+    ) -> Result<()> {
+        instructions::green_label_v1::link_green_label_security_decision_handler(
+            ctx,
+            expected_proposal_id,
+            expected_action_type,
+            expected_payload_hash,
+        )
+    }
 }
