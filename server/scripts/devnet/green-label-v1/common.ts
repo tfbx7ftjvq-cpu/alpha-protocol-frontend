@@ -263,6 +263,36 @@ export function instructionDiscriminator(name: string): Buffer {
   return getInstructionDiscriminator(loadIdl(), name);
 }
 
+export function debugInstruction(name: string, ix: TransactionInstruction, idl: RuntimeIdl): void {
+  if (process.env.DEBUG_INSTRUCTION !== "1") {
+    return;
+  }
+
+  const matchedInstruction = idl.instructions.find((instruction) => instruction.name === name);
+  const idlDiscriminator = matchedInstruction?.discriminator
+    ? Buffer.from(matchedInstruction.discriminator)
+    : null;
+
+  console.log("DEBUG_INSTRUCTION");
+  console.log("  instruction name:", name);
+  console.log("  ix.programId:", ix.programId.toBase58());
+  console.log("  ix.data.length:", ix.data.length);
+  console.log("  ix.data[0..8] hex:", ix.data.subarray(0, 8).toString("hex"));
+  console.log(
+    "  getInstructionDiscriminator hex:",
+    getInstructionDiscriminator(idl, name).toString("hex"),
+  );
+  console.log("  anchorDiscriminator hex:", anchorDiscriminator(name).toString("hex"));
+  console.log("  IDL matched instruction name:", matchedInstruction?.name ?? "<not found>");
+  console.log("  IDL discriminator hex:", idlDiscriminator?.toString("hex") ?? "<missing>");
+  console.log("  account count:", ix.keys.length);
+  ix.keys.forEach((account, index) => {
+    console.log(
+      `  account[${index}]: pubkey=${account.pubkey.toBase58()} isSigner=${account.isSigner} isWritable=${account.isWritable}`,
+    );
+  });
+}
+
 export function sha256Bytes(text: string): Buffer {
   return crypto.createHash("sha256").update(text).digest();
 }

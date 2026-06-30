@@ -3,10 +3,13 @@ import {
   DEVNET_USDC_MINT,
   PROGRAM_ID,
   buildInitializeGreenLabelConfigIx,
+  debugInstruction,
   deriveGovernanceConfig,
   deriveGreenLabelConfig,
   deriveTreasuryPdas,
   fetchGreenLabelConfig,
+  isDryRun,
+  loadIdl,
   loadProvider,
   printDevnetRiskBanner,
   printGreenLabelConfig,
@@ -92,6 +95,12 @@ async function main(): Promise<void> {
     vaultAuthorityV2: treasuryPdas.vaultAuthorityV2,
     securityGovernanceConfig: governanceConfig,
   });
+
+  debugInstruction("initialize_green_label_config", ix, loadIdl());
+  if (isDryRun()) {
+    console.log("DRY_RUN=true; debug output printed and initialize_green_label_config was not sent.");
+    return;
+  }
 
   await sendAndConfirmLabeled(provider, "initialize_green_label_config", new Transaction().add(ix));
   const createdConfig = await fetchGreenLabelConfig(provider);
