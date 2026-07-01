@@ -41,8 +41,8 @@ import {
   readHashEnv,
   readPublicKeyEnv,
   readU64Env,
-  readUsdcAmountEnv,
   requireShortEnoughResponseWindow,
+  selectGreenLabelBondAmount,
   sendAndConfirmLabeled,
   waitForTimelock,
 } from "./common";
@@ -94,7 +94,7 @@ async function main(): Promise<void> {
   const project = deriveGreenLabelProject(projectId);
   const dispute = deriveGreenLabelDispute(project, disputeId);
   const greenBondVault = deriveGreenBondVault(project);
-  const bondAmount = readUsdcAmountEnv("BOND_AMOUNT_USDC", "299");
+  const { bondAmount, bondAmountSource } = selectGreenLabelBondAmount(config.minBaseBondUsdc);
   const projectNameHash = readHashEnv(
     "PROJECT_NAME_HASH",
     "alpha-green-label-devnet-project",
@@ -130,7 +130,9 @@ async function main(): Promise<void> {
   console.log("dispute:", dispute.toBase58());
   console.log("green_bond_vault:", greenBondVault.toBase58());
   console.log("project_owner_usdc_ata:", projectOwnerUsdcAta.toBase58());
-  console.log("bond_amount:", formatUsdc(bondAmount));
+  console.log("config min_base_bond_usdc:", formatUsdc(config.minBaseBondUsdc));
+  console.log("selected bond_amount:", formatUsdc(bondAmount));
+  console.log("bond amount source:", bondAmountSource);
   console.log("payload_hash:", payloadHash.toString("hex"));
 
   await assertTokenBalanceAtLeast(provider, projectOwnerUsdcAta, bondAmount, "project_owner_usdc_ata");

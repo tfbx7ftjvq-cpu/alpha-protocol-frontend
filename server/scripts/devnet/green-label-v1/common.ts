@@ -385,6 +385,35 @@ export function readUsdcAmountEnv(name: string, defaultValue: string): bigint {
   return value;
 }
 
+export type GreenLabelBondAmountSelection = {
+  bondAmount: bigint;
+  bondAmountSource: "config.min_base_bond_usdc" | "BOND_AMOUNT_USDC env";
+};
+
+export function selectGreenLabelBondAmount(
+  configMinBaseBondUsdc: bigint,
+): GreenLabelBondAmountSelection {
+  const hasEnvOverride = process.env.BOND_AMOUNT_USDC !== undefined;
+  const bondAmount = hasEnvOverride
+    ? readUsdcAmountEnv("BOND_AMOUNT_USDC", formatUsdc(configMinBaseBondUsdc))
+    : configMinBaseBondUsdc;
+  if (bondAmount <= 0n) {
+    throw new Error(`bond_amount must be greater than zero. Received: ${formatUsdc(bondAmount)}`);
+  }
+  if (bondAmount < configMinBaseBondUsdc) {
+    throw new Error(
+      `bond_amount must be at least config min_base_bond_usdc. Selected ${formatUsdc(
+        bondAmount,
+      )}, config minimum ${formatUsdc(configMinBaseBondUsdc)}.`,
+    );
+  }
+
+  return {
+    bondAmount,
+    bondAmountSource: hasEnvOverride ? "BOND_AMOUNT_USDC env" : "config.min_base_bond_usdc",
+  };
+}
+
 export function formatUsdc(amount: bigint): string {
   const sign = amount < 0n ? "-" : "";
   const absoluteAmount = amount < 0n ? -amount : amount;
