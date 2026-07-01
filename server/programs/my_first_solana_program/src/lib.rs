@@ -147,6 +147,16 @@ pub mod my_first_solana_program {
         )
     }
 
+    pub fn update_green_label_min_base_bond(
+        ctx: Context<UpdateGreenLabelMinBaseBond>,
+        min_base_bond_usdc: u64,
+    ) -> Result<()> {
+        instructions::green_label_v1::update_green_label_min_base_bond_handler(
+            ctx,
+            min_base_bond_usdc,
+        )
+    }
+
     pub fn submit_green_label_application(
         ctx: Context<SubmitGreenLabelApplication>,
         expected_project_id: u64,

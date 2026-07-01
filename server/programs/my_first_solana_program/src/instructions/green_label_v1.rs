@@ -139,6 +139,18 @@ pub struct UpdateGreenLabelWindows<'info> {
 }
 
 #[derive(Accounts)]
+pub struct UpdateGreenLabelMinBaseBond<'info> {
+    #[account(
+        mut,
+        seeds = [GREEN_LABEL_CONFIG_SEED],
+        bump = green_label_config.bump
+    )]
+    pub green_label_config: Account<'info, GreenLabelConfigV1>,
+
+    pub authority: Signer<'info>,
+}
+
+#[derive(Accounts)]
 #[instruction(expected_project_id: u64)]
 pub struct SubmitGreenLabelApplication<'info> {
     #[account(
@@ -540,6 +552,25 @@ pub fn update_green_label_windows_handler(
         observation_period_seconds,
         dispute_window_seconds,
         response_window_seconds,
+    );
+
+    Ok(())
+}
+
+pub fn update_green_label_min_base_bond_handler(
+    ctx: Context<UpdateGreenLabelMinBaseBond>,
+    min_base_bond_usdc: u64,
+) -> Result<()> {
+    validate_green_label_min_base_bond_update(
+        ctx.accounts.green_label_config.is_paused,
+        ctx.accounts.green_label_config.authority,
+        ctx.accounts.authority.key(),
+        min_base_bond_usdc,
+    )?;
+
+    record_green_label_min_base_bond_update(
+        &mut ctx.accounts.green_label_config,
+        min_base_bond_usdc,
     );
 
     Ok(())
@@ -1044,6 +1075,33 @@ pub fn record_green_label_window_update(
     green_label_config.observation_period_seconds = observation_period_seconds;
     green_label_config.dispute_window_seconds = dispute_window_seconds;
     green_label_config.response_window_seconds = response_window_seconds;
+}
+
+pub fn validate_green_label_min_base_bond_update(
+    config_is_paused: bool,
+    expected_authority: Pubkey,
+    signer: Pubkey,
+    min_base_bond_usdc: u64,
+) -> Result<()> {
+    require!(!config_is_paused, CustomError::InvalidGreenLabelStatus);
+    require_keys_eq!(
+        expected_authority,
+        signer,
+        CustomError::UnauthorizedGreenLabelAuthority
+    );
+    require!(
+        min_base_bond_usdc > 0 && min_base_bond_usdc <= MIN_GREEN_LABEL_BASE_BOND_USDC,
+        CustomError::InvalidGreenLabelBondAmount
+    );
+
+    Ok(())
+}
+
+pub fn record_green_label_min_base_bond_update(
+    green_label_config: &mut GreenLabelConfigV1,
+    min_base_bond_usdc: u64,
+) {
+    green_label_config.min_base_bond_usdc = min_base_bond_usdc;
 }
 
 pub fn validate_green_bond_vault_initialization(
@@ -2348,6 +2406,175 @@ mod tests {
             actual.security_governance_config,
             expected.security_governance_config
         );
+    }
+
+    mod min_base_bond_update_tests {
+        use super::*;
+
+        #[test]
+        fn accepts_valid_min_base_bond_update_to_1_usdc() {
+            let authority = Pubkey::new_from_array([1; 32]);
+
+            validate_green_label_min_base_bond_update(false, authority, authority, 1_000_000)
+                .unwrap();
+        }
+
+        #[test]
+        fn accepts_valid_min_base_bond_update_to_299_usdc() {
+            let authority = Pubkey::new_from_array([1; 32]);
+
+            validate_green_label_min_base_bond_update(
+                false,
+                authority,
+                authority,
+                MIN_GREEN_LABEL_BASE_BOND_USDC,
+            )
+            .unwrap();
+        }
+
+        #[test]
+        fn rejects_paused_config() {
+            let authority = Pubkey::new_from_array([1; 32]);
+            let err =
+                validate_green_label_min_base_bond_update(true, authority, authority, 1_000_000)
+                    .unwrap_err();
+
+            assert_error_contains(err, "InvalidGreenLabelStatus");
+        }
+
+        #[test]
+        fn rejects_wrong_authority() {
+            let err = validate_green_label_min_base_bond_update(
+                false,
+                Pubkey::new_from_array([1; 32]),
+                Pubkey::new_from_array([2; 32]),
+                1_000_000,
+            )
+            .unwrap_err();
+
+            assert_error_contains(err, "UnauthorizedGreenLabelAuthority");
+        }
+
+        #[test]
+        fn rejects_zero_min_base_bond() {
+            let authority = Pubkey::new_from_array([1; 32]);
+            let err = validate_green_label_min_base_bond_update(false, authority, authority, 0)
+                .unwrap_err();
+
+            assert_error_contains(err, "InvalidGreenLabelBondAmount");
+        }
+
+        #[test]
+        fn rejects_min_base_bond_above_299() {
+            let authority = Pubkey::new_from_array([1; 32]);
+            let err = validate_green_label_min_base_bond_update(
+                false,
+                authority,
+                authority,
+                MIN_GREEN_LABEL_BASE_BOND_USDC + 1,
+            )
+            .unwrap_err();
+
+            assert_error_contains(err, "InvalidGreenLabelBondAmount");
+        }
+
+        #[test]
+        fn record_min_base_bond_update_changes_only_min_base_bond() {
+            let expected = green_label_config();
+            let mut actual = green_label_config();
+
+            record_green_label_min_base_bond_update(&mut actual, 1_000_000);
+
+            assert_eq!(actual.min_base_bond_usdc, 1_000_000);
+            assert_eq!(actual.authority, expected.authority);
+            assert_eq!(actual.usdc_mint, expected.usdc_mint);
+            assert_eq!(actual.base_refund_bps, expected.base_refund_bps);
+            assert_eq!(actual.base_treasury_bps, expected.base_treasury_bps);
+            assert_eq!(
+                actual.observation_period_seconds,
+                expected.observation_period_seconds
+            );
+            assert_eq!(
+                actual.dispute_window_seconds,
+                expected.dispute_window_seconds
+            );
+            assert_eq!(
+                actual.response_window_seconds,
+                expected.response_window_seconds
+            );
+            assert_eq!(actual.project_count, expected.project_count);
+            assert_eq!(
+                actual.treasury_usdc_state_v2,
+                expected.treasury_usdc_state_v2
+            );
+            assert_eq!(
+                actual.base_bond_treasury_vault,
+                expected.base_bond_treasury_vault
+            );
+            assert_eq!(actual.relief_or_risk_vault, expected.relief_or_risk_vault);
+            assert_eq!(actual.vault_authority_v2, expected.vault_authority_v2);
+            assert_eq!(
+                actual.security_governance_config,
+                expected.security_governance_config
+            );
+            assert_eq!(actual.is_paused, expected.is_paused);
+            assert_eq!(actual.bump, expected.bump);
+            assert_eq!(actual.reserved, expected.reserved);
+        }
+
+        #[test]
+        fn record_min_base_bond_update_does_not_change_windows() {
+            let expected = green_label_config();
+            let mut actual = green_label_config();
+
+            record_green_label_min_base_bond_update(&mut actual, 1_000_000);
+
+            assert_eq!(
+                actual.observation_period_seconds,
+                expected.observation_period_seconds
+            );
+            assert_eq!(
+                actual.dispute_window_seconds,
+                expected.dispute_window_seconds
+            );
+            assert_eq!(
+                actual.response_window_seconds,
+                expected.response_window_seconds
+            );
+        }
+
+        #[test]
+        fn record_min_base_bond_update_does_not_change_project_count() {
+            let mut config = green_label_config();
+            config.project_count = 12;
+
+            record_green_label_min_base_bond_update(&mut config, 1_000_000);
+
+            assert_eq!(config.project_count, 12);
+        }
+
+        #[test]
+        fn record_min_base_bond_update_does_not_change_vault_fields() {
+            let expected = green_label_config();
+            let mut actual = green_label_config();
+
+            record_green_label_min_base_bond_update(&mut actual, 1_000_000);
+
+            assert_eq!(
+                actual.treasury_usdc_state_v2,
+                expected.treasury_usdc_state_v2
+            );
+            assert_eq!(
+                actual.base_bond_treasury_vault,
+                expected.base_bond_treasury_vault
+            );
+            assert_eq!(actual.relief_or_risk_vault, expected.relief_or_risk_vault);
+            assert_eq!(actual.vault_authority_v2, expected.vault_authority_v2);
+            assert_eq!(
+                actual.security_governance_config,
+                expected.security_governance_config
+            );
+        }
     }
 
     #[test]
