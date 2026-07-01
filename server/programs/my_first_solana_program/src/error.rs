@@ -151,4 +151,10 @@ pub enum CustomError {
 
     #[msg("Green Label bond vault balance is insufficient")]
     GreenLabelInsufficientBondVaultBalance,
+
+    #[msg("Unauthorized Green Label authority")]
+    UnauthorizedGreenLabelAuthority,
+
+    #[msg("Invalid Green Label window config")]
+    InvalidGreenLabelWindowConfig,
 }

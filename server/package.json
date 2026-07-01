@@ -18,6 +18,7 @@
     "devnet:green-label:refund": "tsx scripts/devnet/green-label-v1/run-green-label-refund-e2e.ts",
     "devnet:green-label:slash": "tsx scripts/devnet/green-label-v1/run-green-label-slash-e2e.ts",
     "devnet:green-label:inspect": "tsx scripts/devnet/green-label-v1/inspect-green-label-project.ts",
+    "devnet:green-label:update-windows": "tsx scripts/devnet/green-label-v1/update-green-label-windows.ts",
     "devnet:green-label:diagnose": "tsx scripts/devnet/green-label-v1/diagnose-green-label-setup.ts"
   },
   "dependencies": {

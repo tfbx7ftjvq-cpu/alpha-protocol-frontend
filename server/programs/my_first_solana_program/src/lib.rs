@@ -133,6 +133,20 @@ pub mod my_first_solana_program {
         instructions::green_label_v1::initialize_green_label_config_handler(ctx)
     }
 
+    pub fn update_green_label_windows(
+        ctx: Context<UpdateGreenLabelWindows>,
+        observation_period_seconds: i64,
+        dispute_window_seconds: i64,
+        response_window_seconds: i64,
+    ) -> Result<()> {
+        instructions::green_label_v1::update_green_label_windows_handler(
+            ctx,
+            observation_period_seconds,
+            dispute_window_seconds,
+            response_window_seconds,
+        )
+    }
+
     pub fn submit_green_label_application(
         ctx: Context<SubmitGreenLabelApplication>,
         expected_project_id: u64,

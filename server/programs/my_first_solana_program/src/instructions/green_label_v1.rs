@@ -19,6 +19,8 @@ use crate::state::{
     ProposalDecisionV1, ProposalType, RugReasonCode,
 };
 
+pub const MAX_GREEN_LABEL_WINDOW_SECONDS: i64 = 30 * 24 * 60 * 60;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GreenLabelBondSplit {
     pub base_bond_amount: u64,
@@ -122,6 +124,18 @@ pub struct InitializeGreenLabelConfig<'info> {
     pub security_governance_config: UncheckedAccount<'info>,
 
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateGreenLabelWindows<'info> {
+    #[account(
+        mut,
+        seeds = [GREEN_LABEL_CONFIG_SEED],
+        bump = green_label_config.bump
+    )]
+    pub green_label_config: Account<'info, GreenLabelConfigV1>,
+
+    pub authority: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -502,6 +516,31 @@ pub fn initialize_green_label_config_handler(
     green_label_config.is_paused = values.is_paused;
     green_label_config.bump = values.bump;
     green_label_config.reserved = values.reserved;
+
+    Ok(())
+}
+
+pub fn update_green_label_windows_handler(
+    ctx: Context<UpdateGreenLabelWindows>,
+    observation_period_seconds: i64,
+    dispute_window_seconds: i64,
+    response_window_seconds: i64,
+) -> Result<()> {
+    validate_green_label_window_update(
+        ctx.accounts.green_label_config.is_paused,
+        ctx.accounts.green_label_config.authority,
+        ctx.accounts.authority.key(),
+        observation_period_seconds,
+        dispute_window_seconds,
+        response_window_seconds,
+    )?;
+
+    record_green_label_window_update(
+        &mut ctx.accounts.green_label_config,
+        observation_period_seconds,
+        dispute_window_seconds,
+        response_window_seconds,
+    );
 
     Ok(())
 }
@@ -963,6 +1002,48 @@ pub fn build_default_green_label_config_values(
         bump,
         reserved: [0; GREEN_LABEL_CONFIG_RESERVED_BYTES],
     })
+}
+
+pub fn validate_green_label_window_update(
+    config_is_paused: bool,
+    expected_authority: Pubkey,
+    signer: Pubkey,
+    observation_period_seconds: i64,
+    dispute_window_seconds: i64,
+    response_window_seconds: i64,
+) -> Result<()> {
+    require!(!config_is_paused, CustomError::InvalidGreenLabelStatus);
+    require_keys_eq!(
+        expected_authority,
+        signer,
+        CustomError::UnauthorizedGreenLabelAuthority
+    );
+    require!(
+        observation_period_seconds > 0
+            && observation_period_seconds <= MAX_GREEN_LABEL_WINDOW_SECONDS,
+        CustomError::InvalidGreenLabelWindowConfig
+    );
+    require!(
+        dispute_window_seconds > 0 && dispute_window_seconds <= MAX_GREEN_LABEL_WINDOW_SECONDS,
+        CustomError::InvalidGreenLabelWindowConfig
+    );
+    require!(
+        response_window_seconds > 0 && response_window_seconds <= MAX_GREEN_LABEL_WINDOW_SECONDS,
+        CustomError::InvalidGreenLabelWindowConfig
+    );
+
+    Ok(())
+}
+
+pub fn record_green_label_window_update(
+    green_label_config: &mut GreenLabelConfigV1,
+    observation_period_seconds: i64,
+    dispute_window_seconds: i64,
+    response_window_seconds: i64,
+) {
+    green_label_config.observation_period_seconds = observation_period_seconds;
+    green_label_config.dispute_window_seconds = dispute_window_seconds;
+    green_label_config.response_window_seconds = response_window_seconds;
 }
 
 pub fn validate_green_bond_vault_initialization(
@@ -2093,6 +2174,180 @@ mod tests {
         let values = green_label_config_init_values();
 
         assert_eq!(values.reserved, [0; GREEN_LABEL_CONFIG_RESERVED_BYTES]);
+    }
+
+    #[test]
+    fn accepts_valid_window_update() {
+        let authority = Pubkey::new_from_array([1; 32]);
+
+        validate_green_label_window_update(false, authority, authority, 60, 60, 60).unwrap();
+    }
+
+    #[test]
+    fn rejects_paused_config() {
+        let authority = Pubkey::new_from_array([1; 32]);
+        let err =
+            validate_green_label_window_update(true, authority, authority, 60, 60, 60).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelStatus");
+    }
+
+    #[test]
+    fn rejects_wrong_authority() {
+        let err = validate_green_label_window_update(
+            false,
+            Pubkey::new_from_array([1; 32]),
+            Pubkey::new_from_array([2; 32]),
+            60,
+            60,
+            60,
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "UnauthorizedGreenLabelAuthority");
+    }
+
+    #[test]
+    fn rejects_zero_observation_window() {
+        let authority = Pubkey::new_from_array([1; 32]);
+        let err =
+            validate_green_label_window_update(false, authority, authority, 0, 60, 60).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelWindowConfig");
+    }
+
+    #[test]
+    fn rejects_zero_dispute_window() {
+        let authority = Pubkey::new_from_array([1; 32]);
+        let err =
+            validate_green_label_window_update(false, authority, authority, 60, 0, 60).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelWindowConfig");
+    }
+
+    #[test]
+    fn rejects_zero_response_window() {
+        let authority = Pubkey::new_from_array([1; 32]);
+        let err =
+            validate_green_label_window_update(false, authority, authority, 60, 60, 0).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelWindowConfig");
+    }
+
+    #[test]
+    fn rejects_observation_above_max() {
+        let authority = Pubkey::new_from_array([1; 32]);
+        let err = validate_green_label_window_update(
+            false,
+            authority,
+            authority,
+            MAX_GREEN_LABEL_WINDOW_SECONDS + 1,
+            60,
+            60,
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelWindowConfig");
+    }
+
+    #[test]
+    fn rejects_dispute_above_max() {
+        let authority = Pubkey::new_from_array([1; 32]);
+        let err = validate_green_label_window_update(
+            false,
+            authority,
+            authority,
+            60,
+            MAX_GREEN_LABEL_WINDOW_SECONDS + 1,
+            60,
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelWindowConfig");
+    }
+
+    #[test]
+    fn rejects_response_above_max() {
+        let authority = Pubkey::new_from_array([1; 32]);
+        let err = validate_green_label_window_update(
+            false,
+            authority,
+            authority,
+            60,
+            60,
+            MAX_GREEN_LABEL_WINDOW_SECONDS + 1,
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelWindowConfig");
+    }
+
+    #[test]
+    fn record_window_update_changes_only_windows() {
+        let expected = green_label_config();
+        let mut actual = green_label_config();
+
+        record_green_label_window_update(&mut actual, 60, 70, 80);
+
+        assert_eq!(actual.observation_period_seconds, 60);
+        assert_eq!(actual.dispute_window_seconds, 70);
+        assert_eq!(actual.response_window_seconds, 80);
+        assert_eq!(actual.authority, expected.authority);
+        assert_eq!(actual.usdc_mint, expected.usdc_mint);
+        assert_eq!(actual.min_base_bond_usdc, expected.min_base_bond_usdc);
+        assert_eq!(actual.base_refund_bps, expected.base_refund_bps);
+        assert_eq!(actual.base_treasury_bps, expected.base_treasury_bps);
+        assert_eq!(actual.project_count, expected.project_count);
+        assert_eq!(
+            actual.treasury_usdc_state_v2,
+            expected.treasury_usdc_state_v2
+        );
+        assert_eq!(
+            actual.base_bond_treasury_vault,
+            expected.base_bond_treasury_vault
+        );
+        assert_eq!(actual.relief_or_risk_vault, expected.relief_or_risk_vault);
+        assert_eq!(actual.vault_authority_v2, expected.vault_authority_v2);
+        assert_eq!(
+            actual.security_governance_config,
+            expected.security_governance_config
+        );
+        assert_eq!(actual.is_paused, expected.is_paused);
+        assert_eq!(actual.bump, expected.bump);
+        assert_eq!(actual.reserved, expected.reserved);
+    }
+
+    #[test]
+    fn record_window_update_does_not_change_project_count() {
+        let mut config = green_label_config();
+        config.project_count = 12;
+
+        record_green_label_window_update(&mut config, 60, 70, 80);
+
+        assert_eq!(config.project_count, 12);
+    }
+
+    #[test]
+    fn record_window_update_does_not_change_vault_fields() {
+        let expected = green_label_config();
+        let mut actual = green_label_config();
+
+        record_green_label_window_update(&mut actual, 60, 70, 80);
+
+        assert_eq!(
+            actual.treasury_usdc_state_v2,
+            expected.treasury_usdc_state_v2
+        );
+        assert_eq!(
+            actual.base_bond_treasury_vault,
+            expected.base_bond_treasury_vault
+        );
+        assert_eq!(actual.relief_or_risk_vault, expected.relief_or_risk_vault);
+        assert_eq!(actual.vault_authority_v2, expected.vault_authority_v2);
+        assert_eq!(
+            actual.security_governance_config,
+            expected.security_governance_config
+        );
     }
 
     #[test]
