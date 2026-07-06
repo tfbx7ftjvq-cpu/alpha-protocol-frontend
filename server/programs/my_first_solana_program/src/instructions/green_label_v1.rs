@@ -587,6 +587,7 @@ pub fn submit_green_label_application_handler(
     let clock = Clock::get()?;
     let values = build_pending_bond_project_values(
         ctx.accounts.green_label_config.is_paused,
+        ctx.accounts.green_label_config.min_base_bond_usdc,
         ctx.accounts.green_label_config.project_count,
         expected_project_id,
         ctx.accounts.project_owner.key(),
@@ -671,6 +672,8 @@ pub fn lock_green_label_bond_handler(ctx: Context<LockGreenLabelBond>) -> Result
         ctx.accounts.project_owner_usdc_ata.owner,
         ctx.accounts.project_owner_usdc_ata.mint,
         ctx.accounts.usdc_mint.key(),
+        ctx.accounts.green_label_project.base_bond_amount,
+        ctx.accounts.green_label_project.extra_bond_amount,
         ctx.accounts.green_label_project.total_bond_amount,
     )?;
     require!(
@@ -816,8 +819,10 @@ pub fn execute_green_label_refund_handler(ctx: Context<ExecuteGreenLabelRefund>)
     let now = Clock::get()?.unix_timestamp;
     let project_key = ctx.accounts.green_label_project.key();
     let dispute_key = ctx.accounts.green_label_dispute.key();
-    let refund_amounts =
-        calculate_green_label_refund(ctx.accounts.green_label_project.total_bond_amount)?;
+    let refund_amounts = calculate_green_label_refund(
+        ctx.accounts.green_label_project.base_bond_amount,
+        ctx.accounts.green_label_project.extra_bond_amount,
+    )?;
 
     validate_green_label_refund_execution(
         ctx.accounts.green_label_config.is_paused,
@@ -1155,6 +1160,8 @@ pub fn validate_green_label_bond_lock(
     owner_ata_owner: Pubkey,
     owner_ata_mint: Pubkey,
     usdc_mint: Pubkey,
+    base_bond_amount: u64,
+    extra_bond_amount: u64,
     total_bond_amount: u64,
 ) -> Result<()> {
     require!(!config_is_paused, CustomError::InvalidGreenLabelStatus);
@@ -1206,7 +1213,14 @@ pub fn validate_green_label_bond_lock(
         CustomError::InvalidGreenLabelMint
     );
     require!(
-        total_bond_amount >= MIN_GREEN_LABEL_BASE_BOND_USDC,
+        base_bond_amount > 0,
+        CustomError::InvalidGreenLabelBondAmount
+    );
+    let expected_total_bond_amount = base_bond_amount
+        .checked_add(extra_bond_amount)
+        .ok_or(CustomError::GreenLabelMathOverflow)?;
+    require!(
+        total_bond_amount == expected_total_bond_amount,
         CustomError::InvalidGreenLabelBondAmount
     );
 
@@ -1906,6 +1920,7 @@ pub fn record_green_bond_vault_initialization(
 
 pub fn build_pending_bond_project_values(
     is_config_paused: bool,
+    configured_min_base_bond_usdc: u64,
     current_project_count: u64,
     expected_project_id: u64,
     project_owner: Pubkey,
@@ -1927,7 +1942,8 @@ pub fn build_pending_bond_project_values(
         CustomError::InvalidGreenLabelProjectId
     );
 
-    let (split, bond_tier) = derive_bond_split_and_tier(total_bond_amount)?;
+    let (split, bond_tier) =
+        derive_bond_split_and_tier(total_bond_amount, configured_min_base_bond_usdc)?;
 
     Ok(GreenLabelProjectInitValues {
         project_id: expected_project_id,
@@ -1975,41 +1991,54 @@ pub fn validate_green_label_bps_config(base_refund_bps: u16, base_treasury_bps: 
     Ok(())
 }
 
-pub fn split_green_label_bond(total_bond_amount: u64) -> Result<GreenLabelBondSplit> {
+pub fn split_green_label_bond(
+    total_bond_amount: u64,
+    configured_min_base_bond_usdc: u64,
+) -> Result<GreenLabelBondSplit> {
     require!(
-        total_bond_amount >= MIN_GREEN_LABEL_BASE_BOND_USDC,
+        configured_min_base_bond_usdc > 0
+            && configured_min_base_bond_usdc <= MIN_GREEN_LABEL_BASE_BOND_USDC,
+        CustomError::InvalidGreenLabelBondAmount
+    );
+    require!(
+        total_bond_amount >= configured_min_base_bond_usdc,
         CustomError::InvalidGreenLabelBondAmount
     );
 
     let extra_bond_amount = total_bond_amount
-        .checked_sub(MIN_GREEN_LABEL_BASE_BOND_USDC)
+        .checked_sub(configured_min_base_bond_usdc)
         .ok_or(CustomError::GreenLabelMathOverflow)?;
 
     Ok(GreenLabelBondSplit {
-        base_bond_amount: MIN_GREEN_LABEL_BASE_BOND_USDC,
+        base_bond_amount: configured_min_base_bond_usdc,
         extra_bond_amount,
         total_bond_amount,
     })
 }
 
-pub fn calculate_green_label_refund(total_bond_amount: u64) -> Result<GreenLabelRefundAmounts> {
+pub fn calculate_green_label_refund(
+    base_bond_amount: u64,
+    extra_bond_amount: u64,
+) -> Result<GreenLabelRefundAmounts> {
     validate_green_label_bps_config(BASE_BOND_REFUND_BPS, BASE_BOND_TREASURY_BPS)?;
+    require!(
+        base_bond_amount > 0,
+        CustomError::InvalidGreenLabelBondAmount
+    );
 
-    let split = split_green_label_bond(total_bond_amount)?;
-    let base_refund_amount = calculate_bps_amount(split.base_bond_amount, BASE_BOND_REFUND_BPS)?;
-    let base_treasury_amount =
-        calculate_bps_amount(split.base_bond_amount, BASE_BOND_TREASURY_BPS)?;
+    let base_refund_amount = calculate_bps_amount(base_bond_amount, BASE_BOND_REFUND_BPS)?;
+    let base_treasury_amount = calculate_bps_amount(base_bond_amount, BASE_BOND_TREASURY_BPS)?;
 
     let base_total = base_refund_amount
         .checked_add(base_treasury_amount)
         .ok_or(CustomError::GreenLabelMathOverflow)?;
     require!(
-        base_total == split.base_bond_amount,
+        base_total == base_bond_amount,
         CustomError::InvalidGreenLabelBondSplit
     );
 
     let project_refund_amount = base_refund_amount
-        .checked_add(split.extra_bond_amount)
+        .checked_add(extra_bond_amount)
         .ok_or(CustomError::GreenLabelMathOverflow)?;
 
     Ok(GreenLabelRefundAmounts {
@@ -2017,18 +2046,29 @@ pub fn calculate_green_label_refund(total_bond_amount: u64) -> Result<GreenLabel
         treasury_amount: base_treasury_amount,
         base_refund_amount,
         base_treasury_amount,
-        extra_refund_amount: split.extra_bond_amount,
+        extra_refund_amount: extra_bond_amount,
     })
 }
 
 pub fn calculate_green_label_slash_amount(total_bond_amount: u64) -> Result<u64> {
-    split_green_label_bond(total_bond_amount)?;
+    require!(
+        total_bond_amount > 0,
+        CustomError::InvalidGreenLabelBondAmount
+    );
     Ok(total_bond_amount)
 }
 
-pub fn calculate_bond_tier(total_bond_amount: u64) -> Result<BondTier> {
+pub fn calculate_bond_tier(
+    total_bond_amount: u64,
+    configured_min_base_bond_usdc: u64,
+) -> Result<BondTier> {
     require!(
-        total_bond_amount >= MIN_GREEN_LABEL_BASE_BOND_USDC,
+        configured_min_base_bond_usdc > 0
+            && configured_min_base_bond_usdc <= MIN_GREEN_LABEL_BASE_BOND_USDC,
+        CustomError::InvalidGreenLabelBondAmount
+    );
+    require!(
+        total_bond_amount >= configured_min_base_bond_usdc,
         CustomError::InvalidGreenLabelBondAmount
     );
 
@@ -2118,9 +2158,10 @@ pub fn expected_green_label_dispute_space() -> usize {
 
 pub fn derive_bond_split_and_tier(
     total_bond_amount: u64,
+    configured_min_base_bond_usdc: u64,
 ) -> Result<(GreenLabelBondSplit, BondTier)> {
-    let split = split_green_label_bond(total_bond_amount)?;
-    let tier = calculate_bond_tier(total_bond_amount)?;
+    let split = split_green_label_bond(total_bond_amount, configured_min_base_bond_usdc)?;
+    let tier = calculate_bond_tier(total_bond_amount, configured_min_base_bond_usdc)?;
 
     Ok((split, tier))
 }
@@ -2619,6 +2660,39 @@ mod tests {
     }
 
     #[test]
+    fn submit_project_accepts_configured_1_usdc_min_base_bond() {
+        let values = pending_bond_project_values_with_min(1_000_000, 1_000_000);
+
+        assert_eq!(values.total_bond_amount, 1_000_000);
+        assert_eq!(values.status, GreenLabelStatus::PendingBondDeposit);
+    }
+
+    #[test]
+    fn submit_project_rejects_below_configured_min_base_bond() {
+        let err = try_pending_bond_project_values(false, 1_000_000, 0, 1, 999_999).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelBondAmount");
+    }
+
+    #[test]
+    fn submit_project_uses_configured_min_base_as_base_amount() {
+        let values = pending_bond_project_values_with_min(1_000_000, 1_000_000);
+
+        assert_eq!(values.base_bond_amount, 1_000_000);
+        assert_eq!(values.extra_bond_amount, 0);
+        assert_eq!(values.bond_tier, BondTier::Base);
+    }
+
+    #[test]
+    fn submit_project_sets_extra_relative_to_configured_min_base() {
+        let values = pending_bond_project_values_with_min(1_000_000, 2_000_000);
+
+        assert_eq!(values.base_bond_amount, 1_000_000);
+        assert_eq!(values.extra_bond_amount, 1_000_000);
+        assert_eq!(values.total_bond_amount, 2_000_000);
+    }
+
+    #[test]
     fn submit_project_sets_bond_tier() {
         let values = pending_bond_project_values(1_299_000_000);
 
@@ -2627,21 +2701,42 @@ mod tests {
 
     #[test]
     fn submit_project_rejects_bond_below_299() {
-        let err = try_pending_bond_project_values(false, 0, 1, 298_999_999).unwrap_err();
+        let err = try_pending_bond_project_values(
+            false,
+            MIN_GREEN_LABEL_BASE_BOND_USDC,
+            0,
+            1,
+            298_999_999,
+        )
+        .unwrap_err();
 
         assert_error_contains(err, "InvalidGreenLabelBondAmount");
     }
 
     #[test]
     fn submit_project_requires_next_project_id() {
-        let err = try_pending_bond_project_values(false, 0, 2, 299_000_000).unwrap_err();
+        let err = try_pending_bond_project_values(
+            false,
+            MIN_GREEN_LABEL_BASE_BOND_USDC,
+            0,
+            2,
+            299_000_000,
+        )
+        .unwrap_err();
 
         assert_error_contains(err, "InvalidGreenLabelProjectId");
     }
 
     #[test]
     fn submit_project_rejects_when_config_paused() {
-        let err = try_pending_bond_project_values(true, 0, 1, 299_000_000).unwrap_err();
+        let err = try_pending_bond_project_values(
+            true,
+            MIN_GREEN_LABEL_BASE_BOND_USDC,
+            0,
+            1,
+            299_000_000,
+        )
+        .unwrap_err();
 
         assert_error_contains(err, "InvalidGreenLabelStatus");
     }
@@ -4305,7 +4400,7 @@ mod tests {
 
     #[test]
     fn split_bond_accepts_minimum_299() {
-        let split = split_green_label_bond(299_000_000).unwrap();
+        let split = split_green_label_bond(299_000_000, MIN_GREEN_LABEL_BASE_BOND_USDC).unwrap();
 
         assert_eq!(split.base_bond_amount, 299_000_000);
         assert_eq!(split.extra_bond_amount, 0);
@@ -4314,14 +4409,14 @@ mod tests {
 
     #[test]
     fn split_bond_rejects_below_299() {
-        let err = split_green_label_bond(298_999_999).unwrap_err();
+        let err = split_green_label_bond(298_999_999, MIN_GREEN_LABEL_BASE_BOND_USDC).unwrap_err();
 
         assert_error_contains(err, "InvalidGreenLabelBondAmount");
     }
 
     #[test]
     fn split_bond_separates_1299_into_299_base_1000_extra() {
-        let split = split_green_label_bond(1_299_000_000).unwrap();
+        let split = split_green_label_bond(1_299_000_000, MIN_GREEN_LABEL_BASE_BOND_USDC).unwrap();
 
         assert_eq!(split.base_bond_amount, 299_000_000);
         assert_eq!(split.extra_bond_amount, 1_000_000_000);
@@ -4329,8 +4424,36 @@ mod tests {
     }
 
     #[test]
+    fn split_bond_accepts_configured_minimum_1_usdc() {
+        let split = split_green_label_bond(1_000_000, 1_000_000).unwrap();
+
+        assert_eq!(split.base_bond_amount, 1_000_000);
+        assert_eq!(split.extra_bond_amount, 0);
+        assert_eq!(split.total_bond_amount, 1_000_000);
+    }
+
+    #[test]
+    fn split_bond_rejects_below_configured_minimum() {
+        let err = split_green_label_bond(999_999, 1_000_000).unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelBondAmount");
+    }
+
+    #[test]
+    fn split_bond_with_2_usdc_and_1_usdc_min_sets_1_usdc_extra() {
+        let split = split_green_label_bond(2_000_000, 1_000_000).unwrap();
+
+        assert_eq!(split.base_bond_amount, 1_000_000);
+        assert_eq!(split.extra_bond_amount, 1_000_000);
+        assert_eq!(split.total_bond_amount, 2_000_000);
+    }
+
+    #[test]
     fn refund_amounts_for_299_still_match_80_20() {
-        let amounts = calculate_green_label_refund(299_000_000).unwrap();
+        let project = pending_bond_project_values(299_000_000);
+        let amounts =
+            calculate_green_label_refund(project.base_bond_amount, project.extra_bond_amount)
+                .unwrap();
 
         assert_eq!(amounts.base_refund_amount, 239_200_000);
         assert_eq!(amounts.base_treasury_amount, 59_800_000);
@@ -4341,7 +4464,10 @@ mod tests {
 
     #[test]
     fn refund_amounts_for_1299_refund_extra_100_percent() {
-        let amounts = calculate_green_label_refund(1_299_000_000).unwrap();
+        let project = pending_bond_project_values(1_299_000_000);
+        let amounts =
+            calculate_green_label_refund(project.base_bond_amount, project.extra_bond_amount)
+                .unwrap();
 
         assert_eq!(amounts.base_refund_amount, 239_200_000);
         assert_eq!(amounts.base_treasury_amount, 59_800_000);
@@ -4376,49 +4502,67 @@ mod tests {
 
     #[test]
     fn bond_tier_base() {
-        assert_eq!(calculate_bond_tier(299_000_000).unwrap(), BondTier::Base);
-        assert_eq!(calculate_bond_tier(499_999_999).unwrap(), BondTier::Base);
+        assert_eq!(
+            calculate_bond_tier(299_000_000, MIN_GREEN_LABEL_BASE_BOND_USDC).unwrap(),
+            BondTier::Base
+        );
+        assert_eq!(
+            calculate_bond_tier(499_999_999, MIN_GREEN_LABEL_BASE_BOND_USDC).unwrap(),
+            BondTier::Base
+        );
     }
 
     #[test]
     fn bond_tier_bronze() {
-        assert_eq!(calculate_bond_tier(500_000_000).unwrap(), BondTier::Bronze);
-        assert_eq!(calculate_bond_tier(999_999_999).unwrap(), BondTier::Bronze);
+        assert_eq!(
+            calculate_bond_tier(500_000_000, MIN_GREEN_LABEL_BASE_BOND_USDC).unwrap(),
+            BondTier::Bronze
+        );
+        assert_eq!(
+            calculate_bond_tier(999_999_999, MIN_GREEN_LABEL_BASE_BOND_USDC).unwrap(),
+            BondTier::Bronze
+        );
     }
 
     #[test]
     fn bond_tier_silver() {
         assert_eq!(
-            calculate_bond_tier(1_000_000_000).unwrap(),
+            calculate_bond_tier(1_000_000_000, MIN_GREEN_LABEL_BASE_BOND_USDC).unwrap(),
             BondTier::Silver
         );
         assert_eq!(
-            calculate_bond_tier(2_999_999_999).unwrap(),
+            calculate_bond_tier(2_999_999_999, MIN_GREEN_LABEL_BASE_BOND_USDC).unwrap(),
             BondTier::Silver
         );
     }
 
     #[test]
     fn bond_tier_gold() {
-        assert_eq!(calculate_bond_tier(3_000_000_000).unwrap(), BondTier::Gold);
-        assert_eq!(calculate_bond_tier(9_999_999_999).unwrap(), BondTier::Gold);
+        assert_eq!(
+            calculate_bond_tier(3_000_000_000, MIN_GREEN_LABEL_BASE_BOND_USDC).unwrap(),
+            BondTier::Gold
+        );
+        assert_eq!(
+            calculate_bond_tier(9_999_999_999, MIN_GREEN_LABEL_BASE_BOND_USDC).unwrap(),
+            BondTier::Gold
+        );
     }
 
     #[test]
     fn bond_tier_platinum() {
         assert_eq!(
-            calculate_bond_tier(10_000_000_000).unwrap(),
+            calculate_bond_tier(10_000_000_000, MIN_GREEN_LABEL_BASE_BOND_USDC).unwrap(),
             BondTier::Platinum
         );
         assert_eq!(
-            calculate_bond_tier(100_000_000_000).unwrap(),
+            calculate_bond_tier(100_000_000_000, MIN_GREEN_LABEL_BASE_BOND_USDC).unwrap(),
             BondTier::Platinum
         );
     }
 
     #[test]
     fn bond_tier_rejects_below_minimum() {
-        let err = calculate_bond_tier(298_999_999).unwrap_err();
+        let err = calculate_bond_tier(298_999_999, MIN_GREEN_LABEL_BASE_BOND_USDC).unwrap_err();
 
         assert_error_contains(err, "InvalidGreenLabelBondAmount");
     }
@@ -4635,7 +4779,8 @@ mod tests {
 
     #[test]
     fn derive_bond_split_and_tier_for_299() {
-        let (split, tier) = derive_bond_split_and_tier(299_000_000).unwrap();
+        let (split, tier) =
+            derive_bond_split_and_tier(299_000_000, MIN_GREEN_LABEL_BASE_BOND_USDC).unwrap();
 
         assert_eq!(split.base_bond_amount, 299_000_000);
         assert_eq!(split.extra_bond_amount, 0);
@@ -4644,7 +4789,8 @@ mod tests {
 
     #[test]
     fn derive_bond_split_and_tier_for_1299() {
-        let (split, tier) = derive_bond_split_and_tier(1_299_000_000).unwrap();
+        let (split, tier) =
+            derive_bond_split_and_tier(1_299_000_000, MIN_GREEN_LABEL_BASE_BOND_USDC).unwrap();
 
         assert_eq!(split.base_bond_amount, 299_000_000);
         assert_eq!(split.extra_bond_amount, 1_000_000_000);
@@ -4767,17 +4913,40 @@ mod tests {
     }
 
     fn pending_bond_project_values(total_bond_amount: u64) -> GreenLabelProjectInitValues {
-        try_pending_bond_project_values(false, 0, 1, total_bond_amount).unwrap()
+        try_pending_bond_project_values(
+            false,
+            MIN_GREEN_LABEL_BASE_BOND_USDC,
+            0,
+            1,
+            total_bond_amount,
+        )
+        .unwrap()
+    }
+
+    fn pending_bond_project_values_with_min(
+        configured_min_base_bond_usdc: u64,
+        total_bond_amount: u64,
+    ) -> GreenLabelProjectInitValues {
+        try_pending_bond_project_values(
+            false,
+            configured_min_base_bond_usdc,
+            0,
+            1,
+            total_bond_amount,
+        )
+        .unwrap()
     }
 
     fn try_pending_bond_project_values(
         is_config_paused: bool,
+        configured_min_base_bond_usdc: u64,
         current_project_count: u64,
         expected_project_id: u64,
         total_bond_amount: u64,
     ) -> Result<GreenLabelProjectInitValues> {
         build_pending_bond_project_values(
             is_config_paused,
+            configured_min_base_bond_usdc,
             current_project_count,
             expected_project_id,
             Pubkey::new_from_array([8; 32]),
@@ -4806,6 +4975,8 @@ mod tests {
         owner_ata_owner: Pubkey,
         owner_ata_mint: Pubkey,
         usdc_mint: Pubkey,
+        base_bond_amount: u64,
+        extra_bond_amount: u64,
         total_bond_amount: u64,
     }
 
@@ -4830,6 +5001,8 @@ mod tests {
                 owner_ata_owner: project_owner,
                 owner_ata_mint: usdc_mint,
                 usdc_mint,
+                base_bond_amount: 299_000_000,
+                extra_bond_amount: 1_000_000_000,
                 total_bond_amount: 1_299_000_000,
             }
         }
@@ -4850,6 +5023,8 @@ mod tests {
             fixture.owner_ata_owner,
             fixture.owner_ata_mint,
             fixture.usdc_mint,
+            fixture.base_bond_amount,
+            fixture.extra_bond_amount,
             fixture.total_bond_amount,
         )
     }
