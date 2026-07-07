@@ -10,8 +10,9 @@ import { type Lang } from './translations';
 import TreasuryDashboard from './components/TreasuryDashboard';
 import WallOfShame from './components/WallOfShame';
 import VictimRelief from './components/VictimRelief';
+import GreenLabelDashboard from './components/GreenLabelDashboard';
 
-type Tab = 'treasury' | 'shame' | 'relief';
+type Tab = 'treasury' | 'shame' | 'relief' | 'greenLabel';
 type RpcStatus = 'checking' | 'ok' | 'error';
 
 const endpoint = 'https://api.devnet.solana.com';
@@ -151,6 +152,7 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
     { key: 'treasury', label: h.tabTreasury, icon: BookOpen, activeColor: 'text-green-400', activeBorder: 'border-green-400' },
     { key: 'shame', label: h.tabShame, icon: ShieldCheck, activeColor: 'text-red-400', activeBorder: 'border-red-400' },
     { key: 'relief', label: h.tabRelief, icon: LayoutDashboard, activeColor: 'text-cyan-400', activeBorder: 'border-cyan-400' },
+    { key: 'greenLabel', label: 'Green Label 认证', icon: ShieldCheck, activeColor: 'text-emerald-400', activeBorder: 'border-emerald-400' },
   ];
 
   return (
@@ -267,6 +269,7 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
         )}
         {activeTab === 'shame' && <WallOfShame lang={lang} />}
         {activeTab === 'relief' && <VictimRelief lang={lang} />}
+        {activeTab === 'greenLabel' && <GreenLabelDashboard />}
       </main>
 
       <footer className="border-t border-zinc-900 mt-24 px-6 py-8 text-center space-y-4 bg-zinc-950">
