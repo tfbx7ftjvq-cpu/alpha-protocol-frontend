@@ -6,10 +6,21 @@ import {
   FileCheck2,
   Gauge,
   Landmark,
+  Loader2,
   LockKeyhole,
+  RefreshCw,
   ShieldAlert,
   ShieldCheck,
 } from 'lucide-react';
+import { useGreenLabelConfig } from '../hooks/useGreenLabelConfig';
+import {
+  formatBps,
+  formatDuration,
+  formatUsdcAmount,
+  getGreenLabelParameterMode,
+  type GreenLabelConfigV1,
+  type GreenLabelParameterMode,
+} from '../lib/greenLabel';
 
 const PROGRAM_ID = 'HrLBQxUD3XHkB3KABjHXTiBHuAe6jVP2UPqiwmpmH8EY';
 const GREEN_LABEL_CONFIG = '7hNAeoqZxqvp38giY9gZwfR5ai3ttYTrse63QNYrRBWS';
@@ -75,6 +86,9 @@ const EXPLORER_LINKS = [
 ];
 
 export default function GreenLabelDashboard() {
+  const { config, error, lastLoadedAt, refresh, status } = useGreenLabelConfig();
+  const parameterMode = config ? getGreenLabelParameterMode(config) : null;
+
   return (
     <div className="space-y-8">
       <section className="space-y-5">
@@ -112,6 +126,15 @@ export default function GreenLabelDashboard() {
           ))}
         </div>
       </section>
+
+      <OnChainConfigPanel
+        config={config}
+        error={error}
+        lastLoadedAt={lastLoadedAt}
+        onRefresh={refresh}
+        parameterMode={parameterMode}
+        status={status}
+      />
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-red-400/25 bg-red-400/5 p-5">
@@ -305,6 +328,205 @@ function InfoTile({
       <p className={`break-all font-mono text-xs font-bold leading-relaxed ${tone}`}>{value}</p>
     </div>
   );
+}
+
+function OnChainConfigPanel({
+  config,
+  error,
+  lastLoadedAt,
+  onRefresh,
+  parameterMode,
+  status,
+}: {
+  config: GreenLabelConfigV1 | null;
+  error: string | null;
+  lastLoadedAt: Date | null;
+  onRefresh: () => Promise<void>;
+  parameterMode: GreenLabelParameterMode | null;
+  status: 'idle' | 'loading' | 'ready' | 'error';
+}) {
+  const isLoading = status === 'loading';
+  const rows = config ? getOnChainConfigRows(config) : [];
+
+  return (
+    <section className="rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <SectionHeader
+          icon={Gauge}
+          eyebrow="On-chain GreenLabelConfigV1"
+          title="链上实时配置"
+          description="从 Devnet RPC 只读读取 GreenLabelConfigV1 PDA；无需连接钱包，不要求签名，也不会发起任何写入交易。"
+          tone="text-cyan-300"
+        />
+
+        <div className="flex flex-col items-start gap-2 lg:items-end">
+          <StatusPill status={status} />
+          <button
+            type="button"
+            onClick={() => void onRefresh()}
+            disabled={isLoading}
+            className="inline-flex items-center justify-center gap-2 rounded border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-xs font-bold text-cyan-300 transition-all hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            {isLoading ? '读取中...' : '刷新链上配置'}
+          </button>
+          {lastLoadedAt && (
+            <p className="text-[10px] text-zinc-600">
+              Last loaded: {lastLoadedAt.toLocaleTimeString('zh-CN')}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2 text-[10px] font-bold text-zinc-500">
+        <span className="rounded border border-zinc-800 bg-zinc-950/70 px-2 py-1">
+          RPC: https://api.devnet.solana.com
+        </span>
+        <span className="break-all rounded border border-zinc-800 bg-zinc-950/70 px-2 py-1">
+          PDA: {GREEN_LABEL_CONFIG}
+        </span>
+      </div>
+
+      {parameterMode && <ParameterModeNotice mode={parameterMode} />}
+
+      {error && (
+        <div className="mt-4 flex items-start gap-2 rounded border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs leading-relaxed text-red-200">
+          <ShieldAlert className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+          <span className="break-words">链上读取失败：{error}</span>
+        </div>
+      )}
+
+      {isLoading && !config && (
+        <div className="mt-4 flex items-center gap-2 rounded border border-zinc-800 bg-zinc-950/70 px-3 py-3 text-xs font-bold text-zinc-400">
+          <Loader2 className="h-4 w-4 animate-spin text-cyan-300" />
+          正在读取 GreenLabelConfigV1...
+        </div>
+      )}
+
+      {config && (
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {rows.map((row) => (
+            <div key={row.label} className="rounded border border-zinc-800 bg-zinc-950/75 p-3">
+              <p className="break-all font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-600">
+                {row.label}
+              </p>
+              <p className={`mt-2 break-all font-mono text-sm font-black leading-relaxed ${row.tone}`}>
+                {row.value}
+              </p>
+              {row.caption && (
+                <p className="mt-1 break-all text-[10px] font-bold text-zinc-500">{row.caption}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function StatusPill({ status }: { status: 'idle' | 'loading' | 'ready' | 'error' }) {
+  const statusMeta = {
+    idle: {
+      label: '等待读取',
+      className: 'border-zinc-700 bg-zinc-900/60 text-zinc-400',
+    },
+    loading: {
+      label: '读取中',
+      className: 'border-yellow-400/30 bg-yellow-400/10 text-yellow-300',
+    },
+    ready: {
+      label: '链上已同步',
+      className: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
+    },
+    error: {
+      label: '读取失败',
+      className: 'border-red-400/30 bg-red-400/10 text-red-300',
+    },
+  }[status];
+
+  return (
+    <span className={`inline-flex w-fit items-center gap-2 rounded border px-3 py-1.5 text-xs font-bold ${statusMeta.className}`}>
+      {status === 'loading' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+      {statusMeta.label}
+    </span>
+  );
+}
+
+function ParameterModeNotice({ mode }: { mode: GreenLabelParameterMode }) {
+  if (mode === 'mainnet-like') {
+    return (
+      <div className="mt-4 flex items-start gap-2 rounded border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs font-bold leading-relaxed text-emerald-200">
+        <ShieldCheck className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+        <span>链上配置接近正式参数：299U / 30天 / 7天 / 3天。</span>
+      </div>
+    );
+  }
+
+  if (mode === 'devnet-test') {
+    return (
+      <div className="mt-4 flex items-start gap-2 rounded border border-orange-400/35 bg-orange-400/10 px-3 py-2 text-xs font-bold leading-relaxed text-orange-200">
+        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+        <span>链上配置命中 Devnet 测试参数：1 USDC 或 30 秒窗口。Mainnet 前必须恢复正式参数。</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 flex items-start gap-2 rounded border border-yellow-400/30 bg-yellow-400/10 px-3 py-2 text-xs font-bold leading-relaxed text-yellow-200">
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+      <span>链上配置不是已知 Devnet 测试参数，也不是完整正式参数，请在 Mainnet 前单独复核。</span>
+    </div>
+  );
+}
+
+function getOnChainConfigRows(config: GreenLabelConfigV1) {
+  return [
+    { label: 'authority', value: config.authority, tone: 'text-emerald-300' },
+    { label: 'usdc_mint', value: config.usdcMint, tone: 'text-blue-300' },
+    {
+      label: 'min_base_bond_usdc',
+      value: formatUsdcAmount(config.minBaseBondUsdc),
+      caption: `${config.minBaseBondUsdc.toString()} raw units`,
+      tone: 'text-yellow-300',
+    },
+    {
+      label: 'base_refund_bps',
+      value: `${config.baseRefundBps} bps`,
+      caption: formatBps(config.baseRefundBps),
+      tone: 'text-emerald-300',
+    },
+    {
+      label: 'base_treasury_bps',
+      value: `${config.baseTreasuryBps} bps`,
+      caption: formatBps(config.baseTreasuryBps),
+      tone: 'text-cyan-300',
+    },
+    {
+      label: 'observation_period_seconds',
+      value: `${config.observationPeriodSeconds.toString()} seconds`,
+      caption: formatDuration(config.observationPeriodSeconds),
+      tone: 'text-orange-300',
+    },
+    {
+      label: 'dispute_window_seconds',
+      value: `${config.disputeWindowSeconds.toString()} seconds`,
+      caption: formatDuration(config.disputeWindowSeconds),
+      tone: 'text-orange-300',
+    },
+    {
+      label: 'response_window_seconds',
+      value: `${config.responseWindowSeconds.toString()} seconds`,
+      caption: formatDuration(config.responseWindowSeconds),
+      tone: 'text-orange-300',
+    },
+    { label: 'project_count', value: config.projectCount.toString(), tone: 'text-zinc-100' },
+    { label: 'treasury_usdc_state_v2', value: config.treasuryUsdcStateV2, tone: 'text-yellow-300' },
+    { label: 'base_bond_treasury_vault', value: config.baseBondTreasuryVault, tone: 'text-yellow-300' },
+    { label: 'relief_or_risk_vault', value: config.reliefOrRiskVault, tone: 'text-red-300' },
+    { label: 'vault_authority_v2', value: config.vaultAuthorityV2, tone: 'text-cyan-300' },
+    { label: 'security_governance_config', value: config.securityGovernanceConfig, tone: 'text-red-300' },
+    { label: 'is_paused', value: config.isPaused ? 'true' : 'false', tone: config.isPaused ? 'text-red-300' : 'text-emerald-300' },
+  ];
 }
 
 function ParameterGrid({
