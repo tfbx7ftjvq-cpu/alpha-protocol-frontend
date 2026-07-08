@@ -76,6 +76,15 @@ const MAINNET_READINESS = [
   'update config 权限需完成审计。',
 ];
 
+const LAUNCH_GUARD_ITEMS = [
+  '当前页面为 Devnet verification dashboard。',
+  'Mainnet 前必须恢复 299U / 30天 / 7天 / 3天。',
+  'Config authority 必须迁移到 DAO / multisig / Security Layer timelock。',
+  'Devnet-only scripts 不可用于 Mainnet。',
+  'Update config 权限必须审计。',
+  'Green Label 不等于保险、不等于信用评级、不构成投资建议。',
+];
+
 const EXPLORER_LINKS = [
   {
     label: 'Program Explorer',
@@ -339,6 +348,25 @@ export default function GreenLabelDashboard() {
               <span>{item}</span>
             </div>
           ))}
+        </div>
+        <div className="mt-4 rounded-xl border border-red-400/35 bg-red-400/10 p-4">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-300" />
+            <div className="min-w-0">
+              <p className="text-sm font-black text-red-100">Mainnet Launch Guard</p>
+              <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+                {LAUNCH_GUARD_ITEMS.map((item) => (
+                  <div
+                    key={item}
+                    className="flex items-start gap-2 rounded border border-red-400/20 bg-zinc-950/70 px-3 py-2 text-xs font-bold leading-relaxed text-red-100"
+                  >
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-red-300" />
+                    <span>{item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
     </div>
