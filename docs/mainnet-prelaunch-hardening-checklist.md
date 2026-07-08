@@ -37,14 +37,18 @@ Mainnet must restore and confirm the production parameters before launch:
 - `update_green_label_windows` and `update_green_label_min_base_bond` must be gated by governance or timelock flow.
 - Emergency guardian permissions and boundaries must be explicitly documented and reviewed.
 
-## 5. Devnet / Mainnet Script Separation
+## 5. Authority and Parameter Migration Plan
+
+Before Mainnet, review `docs/mainnet-authority-and-parameter-migration-plan.md`. That document is the required companion plan for restoring Green Label production parameters and migrating critical authorities before launch.
+
+## 6. Devnet / Mainnet Script Separation
 
 - Devnet scripts must not be used directly for Mainnet.
 - Mainnet scripts must use separate names, for example `mainnet:green-label:setup`.
 - Mainnet scripts must force-print cluster / program id / authority / config parameters.
 - Mainnet scripts must include a human confirmation mechanism to prevent accidental transactions.
 
-## 6. Devnet Script Isolation Status
+## 7. Devnet Script Isolation Status
 
 - Current Devnet scripts use the `devnet:...` npm script namespace.
 - Green Label Devnet scripts include a devnet-only guard.
@@ -53,21 +57,21 @@ Mainnet must restore and confirm the production parameters before launch:
 - Mainnet scripts must include an explicit human confirmation mechanism.
 - Devnet `1 USDC / 30s / 30s / 30s` parameters must never be reused as Mainnet default parameters.
 
-## 7. Frontend Launch Protection
+## 8. Frontend Launch Protection
 
 - The frontend must clearly display the current cluster.
 - Mainnet mode must not present Devnet test parameters as production rules.
 - Green Label pages must display: not investment advice, not an insurance promise, and risk bond / commitment tier is not a credit rating.
 - The frontend must show warnings when Mainnet parameters are abnormal.
 
-## 8. Program / IDL / Explorer Checks
+## 9. Program / IDL / Explorer Checks
 
 - Program ID and IDL address must match.
 - The frontend IDL must match the deployed program version.
 - Explorer links must switch by cluster.
 - A read-only sanity check must be run before Mainnet launch.
 
-## 9. Funds-Flow Checks
+## 10. Funds-Flow Checks
 
 - Treasury V2 four-pool addresses must be confirmed.
 - Green Label `base_bond_treasury_vault` must be confirmed.
@@ -75,7 +79,7 @@ Mainnet must restore and confirm the production parameters before launch:
 - Staking rewards vault must be confirmed.
 - Every vault owner / mint / authority must be checked.
 
-## 10. Tests That Must Not Be Skipped
+## 11. Tests That Must Not Be Skipped
 
 - `cargo test`
 - `anchor build --ignore-keys`
@@ -85,7 +89,7 @@ Mainnet must restore and confirm the production parameters before launch:
 - Green Label refund / slash read-only verification
 - Treasury / Staking read-only verification
 
-## 11. Mainnet Blockers
+## 12. Mainnet Blockers
 
 Any one of the following unresolved items blocks Mainnet launch:
 
