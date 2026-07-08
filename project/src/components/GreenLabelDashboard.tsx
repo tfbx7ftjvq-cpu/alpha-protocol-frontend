@@ -70,10 +70,10 @@ const VERIFIED_PATH = [
 ];
 
 const MAINNET_READINESS = [
-  'Mainnet 前必须恢复 299U / 30天 / 7天 / 3天。',
-  'config authority 不能长期由单钱包控制，应迁移到 DAO / multisig / Security Layer timelock。',
+  '恢复正式参数：299 USDC / 30天 / 7天 / 3天。',
+  '将 config authority 迁移到 DAO / multisig / Security Layer timelock。',
   'Devnet-only scripts 不可用于 Mainnet。',
-  'update config 权限需要审计。',
+  'update config 权限需完成审计。',
 ];
 
 const EXPLORER_LINKS = [
@@ -194,6 +194,8 @@ export default function GreenLabelDashboard() {
         </div>
       </section>
 
+      <DevnetParameterBanner />
+
       <OnChainConfigPanel
         config={config}
         error={error}
@@ -281,13 +283,13 @@ export default function GreenLabelDashboard() {
             description="Green Label 与 Security Layer 的 Devnet 闭环路径已经完成验证。"
             tone="text-cyan-300"
           />
-          <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
             {VERIFIED_PATH.map((item) => (
               <div
                 key={item}
-                className="flex min-w-0 items-start gap-2 rounded border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-xs font-bold text-zinc-300"
+                className="flex min-w-0 items-start gap-2 rounded border border-zinc-800 bg-zinc-950/70 px-2 py-1.5 text-[10px] font-bold text-zinc-300"
               >
-                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-400" />
+                <CheckCircle2 className="mt-0.5 h-3 w-3 flex-shrink-0 text-emerald-400" />
                 <span className="break-all font-mono">{item}</span>
               </div>
             ))}
@@ -405,6 +407,24 @@ function InfoTile({
   );
 }
 
+function DevnetParameterBanner() {
+  return (
+    <section className="rounded-xl border border-red-400/35 bg-red-400/10 p-4">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-300" />
+        <div className="space-y-1">
+          <p className="text-sm font-black text-red-100">
+            当前为 Devnet E2E 测试配置：1 USDC / 30s / 30s / 30s，不代表 Mainnet 正式规则。
+          </p>
+          <p className="text-xs font-bold leading-relaxed text-red-200/90">
+            Mainnet 前必须恢复 299 USDC / 30天 / 7天 / 3天。
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function OnChainConfigPanel({
   config,
   error,
@@ -421,7 +441,8 @@ function OnChainConfigPanel({
   status: 'idle' | 'loading' | 'ready' | 'error';
 }) {
   const isLoading = status === 'loading';
-  const rows = config ? getOnChainConfigRows(config) : [];
+  const keyRows = config ? getOnChainConfigKeyRows(config) : [];
+  const advancedRows = config ? getOnChainConfigAdvancedRows(config) : [];
 
   return (
     <section className="rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-5">
@@ -479,23 +500,42 @@ function OnChainConfigPanel({
       )}
 
       {config && (
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {rows.map((row) => (
-            <div key={row.label} className="rounded border border-zinc-800 bg-zinc-950/75 p-3">
-              <p className="break-all font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-600">
-                {row.label}
-              </p>
-              <p className={`mt-2 break-all font-mono text-sm font-black leading-relaxed ${row.tone}`}>
-                {row.value}
-              </p>
-              {row.caption && (
-                <p className="mt-1 break-all text-[10px] font-bold text-zinc-500">{row.caption}</p>
-              )}
+        <div className="mt-4 space-y-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+            {keyRows.map((row) => (
+              <ConfigMetricTile key={row.label} row={row} />
+            ))}
+          </div>
+
+          <details className="rounded border border-zinc-800 bg-zinc-950/60 p-3">
+            <summary className="cursor-pointer text-xs font-black uppercase tracking-widest text-zinc-400 hover:text-cyan-300">
+              Advanced config
+            </summary>
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {advancedRows.map((row) => (
+                <ConfigMetricTile key={row.label} row={row} />
+              ))}
             </div>
-          ))}
+          </details>
         </div>
       )}
     </section>
+  );
+}
+
+function ConfigMetricTile({ row }: { row: ConfigRow }) {
+  return (
+    <div className="rounded border border-zinc-800 bg-zinc-950/75 p-3">
+      <p className="break-all font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-600">
+        {row.label}
+      </p>
+      <p className={`mt-2 break-all font-mono text-sm font-black leading-relaxed ${row.tone}`}>
+        {row.value}
+      </p>
+      {row.caption && (
+        <p className="mt-1 break-all text-[10px] font-bold text-zinc-500">{row.caption}</p>
+      )}
+    </div>
   );
 }
 
@@ -554,27 +594,13 @@ function ParameterModeNotice({ mode }: { mode: GreenLabelParameterMode }) {
   );
 }
 
-function getOnChainConfigRows(config: GreenLabelConfigV1) {
+function getOnChainConfigKeyRows(config: GreenLabelConfigV1): ConfigRow[] {
   return [
-    { label: 'authority', value: config.authority, tone: 'text-emerald-300' },
-    { label: 'usdc_mint', value: config.usdcMint, tone: 'text-blue-300' },
     {
       label: 'min_base_bond_usdc',
       value: formatUsdcAmount(config.minBaseBondUsdc),
       caption: `${config.minBaseBondUsdc.toString()} raw units`,
       tone: 'text-yellow-300',
-    },
-    {
-      label: 'base_refund_bps',
-      value: `${config.baseRefundBps} bps`,
-      caption: formatBps(config.baseRefundBps),
-      tone: 'text-emerald-300',
-    },
-    {
-      label: 'base_treasury_bps',
-      value: `${config.baseTreasuryBps} bps`,
-      caption: formatBps(config.baseTreasuryBps),
-      tone: 'text-cyan-300',
     },
     {
       label: 'observation_period_seconds',
@@ -595,13 +621,39 @@ function getOnChainConfigRows(config: GreenLabelConfigV1) {
       tone: 'text-orange-300',
     },
     { label: 'project_count', value: config.projectCount.toString(), tone: 'text-zinc-100' },
+    { label: 'is_paused', value: config.isPaused ? 'true' : 'false', tone: config.isPaused ? 'text-red-300' : 'text-emerald-300' },
+  ];
+}
+
+function getOnChainConfigAdvancedRows(config: GreenLabelConfigV1): ConfigRow[] {
+  return [
+    { label: 'authority', value: config.authority, tone: 'text-emerald-300' },
+    { label: 'usdc_mint', value: config.usdcMint, tone: 'text-blue-300' },
+    {
+      label: 'base_refund_bps',
+      value: `${config.baseRefundBps} bps`,
+      caption: formatBps(config.baseRefundBps),
+      tone: 'text-emerald-300',
+    },
+    {
+      label: 'base_treasury_bps',
+      value: `${config.baseTreasuryBps} bps`,
+      caption: formatBps(config.baseTreasuryBps),
+      tone: 'text-cyan-300',
+    },
     { label: 'treasury_usdc_state_v2', value: config.treasuryUsdcStateV2, tone: 'text-yellow-300' },
     { label: 'base_bond_treasury_vault', value: config.baseBondTreasuryVault, tone: 'text-yellow-300' },
     { label: 'relief_or_risk_vault', value: config.reliefOrRiskVault, tone: 'text-red-300' },
     { label: 'vault_authority_v2', value: config.vaultAuthorityV2, tone: 'text-cyan-300' },
     { label: 'security_governance_config', value: config.securityGovernanceConfig, tone: 'text-red-300' },
-    { label: 'is_paused', value: config.isPaused ? 'true' : 'false', tone: config.isPaused ? 'text-red-300' : 'text-emerald-300' },
   ];
+}
+
+interface ConfigRow {
+  label: string;
+  value: string;
+  caption?: string;
+  tone: string;
 }
 
 function E2EResultsPanel({
@@ -682,6 +734,7 @@ function E2EResultCard({ result }: { result: GreenLabelE2EResult }) {
     ? 'border-emerald-400/25 bg-emerald-400/5 text-emerald-300'
     : 'border-orange-400/30 bg-orange-400/5 text-orange-300';
   const Icon = isRefund ? CheckCircle2 : ShieldAlert;
+  const summaryRows = getE2ESummaryRows(result, statusMatches);
 
   return (
     <div className={`rounded-xl border p-5 ${toneClass}`}>
@@ -706,13 +759,54 @@ function E2EResultCard({ result }: { result: GreenLabelE2EResult }) {
         </div>
       )}
 
+      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        {summaryRows.map((row) => (
+          <div key={row.label} className="rounded border border-zinc-800 bg-zinc-950/75 p-3">
+            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-600">{row.label}</p>
+            <p className={`mt-2 break-all font-mono text-sm font-black ${row.tone}`}>{row.value}</p>
+          </div>
+        ))}
+      </div>
+
       <div className="mt-4 grid grid-cols-1 gap-3">
         <E2EAccountLinks result={result} />
-        <AccountDetailSection title="GreenLabelProjectV1" rows={getProjectRows(result.project)} />
-        <AccountDetailSection title="GreenLabelDisputeV1" rows={getDisputeRows(result.dispute)} />
+        <AccountDetailSection summary="Show raw project account" title="GreenLabelProjectV1" rows={getProjectRows(result.project)} />
+        <AccountDetailSection summary="Show raw dispute account" title="GreenLabelDisputeV1" rows={getDisputeRows(result.dispute)} />
       </div>
     </div>
   );
+}
+
+function getE2ESummaryRows(result: GreenLabelE2EResult, statusMatches: boolean): SummaryRow[] {
+  const sharedRows: SummaryRow[] = [
+    {
+      label: 'Status',
+      value: result.project.status,
+      tone: result.project.status === result.expectedProjectStatus ? 'text-emerald-300' : 'text-yellow-200',
+    },
+    {
+      label: 'Dispute',
+      value: result.dispute.status,
+      tone: result.dispute.status === result.expectedDisputeStatus ? 'text-emerald-300' : 'text-yellow-200',
+    },
+    { label: 'Bond', value: formatUsdcAmount(result.project.totalBondAmount), tone: 'text-cyan-300' },
+  ];
+
+  if (result.key === 'refund') {
+    return [
+      ...sharedRows,
+      { label: 'Treasury Delta', value: '+0.2 USDC', tone: 'text-yellow-300' },
+      { label: 'Green Bond Vault', value: '0', tone: 'text-zinc-100' },
+      { label: 'Path', value: statusMatches ? 'Path Verified' : 'Needs Review', tone: statusMatches ? 'text-emerald-300' : 'text-yellow-200' },
+    ];
+  }
+
+  return [
+    ...sharedRows,
+    { label: 'Relief/Risk Vault Delta', value: '+1 USDC', tone: 'text-orange-300' },
+    { label: 'Green Bond Vault', value: '0', tone: 'text-zinc-100' },
+    { label: 'Path', value: statusMatches ? 'Path Verified' : 'Needs Review', tone: statusMatches ? 'text-emerald-300' : 'text-yellow-200' },
+  ];
 }
 
 function E2EAccountLinks({ result }: { result: GreenLabelE2EResult }) {
@@ -736,16 +830,19 @@ function E2EAccountLinks({ result }: { result: GreenLabelE2EResult }) {
   );
 }
 
-function AccountDetailSection({ title, rows }: { title: string; rows: DetailRow[] }) {
+function AccountDetailSection({ summary, title, rows }: { summary: string; title: string; rows: DetailRow[] }) {
   return (
-    <div className="rounded border border-zinc-800 bg-zinc-950/75 p-3">
-      <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-zinc-600">{title}</p>
+    <details className="rounded border border-zinc-800 bg-zinc-950/75 p-3">
+      <summary className="cursor-pointer text-xs font-black text-zinc-300 hover:text-cyan-300">
+        {summary}
+      </summary>
+      <p className="mb-3 mt-3 text-[10px] font-black uppercase tracking-widest text-zinc-600">{title}</p>
       <div className="grid grid-cols-1 gap-2">
         {rows.map((row) => (
           <DetailRowItem key={row.label} row={row} />
         ))}
       </div>
-    </div>
+    </details>
   );
 }
 
@@ -861,6 +958,12 @@ interface DetailRow {
   value: string;
   caption?: string;
   href?: string;
+}
+
+interface SummaryRow {
+  label: string;
+  value: string;
+  tone: string;
 }
 
 function ParameterGrid({
