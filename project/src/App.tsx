@@ -5,14 +5,15 @@ import { WalletModalProvider, WalletMultiButton } from '@solana/wallet-adapter-r
 import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import '@solana/wallet-adapter-react-ui/styles.css';
-import { Globe, ShieldCheck, BookOpen, LayoutDashboard, Hexagon, Wallet } from 'lucide-react';
+import { Globe, ShieldCheck, BookOpen, LayoutDashboard, Hexagon, Wallet, Coins } from 'lucide-react';
 import { type Lang } from './translations';
 import TreasuryDashboard from './components/TreasuryDashboard';
 import WallOfShame from './components/WallOfShame';
 import VictimRelief from './components/VictimRelief';
 import GreenLabelDashboard from './components/GreenLabelDashboard';
+import TokenRevenueDashboard from './components/TokenRevenueDashboard';
 
-type Tab = 'treasury' | 'shame' | 'relief' | 'greenLabel';
+type Tab = 'treasury' | 'shame' | 'relief' | 'greenLabel' | 'tokenRevenue';
 type RpcStatus = 'checking' | 'ok' | 'error';
 
 const endpoint = 'https://api.devnet.solana.com';
@@ -153,6 +154,7 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
     { key: 'shame', label: h.tabShame, icon: ShieldCheck, activeColor: 'text-red-400', activeBorder: 'border-red-400' },
     { key: 'relief', label: h.tabRelief, icon: LayoutDashboard, activeColor: 'text-cyan-400', activeBorder: 'border-cyan-400' },
     { key: 'greenLabel', label: 'Green Label 认证', icon: ShieldCheck, activeColor: 'text-emerald-400', activeBorder: 'border-emerald-400' },
+    { key: 'tokenRevenue', label: '代币与收入闭环', icon: Coins, activeColor: 'text-yellow-400', activeBorder: 'border-yellow-400' },
   ];
 
   return (
@@ -270,6 +272,7 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
         {activeTab === 'shame' && <WallOfShame lang={lang} />}
         {activeTab === 'relief' && <VictimRelief lang={lang} />}
         {activeTab === 'greenLabel' && <GreenLabelDashboard />}
+        {activeTab === 'tokenRevenue' && <TokenRevenueDashboard />}
       </main>
 
       <footer className="border-t border-zinc-900 mt-24 px-6 py-8 text-center space-y-4 bg-zinc-950">

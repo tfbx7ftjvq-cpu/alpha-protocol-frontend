@@ -93,7 +93,22 @@ Reasons:
 
 Any shortcut around Security Layer governance weakens the protocol trust model.
 
-## 7. Phase 2A Roadmap
+## 7. DAO Oversight of Treasury and Token Revenue
+
+DAO / Security Layer governance should eventually supervise the Token / Revenue / Treasury product loop.
+
+This includes:
+
+- Treasury V2 parameters and revenue split policy.
+- Builders / contributors pool spending.
+- Relief pool payout and risk response policy.
+- Staking reward policy.
+- Green Label refund / slash execution.
+- Emergency pause review and timelock-protected recovery.
+
+The Token / Revenue dashboard is read-only product presentation. It must not imply guaranteed yield, automatic insurance payouts, or discretionary spending without governance.
+
+## 8. Phase 2A Roadmap
 
 1. Read-only governance dashboard.
 2. Proposal product model.
@@ -101,7 +116,7 @@ Any shortcut around Security Layer governance weakens the protocol trust model.
 4. On-chain voting layer.
 5. DAO-controlled treasury and governance authority.
 
-## 8. Messaging Boundary
+## 9. Messaging Boundary
 
 Until the voting layer is complete:
 
