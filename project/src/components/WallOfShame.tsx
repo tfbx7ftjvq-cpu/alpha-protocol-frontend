@@ -18,6 +18,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { type Lang } from '../translations';
+import DAOGovernanceDashboard from './DAOGovernanceDashboard';
 
 interface Props {
   lang: Lang;
@@ -262,6 +263,8 @@ export default function WallOfShame({ lang }: Props) {
             当前版本为 Devnet Alpha 测试网原型。风险曝光、受害者联署、绿标名录和 DAO 提案卡片均为路线图展示，不代表已开放真实链上 DAO 投票交易。
           </p>
         </div>
+
+        <DAOGovernanceDashboard />
 
         <div className="border border-cyan-400/20 bg-cyan-400/5 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-cyan-400/10 bg-zinc-950/70 flex items-center gap-2">

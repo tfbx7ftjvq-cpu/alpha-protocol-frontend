@@ -152,6 +152,13 @@ Manual review notes:
 - After the Go/No-Go checklist reaches GO, Mainnet launch must follow the operational runbook.
 - The runbook cannot bypass blockers. If any blocker appears during execution, stop and return to this Go/No-Go checklist.
 
-## 11. Current Conclusion
+## 11. DAO Governance Product Layer
+
+- Review `docs/dao-governance-product-layer.md` before Mainnet.
+- Mainnet readiness includes clear display of the DAO execution layer, not only backend safety checks.
+- Until the full voting layer is complete, Alpha Protocol must not be marketed as a fully decentralized DAO.
+- The read-only DAO Governance Dashboard may show Security Layer state, proposal decisions, and queue items, but must not expose voting or execution buttons.
+
+## 12. Current Conclusion
 
 NO-GO for Mainnet production until Mainnet parameters, authorities, vaults, staking pool, and mainnet sanity check are completed and reviewed.
