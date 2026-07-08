@@ -71,7 +71,16 @@ Before Mainnet, review `docs/mainnet-authority-and-parameter-migration-plan.md`.
 - Explorer links must switch by cluster.
 - A read-only sanity check must be run before Mainnet launch.
 
-## 10. Funds-Flow Checks
+## 10. Read-only Sanity Check
+
+- `devnet:prelaunch:sanity` runs the Devnet read-only prelaunch sanity check.
+- `mainnet:prelaunch:sanity` runs the Mainnet read-only prelaunch sanity check.
+- These scripts only read local files and on-chain accounts; they must not send transactions.
+- Mainnet launch requires `mainnet:prelaunch:sanity` to pass before any production action.
+- Any `FAIL` result blocks Mainnet launch.
+- Any `MANUAL_REVIEW` result must be manually confirmed before Mainnet launch.
+
+## 11. Funds-Flow Checks
 
 - Treasury V2 four-pool addresses must be confirmed.
 - Green Label `base_bond_treasury_vault` must be confirmed.
@@ -79,7 +88,7 @@ Before Mainnet, review `docs/mainnet-authority-and-parameter-migration-plan.md`.
 - Staking rewards vault must be confirmed.
 - Every vault owner / mint / authority must be checked.
 
-## 11. Tests That Must Not Be Skipped
+## 12. Tests That Must Not Be Skipped
 
 - `cargo test`
 - `anchor build --ignore-keys`
@@ -89,7 +98,7 @@ Before Mainnet, review `docs/mainnet-authority-and-parameter-migration-plan.md`.
 - Green Label refund / slash read-only verification
 - Treasury / Staking read-only verification
 
-## 12. Mainnet Blockers
+## 13. Mainnet Blockers
 
 Any one of the following unresolved items blocks Mainnet launch:
 

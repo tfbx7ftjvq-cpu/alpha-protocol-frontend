@@ -20,7 +20,9 @@
     "devnet:green-label:inspect": "tsx scripts/devnet/green-label-v1/inspect-green-label-project.ts",
     "devnet:green-label:update-windows": "tsx scripts/devnet/green-label-v1/update-green-label-windows.ts",
     "devnet:green-label:update-min-bond": "tsx scripts/devnet/green-label-v1/update-green-label-min-base-bond.ts",
-    "devnet:green-label:diagnose": "tsx scripts/devnet/green-label-v1/diagnose-green-label-setup.ts"
+    "devnet:green-label:diagnose": "tsx scripts/devnet/green-label-v1/diagnose-green-label-setup.ts",
+    "devnet:prelaunch:sanity": "tsx scripts/sanity/mainnet-prelaunch-readonly-check.ts",
+    "mainnet:prelaunch:sanity": "tsx scripts/sanity/mainnet-prelaunch-readonly-check.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
