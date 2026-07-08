@@ -12,6 +12,7 @@ export type ExpectedMode = "devnet-test" | "mainnet-production";
 
 export const DEFAULT_PROGRAM_ID = new PublicKey("HrLBQxUD3XHkB3KABjHXTiBHuAe6jVP2UPqiwmpmH8EY");
 export const DEFAULT_GREEN_LABEL_CONFIG = new PublicKey("7hNAeoqZxqvp38giY9gZwfR5ai3ttYTrse63QNYrRBWS");
+export const DEFAULT_DEVNET_STAKING_POOL = new PublicKey("91PjLExu9FCLY6KQuvuisEhTEciQyWXJGW9fMKUEHW35");
 export const DEFAULT_DEVNET_RPC_URL = "https://api.devnet.solana.com";
 export const IDL_PATH = path.resolve(__dirname, "../../target/idl/my_first_solana_program.json");
 export const BPF_LOADER_UPGRADEABLE_PROGRAM_ID = new PublicKey(
@@ -21,6 +22,17 @@ export const BPF_LOADER_UPGRADEABLE_PROGRAM_ID = new PublicKey(
 const GREEN_LABEL_CONFIG_DISCRIMINATOR = anchorAccountDiscriminator("GreenLabelConfigV1");
 const SECURITY_GOVERNANCE_CONFIG_V1_DISCRIMINATOR =
   anchorAccountDiscriminator("GovernanceConfigV1");
+const TREASURY_CONFIG_V2_DISCRIMINATOR = anchorAccountDiscriminator("TreasuryConfigV2");
+const TREASURY_USDC_STATE_V2_DISCRIMINATOR = anchorAccountDiscriminator("TreasuryUsdcStateV2");
+const STAKING_POOL_V1_DISCRIMINATOR = anchorAccountDiscriminator("StakingPoolV1");
+
+const TREASURY_CONFIG_V2_SEED = Buffer.from("treasury_config_v2");
+const TREASURY_USDC_STATE_V2_SEED = Buffer.from("treasury_usdc_state_v2");
+const RELIEF_USDC_VAULT_SEED = Buffer.from("relief_usdc_vault");
+const BUYBACK_USDC_VAULT_SEED = Buffer.from("buyback_usdc_vault");
+const BUILDERS_USDC_VAULT_SEED = Buffer.from("builders_usdc_vault");
+const STAKING_USDC_VAULT_SEED = Buffer.from("staking_usdc_vault");
+const VAULT_AUTHORITY_V2_SEED = Buffer.from("vault_authority_v2");
 
 const REQUIRED_GREEN_LABEL_INSTRUCTIONS = [
   "initialize_green_label_config",
@@ -64,12 +76,63 @@ export type SecurityGovernanceConfigV1Decoded = {
   bump: number;
 };
 
+export type TreasuryConfigV2Decoded = {
+  authority: PublicKey;
+  usdcMint: PublicKey;
+  alphaMint: PublicKey;
+  bump: number;
+};
+
+export type TreasuryUsdcStateV2Decoded = {
+  totalUsdcInflow: bigint;
+  reliefUsdcTotal: bigint;
+  buybackUsdcTotal: bigint;
+  buildersUsdcTotal: bigint;
+  stakingUsdcTotal: bigint;
+  bump: number;
+};
+
+export type TreasuryV2CheckResult = {
+  treasuryConfig: TreasuryConfigV2Decoded;
+  treasuryUsdcState: TreasuryUsdcStateV2Decoded;
+  treasuryConfigAddress: PublicKey;
+  treasuryUsdcStateAddress: PublicKey;
+  vaultAuthorityV2: PublicKey;
+  reliefUsdcVault: PublicKey;
+  buybackUsdcVault: PublicKey;
+  buildersUsdcVault: PublicKey;
+  stakingUsdcVault: PublicKey;
+};
+
+export type StakingPoolV1Decoded = {
+  authority: PublicKey;
+  alphaMint: PublicKey;
+  usdcMint: PublicKey;
+  alphaVault: PublicKey;
+  alphaVaultAuthority: PublicKey;
+  stakingUsdcVault: PublicKey;
+  vaultAuthorityV2: PublicKey;
+  totalStakedAlpha: bigint;
+  totalEffectiveWeight: bigint;
+  accUsdcPerWeight: bigint;
+  lastRewardUpdateTs: bigint;
+  lastObservedUsdcBalance: bigint;
+  rewardReleaseBps: number;
+  minClaimUsdc: bigint;
+  vaultAuthorityV2Bump: number;
+  alphaVaultAuthorityBump: number;
+  bump: number;
+};
+
 export type RuntimeConfig = {
   cluster: Cluster;
   rpcUrl: string | null;
   expectedMode: ExpectedMode;
   programId: PublicKey;
   greenLabelConfig: PublicKey;
+  treasuryUsdcStateOverride: PublicKey | null;
+  stakingPool: PublicKey | null;
+  stakingPoolSource: "env" | "default-devnet" | "missing";
 };
 
 export type CheckSummary = {
@@ -88,6 +151,13 @@ export type RuntimeIdl = {
     name: string;
     discriminator?: number[];
   }>;
+};
+
+type ParsedTokenAccountInfo = {
+  mint: string;
+  owner: string;
+  amount: string;
+  uiAmountString?: string;
 };
 
 export function createSummary(): CheckSummary {
@@ -146,6 +216,15 @@ export function resolveRuntimeConfig(summary: CheckSummary): RuntimeConfig {
     DEFAULT_GREEN_LABEL_CONFIG,
     summary,
   );
+  const treasuryUsdcStateOverride = readOptionalPublicKeyEnv(
+    "TREASURY_USDC_STATE_V2",
+    summary,
+  );
+  const { stakingPool, stakingPoolSource } = resolveStakingPoolAddress(
+    cluster,
+    expectedMode,
+    summary,
+  );
 
   return {
     cluster,
@@ -153,6 +232,9 @@ export function resolveRuntimeConfig(summary: CheckSummary): RuntimeConfig {
     expectedMode,
     programId,
     greenLabelConfig,
+    treasuryUsdcStateOverride,
+    stakingPool,
+    stakingPoolSource,
   };
 }
 
@@ -163,6 +245,18 @@ export function printEnvironment(config: RuntimeConfig): void {
   console.log("expected mode:", config.expectedMode);
   console.log("program id:", config.programId.toBase58());
   console.log("green label config PDA:", config.greenLabelConfig.toBase58());
+  console.log(
+    "treasury_usdc_state_v2 source:",
+    config.treasuryUsdcStateOverride
+      ? "TREASURY_USDC_STATE_V2 env"
+      : "GreenLabelConfig.treasury_usdc_state_v2 after decode",
+  );
+  console.log(
+    "treasury_usdc_state_v2 override:",
+    config.treasuryUsdcStateOverride?.toBase58() ?? "<none>",
+  );
+  console.log("staking_pool source:", config.stakingPoolSource);
+  console.log("staking_pool:", config.stakingPool?.toBase58() ?? "<missing>");
   console.log("local IDL path:", IDL_PATH);
   console.log("current time:", new Date().toISOString());
 }
@@ -378,48 +472,164 @@ export async function checkTokenVault(
   expectedMint: PublicKey,
   summary: CheckSummary,
 ): Promise<void> {
-  console.log("");
-  console.log(`=== Token Vault: ${label} ===`);
-  console.log("address:", vaultAddress.toBase58());
-
-  try {
-    const account = await connection.getParsedAccountInfo(vaultAddress, "confirmed");
-    if (!account.value) {
-      addWarn(summary, `${label} token account does not exist or could not be read`);
-      return;
-    }
-
-    console.log("owner program:", account.value.owner.toBase58());
-    console.log("lamports:", account.value.lamports);
-
-    const data = account.value.data;
-    if (typeof data === "string" || !("parsed" in data)) {
-      addWarn(summary, `${label} is not a parsed token account`);
-      return;
-    }
-
-    const parsed = data as ParsedAccountData;
-    const tokenInfo = readParsedTokenInfo(parsed);
-    if (!tokenInfo) {
-      addWarn(summary, `${label} parsed token account shape was not recognized`);
-      return;
-    }
-
-    console.log("mint:", tokenInfo.mint);
-    console.log("token owner/authority:", tokenInfo.owner);
-    console.log("balance:", tokenInfo.amount, "raw /", tokenInfo.uiAmountString ?? "<unknown>", "UI");
-
-    if (tokenInfo.mint === expectedMint.toBase58()) {
-      addPass(summary, `${label} token mint matches GreenLabelConfig usdc_mint`);
-    } else {
-      addFail(
-        summary,
-        `${label} token mint mismatch. Expected ${expectedMint.toBase58()}, got ${tokenInfo.mint}`,
-      );
-    }
-  } catch (error) {
-    addWarn(summary, `${label} parsed token account read failed: ${formatError(error)}`);
+  const tokenInfo = await readParsedTokenAccount(
+    connection,
+    label,
+    vaultAddress,
+    summary,
+    "warn",
+  );
+  if (!tokenInfo) {
+    return;
   }
+
+  if (tokenInfo.mint === expectedMint.toBase58()) {
+    addPass(summary, `${label} token mint matches GreenLabelConfig usdc_mint`);
+  } else {
+    addFail(
+      summary,
+      `${label} token mint mismatch. Expected ${expectedMint.toBase58()}, got ${tokenInfo.mint}`,
+    );
+  }
+}
+
+export async function checkTreasuryV2(
+  connection: Connection,
+  programId: PublicKey,
+  greenLabelConfig: GreenLabelConfigSummary,
+  treasuryUsdcStateOverride: PublicKey | null,
+  expectedMode: ExpectedMode,
+  summary: CheckSummary,
+): Promise<TreasuryV2CheckResult | null> {
+  console.log("");
+  console.log("=== Treasury V2 ===");
+
+  const treasuryConfigAddress = findPda(TREASURY_CONFIG_V2_SEED, programId);
+  const expectedTreasuryUsdcStateAddress = findPda(TREASURY_USDC_STATE_V2_SEED, programId);
+  const treasuryUsdcStateAddress =
+    treasuryUsdcStateOverride ?? greenLabelConfig.treasuryUsdcStateV2;
+  const treasuryUsdcStateSource = treasuryUsdcStateOverride
+    ? "TREASURY_USDC_STATE_V2 env"
+    : "GreenLabelConfig.treasury_usdc_state_v2";
+  const vaultAuthorityV2 = findPda(VAULT_AUTHORITY_V2_SEED, programId);
+  const reliefUsdcVault = findPda(RELIEF_USDC_VAULT_SEED, programId);
+  const buybackUsdcVault = findPda(BUYBACK_USDC_VAULT_SEED, programId);
+  const buildersUsdcVault = findPda(BUILDERS_USDC_VAULT_SEED, programId);
+  const stakingUsdcVault = findPda(STAKING_USDC_VAULT_SEED, programId);
+
+  console.log("treasury_config_v2 PDA:", treasuryConfigAddress.toBase58());
+  console.log("treasury_usdc_state_v2:", treasuryUsdcStateAddress.toBase58());
+  console.log("treasury_usdc_state_v2 source:", treasuryUsdcStateSource);
+  console.log("expected treasury_usdc_state_v2 PDA:", expectedTreasuryUsdcStateAddress.toBase58());
+  console.log("vault_authority_v2 PDA:", vaultAuthorityV2.toBase58());
+
+  if (treasuryUsdcStateAddress.equals(expectedTreasuryUsdcStateAddress)) {
+    addPass(summary, "Treasury USDC state matches expected PDA seed");
+  } else {
+    addWarn(summary, "Treasury USDC state does not match expected PDA seed");
+  }
+
+  const treasuryConfig = await readTreasuryConfigV2Account(
+    connection,
+    treasuryConfigAddress,
+    programId,
+    summary,
+  );
+  const treasuryUsdcState = await readTreasuryUsdcStateV2Account(
+    connection,
+    treasuryUsdcStateAddress,
+    programId,
+    summary,
+  );
+
+  if (!treasuryConfig || !treasuryUsdcState) {
+    addFail(summary, "Treasury V2 decode unavailable; vault checks skipped");
+    return null;
+  }
+
+  if (treasuryConfig.usdcMint.equals(greenLabelConfig.usdcMint)) {
+    addPass(summary, "Treasury V2 usdc_mint matches GreenLabelConfig usdc_mint");
+  } else {
+    addFail(
+      summary,
+      `Treasury V2 usdc_mint mismatch. GreenLabelConfig=${greenLabelConfig.usdcMint.toBase58()} Treasury=${treasuryConfig.usdcMint.toBase58()}`,
+    );
+  }
+
+  const result: TreasuryV2CheckResult = {
+    treasuryConfig,
+    treasuryUsdcState,
+    treasuryConfigAddress,
+    treasuryUsdcStateAddress,
+    vaultAuthorityV2,
+    reliefUsdcVault,
+    buybackUsdcVault,
+    buildersUsdcVault,
+    stakingUsdcVault,
+  };
+
+  await checkTreasuryV2Vaults(connection, result, expectedMode, summary);
+  checkTreasuryV2Policy(result, expectedMode, summary);
+
+  return result;
+}
+
+export async function checkStakingPoolV1(
+  connection: Connection,
+  stakingPoolAddress: PublicKey | null,
+  expectedMode: ExpectedMode,
+  programId: PublicKey,
+  summary: CheckSummary,
+): Promise<StakingPoolV1Decoded | null> {
+  console.log("");
+  console.log("=== Staking Pool V1 ===");
+
+  if (!stakingPoolAddress) {
+    addFail(summary, "Staking pool address is missing");
+    return null;
+  }
+
+  console.log("staking_pool:", stakingPoolAddress.toBase58());
+
+  const info = await connection.getAccountInfo(stakingPoolAddress, "confirmed");
+  if (!info) {
+    addFail(summary, `StakingPoolV1 account does not exist: ${stakingPoolAddress.toBase58()}`);
+    return null;
+  }
+
+  addPass(summary, "StakingPoolV1 account exists");
+  console.log("owner:", info.owner.toBase58());
+  console.log("lamports:", info.lamports);
+  console.log("data length:", info.data.length);
+
+  if (info.owner.equals(programId)) {
+    addPass(summary, "StakingPoolV1 owner matches Program ID");
+  } else {
+    addFail(summary, `StakingPoolV1 owner mismatch: ${info.owner.toBase58()}`);
+  }
+
+  if (info.data.subarray(0, 8).equals(STAKING_POOL_V1_DISCRIMINATOR)) {
+    addPass(summary, "StakingPoolV1 discriminator matches");
+  } else {
+    addFail(summary, "StakingPoolV1 discriminator mismatch");
+    return null;
+  }
+
+  let pool: StakingPoolV1Decoded;
+  try {
+    pool = decodeStakingPoolV1(info.data);
+  } catch (error) {
+    addFail(summary, `StakingPoolV1 decode failed: ${formatError(error)}`);
+    return null;
+  }
+
+  addPass(summary, "Staking pool decoded successfully");
+  printStakingPoolV1(pool);
+
+  await checkStakingVaults(connection, pool, expectedMode, summary);
+  checkStakingPolicy(pool, expectedMode, summary);
+
+  return pool;
 }
 
 export async function checkSecurityGovernanceConfig(
@@ -591,6 +801,120 @@ function decodeSecurityGovernanceConfigV1(data: Buffer): SecurityGovernanceConfi
   };
 }
 
+function decodeTreasuryConfigV2(data: Buffer): TreasuryConfigV2Decoded {
+  const minimumLength = 8 + 32 + 32 + 32 + 1;
+  if (data.length < minimumLength) {
+    throw new Error(`account data too short. Expected at least ${minimumLength}, got ${data.length}`);
+  }
+
+  let offset = 8;
+  const authority = readPubkey(data, offset);
+  offset += 32;
+  const usdcMint = readPubkey(data, offset);
+  offset += 32;
+  const alphaMint = readPubkey(data, offset);
+  offset += 32;
+  const bump = data.readUInt8(offset);
+
+  return {
+    authority,
+    usdcMint,
+    alphaMint,
+    bump,
+  };
+}
+
+function decodeTreasuryUsdcStateV2(data: Buffer): TreasuryUsdcStateV2Decoded {
+  const minimumLength = 8 + (8 * 5) + 1;
+  if (data.length < minimumLength) {
+    throw new Error(`account data too short. Expected at least ${minimumLength}, got ${data.length}`);
+  }
+
+  let offset = 8;
+  const totalUsdcInflow = data.readBigUInt64LE(offset);
+  offset += 8;
+  const reliefUsdcTotal = data.readBigUInt64LE(offset);
+  offset += 8;
+  const buybackUsdcTotal = data.readBigUInt64LE(offset);
+  offset += 8;
+  const buildersUsdcTotal = data.readBigUInt64LE(offset);
+  offset += 8;
+  const stakingUsdcTotal = data.readBigUInt64LE(offset);
+  offset += 8;
+  const bump = data.readUInt8(offset);
+
+  return {
+    totalUsdcInflow,
+    reliefUsdcTotal,
+    buybackUsdcTotal,
+    buildersUsdcTotal,
+    stakingUsdcTotal,
+    bump,
+  };
+}
+
+function decodeStakingPoolV1(data: Buffer): StakingPoolV1Decoded {
+  const minimumLength = 8 + (32 * 7) + 8 + 16 + 16 + 8 + 8 + 2 + 8 + 1 + 1 + 1;
+  if (data.length < minimumLength) {
+    throw new Error(`account data too short. Expected at least ${minimumLength}, got ${data.length}`);
+  }
+
+  let offset = 8;
+  const authority = readPubkey(data, offset);
+  offset += 32;
+  const alphaMint = readPubkey(data, offset);
+  offset += 32;
+  const usdcMint = readPubkey(data, offset);
+  offset += 32;
+  const alphaVault = readPubkey(data, offset);
+  offset += 32;
+  const alphaVaultAuthority = readPubkey(data, offset);
+  offset += 32;
+  const stakingUsdcVault = readPubkey(data, offset);
+  offset += 32;
+  const vaultAuthorityV2 = readPubkey(data, offset);
+  offset += 32;
+  const totalStakedAlpha = data.readBigUInt64LE(offset);
+  offset += 8;
+  const totalEffectiveWeight = readBigUInt128LE(data, offset);
+  offset += 16;
+  const accUsdcPerWeight = readBigUInt128LE(data, offset);
+  offset += 16;
+  const lastRewardUpdateTs = data.readBigInt64LE(offset);
+  offset += 8;
+  const lastObservedUsdcBalance = data.readBigUInt64LE(offset);
+  offset += 8;
+  const rewardReleaseBps = data.readUInt16LE(offset);
+  offset += 2;
+  const minClaimUsdc = data.readBigUInt64LE(offset);
+  offset += 8;
+  const vaultAuthorityV2Bump = data.readUInt8(offset);
+  offset += 1;
+  const alphaVaultAuthorityBump = data.readUInt8(offset);
+  offset += 1;
+  const bump = data.readUInt8(offset);
+
+  return {
+    authority,
+    alphaMint,
+    usdcMint,
+    alphaVault,
+    alphaVaultAuthority,
+    stakingUsdcVault,
+    vaultAuthorityV2,
+    totalStakedAlpha,
+    totalEffectiveWeight,
+    accUsdcPerWeight,
+    lastRewardUpdateTs,
+    lastObservedUsdcBalance,
+    rewardReleaseBps,
+    minClaimUsdc,
+    vaultAuthorityV2Bump,
+    alphaVaultAuthorityBump,
+    bump,
+  };
+}
+
 function readPubkey(data: Buffer, offset: number): PublicKey {
   return new PublicKey(data.subarray(offset, offset + 32));
 }
@@ -624,6 +948,48 @@ function printSecurityGovernanceConfig(config: SecurityGovernanceConfigV1Decoded
   console.log("emergency_guardian:", config.emergencyGuardian.toBase58());
   console.log("is_paused:", config.isPaused);
   console.log("bump:", config.bump);
+}
+
+function printTreasuryConfigV2(config: TreasuryConfigV2Decoded): void {
+  console.log("treasury_config.authority:", config.authority.toBase58());
+  console.log("treasury_config.usdc_mint:", config.usdcMint.toBase58());
+  console.log("treasury_config.alpha_mint:", config.alphaMint.toBase58());
+  console.log("treasury_config.bump:", config.bump);
+}
+
+function printTreasuryUsdcStateV2(state: TreasuryUsdcStateV2Decoded): void {
+  console.log("total_usdc_inflow:", `${formatUsdc(state.totalUsdcInflow)} USDC`);
+  console.log("relief_usdc_total:", `${formatUsdc(state.reliefUsdcTotal)} USDC`);
+  console.log("buyback_usdc_total:", `${formatUsdc(state.buybackUsdcTotal)} USDC`);
+  console.log("builders_usdc_total:", `${formatUsdc(state.buildersUsdcTotal)} USDC`);
+  console.log("staking_usdc_total:", `${formatUsdc(state.stakingUsdcTotal)} USDC`);
+  console.log("treasury_usdc_state.bump:", state.bump);
+}
+
+function printStakingPoolV1(pool: StakingPoolV1Decoded): void {
+  console.log("authority:", pool.authority.toBase58());
+  console.log("alpha_mint:", pool.alphaMint.toBase58());
+  console.log("usdc_mint:", pool.usdcMint.toBase58());
+  console.log("alpha_vault:", pool.alphaVault.toBase58());
+  console.log("alpha_vault_authority:", pool.alphaVaultAuthority.toBase58());
+  console.log("staking_usdc_vault:", pool.stakingUsdcVault.toBase58());
+  console.log("vault_authority_v2:", pool.vaultAuthorityV2.toBase58());
+  console.log("total_staked_alpha:", pool.totalStakedAlpha.toString());
+  console.log("total_effective_weight:", pool.totalEffectiveWeight.toString());
+  console.log("acc_usdc_per_weight:", pool.accUsdcPerWeight.toString());
+  console.log(
+    "last_reward_update_ts:",
+    `${pool.lastRewardUpdateTs.toString()} (${formatUnixTimestamp(pool.lastRewardUpdateTs)})`,
+  );
+  console.log(
+    "last_observed_usdc_balance:",
+    `${formatUsdc(pool.lastObservedUsdcBalance)} USDC`,
+  );
+  console.log("reward_release_bps:", pool.rewardReleaseBps);
+  console.log("min_claim_usdc:", `${formatUsdc(pool.minClaimUsdc)} USDC`);
+  console.log("vault_authority_v2_bump:", pool.vaultAuthorityV2Bump);
+  console.log("alpha_vault_authority_bump:", pool.alphaVaultAuthorityBump);
+  console.log("bump:", pool.bump);
 }
 
 function checkSecurityGovernancePolicy(
@@ -676,6 +1042,230 @@ function checkSecurityGovernancePolicy(
   );
 }
 
+async function readTreasuryConfigV2Account(
+  connection: Connection,
+  address: PublicKey,
+  programId: PublicKey,
+  summary: CheckSummary,
+): Promise<TreasuryConfigV2Decoded | null> {
+  console.log("");
+  console.log("=== TreasuryConfigV2 ===");
+  console.log("address:", address.toBase58());
+
+  const info = await connection.getAccountInfo(address, "confirmed");
+  if (!info) {
+    addFail(summary, "TreasuryConfigV2 account does not exist");
+    return null;
+  }
+
+  addPass(summary, "TreasuryConfigV2 account exists");
+  console.log("owner:", info.owner.toBase58());
+  console.log("lamports:", info.lamports);
+  console.log("data length:", info.data.length);
+
+  if (info.owner.equals(programId)) {
+    addPass(summary, "TreasuryConfigV2 owner matches Program ID");
+  } else {
+    addFail(summary, `TreasuryConfigV2 owner mismatch: ${info.owner.toBase58()}`);
+  }
+
+  if (info.data.subarray(0, 8).equals(TREASURY_CONFIG_V2_DISCRIMINATOR)) {
+    addPass(summary, "TreasuryConfigV2 discriminator matches");
+  } else {
+    addFail(summary, "TreasuryConfigV2 discriminator mismatch");
+    return null;
+  }
+
+  try {
+    const config = decodeTreasuryConfigV2(info.data);
+    addPass(summary, "TreasuryConfigV2 decoded successfully");
+    printTreasuryConfigV2(config);
+    return config;
+  } catch (error) {
+    addFail(summary, `TreasuryConfigV2 decode failed: ${formatError(error)}`);
+    return null;
+  }
+}
+
+async function readTreasuryUsdcStateV2Account(
+  connection: Connection,
+  address: PublicKey,
+  programId: PublicKey,
+  summary: CheckSummary,
+): Promise<TreasuryUsdcStateV2Decoded | null> {
+  console.log("");
+  console.log("=== TreasuryUsdcStateV2 ===");
+  console.log("address:", address.toBase58());
+
+  const info = await connection.getAccountInfo(address, "confirmed");
+  if (!info) {
+    addFail(summary, "TreasuryUsdcStateV2 account does not exist");
+    return null;
+  }
+
+  addPass(summary, "TreasuryUsdcStateV2 account exists");
+  console.log("owner:", info.owner.toBase58());
+  console.log("lamports:", info.lamports);
+  console.log("data length:", info.data.length);
+
+  if (info.owner.equals(programId)) {
+    addPass(summary, "TreasuryUsdcStateV2 owner matches Program ID");
+  } else {
+    addFail(summary, `TreasuryUsdcStateV2 owner mismatch: ${info.owner.toBase58()}`);
+  }
+
+  if (info.data.subarray(0, 8).equals(TREASURY_USDC_STATE_V2_DISCRIMINATOR)) {
+    addPass(summary, "TreasuryUsdcStateV2 discriminator matches");
+  } else {
+    addFail(summary, "TreasuryUsdcStateV2 discriminator mismatch");
+    return null;
+  }
+
+  try {
+    const state = decodeTreasuryUsdcStateV2(info.data);
+    addPass(summary, "Treasury V2 decoded successfully");
+    printTreasuryUsdcStateV2(state);
+    return state;
+  } catch (error) {
+    addFail(summary, `TreasuryUsdcStateV2 decode failed: ${formatError(error)}`);
+    return null;
+  }
+}
+
+async function checkTreasuryV2Vaults(
+  connection: Connection,
+  treasury: TreasuryV2CheckResult,
+  expectedMode: ExpectedMode,
+  summary: CheckSummary,
+): Promise<void> {
+  console.log("");
+  console.log("=== Treasury V2 Vaults ===");
+
+  const checks = [
+    ["relief_usdc_vault", treasury.reliefUsdcVault],
+    ["buyback_usdc_vault", treasury.buybackUsdcVault],
+    ["builders_usdc_vault", treasury.buildersUsdcVault],
+    ["staking_usdc_vault", treasury.stakingUsdcVault],
+  ] as const;
+
+  let matchingMintCount = 0;
+  for (const [label, address] of checks) {
+    const ok = await checkExpectedTokenVault(
+      connection,
+      label,
+      address,
+      treasury.treasuryConfig.usdcMint,
+      treasury.vaultAuthorityV2,
+      summary,
+      "fail",
+    );
+    if (ok) {
+      matchingMintCount += 1;
+    }
+  }
+
+  if (matchingMintCount === checks.length) {
+    addPass(summary, "Treasury vault mints match USDC mint");
+  }
+
+  if (expectedMode === "devnet-test") {
+    addWarn(summary, "Devnet Treasury vault balances are test balances");
+  }
+}
+
+function checkTreasuryV2Policy(
+  treasury: TreasuryV2CheckResult,
+  expectedMode: ExpectedMode,
+  summary: CheckSummary,
+): void {
+  console.log("");
+  console.log("=== Treasury V2 Policy ===");
+
+  if (expectedMode === "mainnet-production") {
+    addManualReview(
+      summary,
+      `MANUAL_REVIEW_REQUIRED: Confirm Mainnet USDC mint for Treasury V2: ${treasury.treasuryConfig.usdcMint.toBase58()}`,
+    );
+    addManualReview(
+      summary,
+      `MANUAL_REVIEW_REQUIRED: Confirm Treasury V2 vault authority is a PDA/governed authority: ${treasury.vaultAuthorityV2.toBase58()}`,
+    );
+    addManualReview(
+      summary,
+      `MANUAL_REVIEW_REQUIRED: Confirm Treasury V2 authority governance: ${treasury.treasuryConfig.authority.toBase58()}`,
+    );
+  } else {
+    addWarn(summary, "Devnet Treasury V2 authority and mint are test-environment assumptions");
+  }
+}
+
+async function checkStakingVaults(
+  connection: Connection,
+  pool: StakingPoolV1Decoded,
+  expectedMode: ExpectedMode,
+  summary: CheckSummary,
+): Promise<void> {
+  console.log("");
+  console.log("=== Staking V1 Vaults ===");
+
+  const alphaOk = await checkExpectedTokenVault(
+    connection,
+    "alpha_vault",
+    pool.alphaVault,
+    pool.alphaMint,
+    pool.alphaVaultAuthority,
+    summary,
+    "fail",
+  );
+  const rewardsOk = await checkExpectedTokenVault(
+    connection,
+    "staking_usdc_vault",
+    pool.stakingUsdcVault,
+    pool.usdcMint,
+    pool.vaultAuthorityV2,
+    summary,
+    "fail",
+  );
+
+  if (alphaOk && rewardsOk) {
+    addPass(summary, "Staking vault mints match expected mints");
+  }
+
+  if (expectedMode === "devnet-test") {
+    addWarn(summary, "Devnet Staking vault balances are test balances and may be zero");
+  }
+}
+
+function checkStakingPolicy(
+  pool: StakingPoolV1Decoded,
+  expectedMode: ExpectedMode,
+  summary: CheckSummary,
+): void {
+  console.log("");
+  console.log("=== Staking V1 Policy ===");
+
+  if (expectedMode === "mainnet-production") {
+    addManualReview(
+      summary,
+      `MANUAL_REVIEW_REQUIRED: Confirm Mainnet ALPHA mint for Staking V1: ${pool.alphaMint.toBase58()}`,
+    );
+    addManualReview(
+      summary,
+      `MANUAL_REVIEW_REQUIRED: Confirm Staking V1 USDC rewards mint: ${pool.usdcMint.toBase58()}`,
+    );
+    addManualReview(
+      summary,
+      `MANUAL_REVIEW_REQUIRED: Confirm Staking V1 authority governance: ${pool.authority.toBase58()}`,
+    );
+    addManualReview(
+      summary,
+      `MANUAL_REVIEW_REQUIRED: Confirm Staking V1 vault authorities are expected PDAs: ${pool.alphaVaultAuthority.toBase58()} / ${pool.vaultAuthorityV2.toBase58()}`,
+    );
+  } else {
+    addWarn(summary, "Devnet Staking V1 authority and mints are test-environment assumptions");
+  }
+}
+
 function formatSecondsWithReadable(seconds: bigint): string {
   const sign = seconds < 0n ? "-" : "";
   const absolute = seconds < 0n ? -seconds : seconds;
@@ -704,6 +1294,117 @@ function parseProgramDataAddress(data: Buffer): PublicKey | null {
     return null;
   }
   return new PublicKey(data.subarray(4, 36));
+}
+
+function findPda(seed: Buffer, programId: PublicKey): PublicKey {
+  const [address] = PublicKey.findProgramAddressSync([seed], programId);
+  return address;
+}
+
+function readBigUInt128LE(data: Buffer, offset: number): bigint {
+  const low = data.readBigUInt64LE(offset);
+  const high = data.readBigUInt64LE(offset + 8);
+  return low + (high << 64n);
+}
+
+async function checkExpectedTokenVault(
+  connection: Connection,
+  label: string,
+  vaultAddress: PublicKey,
+  expectedMint: PublicKey,
+  expectedTokenOwner: PublicKey,
+  summary: CheckSummary,
+  missingSeverity: "warn" | "fail",
+): Promise<boolean> {
+  const tokenInfo = await readParsedTokenAccount(
+    connection,
+    label,
+    vaultAddress,
+    summary,
+    missingSeverity,
+  );
+  if (!tokenInfo) {
+    return false;
+  }
+
+  let ok = true;
+  if (tokenInfo.mint === expectedMint.toBase58()) {
+    addPass(summary, `${label} token mint matches expected mint`);
+  } else {
+    addFail(
+      summary,
+      `${label} token mint mismatch. Expected ${expectedMint.toBase58()}, got ${tokenInfo.mint}`,
+    );
+    ok = false;
+  }
+
+  if (tokenInfo.owner === expectedTokenOwner.toBase58()) {
+    addPass(summary, `${label} token owner/authority matches expected vault authority`);
+  } else {
+    addFail(
+      summary,
+      `${label} token owner/authority mismatch. Expected ${expectedTokenOwner.toBase58()}, got ${tokenInfo.owner}`,
+    );
+    ok = false;
+  }
+
+  return ok;
+}
+
+async function readParsedTokenAccount(
+  connection: Connection,
+  label: string,
+  vaultAddress: PublicKey,
+  summary: CheckSummary,
+  missingSeverity: "warn" | "fail",
+): Promise<ParsedTokenAccountInfo | null> {
+  console.log("");
+  console.log(`=== Token Vault: ${label} ===`);
+  console.log("address:", vaultAddress.toBase58());
+
+  try {
+    const account = await connection.getParsedAccountInfo(vaultAddress, "confirmed");
+    if (!account.value) {
+      addTokenAccountIssue(summary, missingSeverity, `${label} token account does not exist or could not be read`);
+      return null;
+    }
+
+    console.log("owner program:", account.value.owner.toBase58());
+    console.log("lamports:", account.value.lamports);
+
+    const data = account.value.data;
+    if (typeof data === "string" || !("parsed" in data)) {
+      addTokenAccountIssue(summary, missingSeverity, `${label} is not a parsed token account`);
+      return null;
+    }
+
+    const parsed = data as ParsedAccountData;
+    const tokenInfo = readParsedTokenInfo(parsed);
+    if (!tokenInfo) {
+      addTokenAccountIssue(summary, missingSeverity, `${label} parsed token account shape was not recognized`);
+      return null;
+    }
+
+    console.log("mint:", tokenInfo.mint);
+    console.log("token owner/authority:", tokenInfo.owner);
+    console.log("balance:", tokenInfo.amount, "raw /", tokenInfo.uiAmountString ?? "<unknown>", "UI");
+    return tokenInfo;
+  } catch (error) {
+    addTokenAccountIssue(summary, missingSeverity, `${label} parsed token account read failed: ${formatError(error)}`);
+    return null;
+  }
+}
+
+function addTokenAccountIssue(
+  summary: CheckSummary,
+  severity: "warn" | "fail",
+  message: string,
+): void {
+  if (severity === "fail") {
+    addFail(summary, message);
+  } else {
+    addWarn(summary, message);
+  }
 }
 
 function readClusterEnv(value: string | undefined, fallback: Cluster, summary: CheckSummary): Cluster {
@@ -758,6 +1459,49 @@ function readPublicKeyEnv(name: string, fallback: PublicKey, summary: CheckSumma
   }
 }
 
+function readOptionalPublicKeyEnv(name: string, summary: CheckSummary): PublicKey | null {
+  const value = process.env[name];
+  if (!value) {
+    return null;
+  }
+  try {
+    return new PublicKey(value);
+  } catch {
+    addFail(summary, `${name} is not a valid public key: ${value}`);
+    return null;
+  }
+}
+
+function resolveStakingPoolAddress(
+  cluster: Cluster,
+  expectedMode: ExpectedMode,
+  summary: CheckSummary,
+): {
+  stakingPool: PublicKey | null;
+  stakingPoolSource: RuntimeConfig["stakingPoolSource"];
+} {
+  const envValue = process.env.STAKING_POOL;
+  if (envValue) {
+    return {
+      stakingPool: readPublicKeyEnv("STAKING_POOL", DEFAULT_DEVNET_STAKING_POOL, summary),
+      stakingPoolSource: "env",
+    };
+  }
+
+  if (cluster === "mainnet-beta" || expectedMode === "mainnet-production") {
+    addFail(summary, "Mainnet requires explicit STAKING_POOL");
+    return {
+      stakingPool: null,
+      stakingPoolSource: "missing",
+    };
+  }
+
+  return {
+    stakingPool: DEFAULT_DEVNET_STAKING_POOL,
+    stakingPoolSource: "default-devnet",
+  };
+}
+
 function printSummaryGroup(title: string, items: string[]): void {
   console.log(`${title}:`);
   if (items.length === 0) {
@@ -769,12 +1513,7 @@ function printSummaryGroup(title: string, items: string[]): void {
   }
 }
 
-function readParsedTokenInfo(parsed: ParsedAccountData): {
-  mint: string;
-  owner: string;
-  amount: string;
-  uiAmountString?: string;
-} | null {
+function readParsedTokenInfo(parsed: ParsedAccountData): ParsedTokenAccountInfo | null {
   const info = parsed.parsed?.info as unknown;
   if (!info || typeof info !== "object") {
     return null;
@@ -809,4 +1548,17 @@ function readParsedTokenInfo(parsed: ParsedAccountData): {
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function formatUnixTimestamp(timestamp: bigint): string {
+  if (timestamp <= 0n) {
+    return "unset";
+  }
+
+  const milliseconds = Number(timestamp) * 1000;
+  if (!Number.isSafeInteger(milliseconds)) {
+    return "out of JavaScript Date range";
+  }
+
+  return new Date(milliseconds).toISOString();
 }

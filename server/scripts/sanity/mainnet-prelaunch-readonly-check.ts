@@ -8,7 +8,9 @@ import {
   checkParameterPolicy,
   checkProgramAccount,
   checkSecurityGovernanceConfig,
+  checkStakingPoolV1,
   checkTokenVault,
+  checkTreasuryV2,
   createSummary,
   printEnvironment,
   printSummary,
@@ -48,6 +50,14 @@ async function main(): Promise<void> {
   }
 
   checkParameterPolicy(greenLabelConfig, runtime.expectedMode, summary);
+  await checkTreasuryV2(
+    connection,
+    runtime.programId,
+    greenLabelConfig,
+    runtime.treasuryUsdcStateOverride,
+    runtime.expectedMode,
+    summary,
+  );
   await checkTokenVault(
     connection,
     "base_bond_treasury_vault",
@@ -70,6 +80,13 @@ async function main(): Promise<void> {
     summary,
   );
   checkAuthorityPolicy(greenLabelConfig, runtime.expectedMode, summary);
+  await checkStakingPoolV1(
+    connection,
+    runtime.stakingPool,
+    runtime.expectedMode,
+    runtime.programId,
+    summary,
+  );
 
   printSummary(summary);
   process.exitCode = summary.fail.length > 0 ? 1 : 0;

@@ -77,8 +77,13 @@ Before Mainnet, review `docs/mainnet-authority-and-parameter-migration-plan.md`.
 - `mainnet:prelaunch:sanity` runs the Mainnet read-only prelaunch sanity check.
 - These scripts only read local files and on-chain accounts; they must not send transactions.
 - The sanity check now raw decodes Security Layer `GovernanceConfigV1`.
+- The sanity check also raw decodes Treasury V2 `TreasuryConfigV2` / `TreasuryUsdcStateV2` and Staking V1 `StakingPoolV1`.
 - Mainnet launch requires manual confirmation of Security governance authority and emergency guardian control.
 - If a Security governance timelock delay field exists and is `0`, that is a Mainnet blocker.
+- Mainnet launch requires manual confirmation of Treasury four-pool vaults, USDC mint, and vault authority.
+- Mainnet launch requires manual confirmation of staking pool, ALPHA mint, USDC rewards vault, and staking authority.
+- `mainnet:prelaunch:sanity` must receive an explicit `STAKING_POOL`; missing `STAKING_POOL` is a blocker.
+- Any Treasury / Staking decoder, vault, mint, or owner check `FAIL` blocks Mainnet launch.
 - Mainnet launch requires `mainnet:prelaunch:sanity` to pass before any production action.
 - Any `FAIL` result blocks Mainnet launch.
 - Any `MANUAL_REVIEW` result must be manually confirmed before Mainnet launch.
