@@ -94,7 +94,13 @@ Before Mainnet, review `docs/mainnet-authority-and-parameter-migration-plan.md`.
 - The report records Devnet health only and cannot replace Mainnet sanity.
 - Before Mainnet, `mainnet:prelaunch:sanity` must still be run against the intended Mainnet Program ID, config, vaults, and staking pool.
 
-## 12. Funds-Flow Checks
+## 12. Mainnet Go/No-Go Checklist
+
+- Review `docs/mainnet-go-no-go-checklist.md` as the final Mainnet launch decision entry point.
+- The Go/No-Go checklist summarizes required evidence across technical checks, authority migration, sanity checks, frontend launch guard, and operations.
+- If any blocker remains unresolved, the Mainnet decision must be NO-GO.
+
+## 13. Funds-Flow Checks
 
 - Treasury V2 four-pool addresses must be confirmed.
 - Green Label `base_bond_treasury_vault` must be confirmed.
@@ -102,7 +108,7 @@ Before Mainnet, review `docs/mainnet-authority-and-parameter-migration-plan.md`.
 - Staking rewards vault must be confirmed.
 - Every vault owner / mint / authority must be checked.
 
-## 13. Tests That Must Not Be Skipped
+## 14. Tests That Must Not Be Skipped
 
 - `cargo test`
 - `anchor build --ignore-keys`
@@ -112,7 +118,7 @@ Before Mainnet, review `docs/mainnet-authority-and-parameter-migration-plan.md`.
 - Green Label refund / slash read-only verification
 - Treasury / Staking read-only verification
 
-## 14. Mainnet Blockers
+## 15. Mainnet Blockers
 
 Any one of the following unresolved items blocks Mainnet launch:
 
