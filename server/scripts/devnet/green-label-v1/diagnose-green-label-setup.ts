@@ -18,6 +18,7 @@ import {
   loadIdl,
   loadProgram,
   loadProvider,
+  printDevnetScriptHeader,
   readPublicKeyEnv,
 } from "./common";
 
@@ -497,13 +498,18 @@ async function main(): Promise<void> {
 
   try {
     provider = loadProvider();
+    printDevnetScriptHeader({
+      scriptName: "diagnose-green-label-setup",
+      provider,
+      sendsTransactions: false,
+    });
     console.log("provider publicKey:", provider.wallet.publicKey.toBase58());
     console.log(
       "solana RPC endpoint:",
       (provider.connection as unknown as { rpcEndpoint?: string }).rpcEndpoint ?? "<unknown>",
     );
   } catch (error) {
-    console.log("provider load failed:", errorMessage(error));
+    throw new Error(`provider load failed: ${errorMessage(error)}`);
   }
 
   console.log("Program ID:", PROGRAM_ID.toBase58());

@@ -6,8 +6,8 @@ import {
   fetchGreenLabelConfig,
   i64Buffer,
   instructionDiscriminator,
-  isDryRun,
   loadProvider,
+  printDevnetScriptHeader,
   sendAndConfirmLabeled,
 } from "./common";
 
@@ -47,13 +47,15 @@ function buildUpdateGreenLabelWindowsIx(args: {
 }
 
 async function main(): Promise<void> {
-  console.log("Green Label V1 Devnet script: update-green-label-windows");
-  console.log("WARNING: This script is for Devnet only.");
+  const provider = loadProvider();
+  printDevnetScriptHeader({
+    scriptName: "update-green-label-windows",
+    provider,
+    sendsTransactions: true,
+  });
   console.log("WARNING: It only updates GreenLabelConfigV1 time windows.");
   console.log("WARNING: It does not move funds, modify projects/disputes, or run refund/slash.");
-  console.log("DRY_RUN:", String(isDryRun()));
 
-  const provider = loadProvider();
   const authority = provider.wallet.publicKey;
   const config = await fetchGreenLabelConfig(provider);
   if (!config) {

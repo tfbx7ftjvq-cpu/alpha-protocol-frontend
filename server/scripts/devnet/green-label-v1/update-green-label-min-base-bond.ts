@@ -6,8 +6,8 @@ import {
   fetchGreenLabelConfig,
   formatUsdc,
   instructionDiscriminator,
-  isDryRun,
   loadProvider,
+  printDevnetScriptHeader,
   readUsdcAmountEnv,
   sendAndConfirmLabeled,
   u64Buffer,
@@ -31,13 +31,15 @@ function buildUpdateGreenLabelMinBaseBondIx(args: {
 }
 
 async function main(): Promise<void> {
-  console.log("Green Label V1 Devnet script: update-green-label-min-base-bond");
-  console.log("WARNING: This script is for Devnet only.");
+  const provider = loadProvider();
+  printDevnetScriptHeader({
+    scriptName: "update-green-label-min-base-bond",
+    provider,
+    sendsTransactions: true,
+  });
   console.log("WARNING: It only updates GreenLabelConfigV1 min_base_bond_usdc.");
   console.log("WARNING: It does not mint USDC, transfer tokens, or run refund/slash.");
-  console.log("DRY_RUN:", String(isDryRun()));
 
-  const provider = loadProvider();
   const authority = provider.wallet.publicKey;
   const config = await fetchGreenLabelConfig(provider);
   if (!config) {

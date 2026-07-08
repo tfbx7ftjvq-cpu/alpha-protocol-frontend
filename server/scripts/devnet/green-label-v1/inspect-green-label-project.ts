@@ -7,7 +7,7 @@ import {
   fetchGreenLabelProject,
   getTokenBalance,
   loadProvider,
-  printDevnetRiskBanner,
+  printDevnetScriptHeader,
   printGreenLabelDispute,
   printGreenLabelProject,
   readU64Env,
@@ -15,9 +15,13 @@ import {
 } from "./common";
 
 async function main(): Promise<void> {
-  printDevnetRiskBanner("inspect-green-label-project");
-
   const provider = loadProvider();
+  printDevnetScriptHeader({
+    scriptName: "inspect-green-label-project",
+    provider,
+    sendsTransactions: false,
+  });
+
   const projectId = readU64Env("PROJECT_ID", 0n);
   if (projectId === 0n) {
     throw new Error("PROJECT_ID is required and must be greater than 0.");

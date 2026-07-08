@@ -44,21 +44,30 @@ Mainnet must restore and confirm the production parameters before launch:
 - Mainnet scripts must force-print cluster / program id / authority / config parameters.
 - Mainnet scripts must include a human confirmation mechanism to prevent accidental transactions.
 
-## 6. Frontend Launch Protection
+## 6. Devnet Script Isolation Status
+
+- Current Devnet scripts use the `devnet:...` npm script namespace.
+- Green Label Devnet scripts include a devnet-only guard.
+- Green Label Devnet scripts reject `mainnet` / `mainnet-beta` endpoints.
+- Future Mainnet scripts must be separately named as `mainnet:...`.
+- Mainnet scripts must include an explicit human confirmation mechanism.
+- Devnet `1 USDC / 30s / 30s / 30s` parameters must never be reused as Mainnet default parameters.
+
+## 7. Frontend Launch Protection
 
 - The frontend must clearly display the current cluster.
 - Mainnet mode must not present Devnet test parameters as production rules.
 - Green Label pages must display: not investment advice, not an insurance promise, and risk bond / commitment tier is not a credit rating.
 - The frontend must show warnings when Mainnet parameters are abnormal.
 
-## 7. Program / IDL / Explorer Checks
+## 8. Program / IDL / Explorer Checks
 
 - Program ID and IDL address must match.
 - The frontend IDL must match the deployed program version.
 - Explorer links must switch by cluster.
 - A read-only sanity check must be run before Mainnet launch.
 
-## 8. Funds-Flow Checks
+## 9. Funds-Flow Checks
 
 - Treasury V2 four-pool addresses must be confirmed.
 - Green Label `base_bond_treasury_vault` must be confirmed.
@@ -66,7 +75,7 @@ Mainnet must restore and confirm the production parameters before launch:
 - Staking rewards vault must be confirmed.
 - Every vault owner / mint / authority must be checked.
 
-## 9. Tests That Must Not Be Skipped
+## 10. Tests That Must Not Be Skipped
 
 - `cargo test`
 - `anchor build --ignore-keys`
@@ -76,7 +85,7 @@ Mainnet must restore and confirm the production parameters before launch:
 - Green Label refund / slash read-only verification
 - Treasury / Staking read-only verification
 
-## 10. Mainnet Blockers
+## 11. Mainnet Blockers
 
 Any one of the following unresolved items blocks Mainnet launch:
 

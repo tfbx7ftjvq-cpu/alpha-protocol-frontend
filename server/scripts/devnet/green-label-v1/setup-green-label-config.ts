@@ -11,7 +11,7 @@ import {
   isDryRun,
   loadIdl,
   loadProvider,
-  printDevnetRiskBanner,
+  printDevnetScriptHeader,
   printGreenLabelConfig,
   readPublicKeyEnv,
   requireAccountExists,
@@ -19,9 +19,13 @@ import {
 } from "./common";
 
 async function main(): Promise<void> {
-  printDevnetRiskBanner("setup-green-label-config");
-
   const provider = loadProvider();
+  printDevnetScriptHeader({
+    scriptName: "setup-green-label-config",
+    provider,
+    sendsTransactions: true,
+  });
+
   const authority = provider.wallet.publicKey;
   const greenLabelConfig = deriveGreenLabelConfig();
   const treasuryPdas = deriveTreasuryPdas();

@@ -32,7 +32,7 @@ import {
   getTokenBalance,
   loadProvider,
   nextProposalId,
-  printDevnetRiskBanner,
+  printDevnetScriptHeader,
   printGreenLabelConfig,
   printGreenLabelDispute,
   printGreenLabelProject,
@@ -60,9 +60,13 @@ function assertConfigCanFinishDisputeWindow(disputeWindow: bigint, responseWindo
 }
 
 async function main(): Promise<void> {
-  printDevnetRiskBanner("run-green-label-slash-e2e");
-
   const provider = loadProvider();
+  printDevnetScriptHeader({
+    scriptName: "run-green-label-slash-e2e",
+    provider,
+    sendsTransactions: true,
+  });
+
   const wallet = provider.wallet.publicKey;
   const config = await fetchGreenLabelConfig(provider);
   if (!config) {

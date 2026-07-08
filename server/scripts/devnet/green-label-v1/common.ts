@@ -6,6 +6,7 @@ import {
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import {
+  Connection,
   PublicKey,
   SYSVAR_RENT_PUBKEY,
   SystemProgram,
@@ -210,8 +211,20 @@ export type ExecutionQueueSummary = {
   bump: number;
 };
 
+type RpcEndpointSource =
+  | string
+  | Connection
+  | anchor.AnchorProvider
+  | {
+      connection?: {
+        rpcEndpoint?: string;
+      };
+      rpcEndpoint?: string;
+    };
+
 export function loadProvider(): anchor.AnchorProvider {
   const provider = anchor.AnchorProvider.env();
+  assertDevnetOnly(provider);
   anchor.setProvider(provider);
   return provider;
 }
@@ -225,6 +238,77 @@ export function loadIdl(): RuntimeIdl {
 export function loadProgram(provider: anchor.AnchorProvider = loadProvider()): anchor.Program {
   const idl = loadIdl();
   return new anchor.Program(idl as anchor.Idl, provider);
+}
+
+export function isMainnetEndpoint(endpoint: string): boolean {
+  const normalized = endpoint.toLowerCase();
+  return normalized.includes("mainnet") || normalized.includes("api.mainnet-beta.solana.com");
+}
+
+export function isDevnetEndpoint(endpoint: string): boolean {
+  const normalized = endpoint.toLowerCase();
+  return normalized.includes("devnet") || normalized.includes("api.devnet.solana.com");
+}
+
+export function resolveRpcEndpoint(source: RpcEndpointSource): string {
+  if (typeof source === "string") {
+    return source;
+  }
+
+  const directEndpoint = "rpcEndpoint" in source ? source.rpcEndpoint : undefined;
+  if (directEndpoint) {
+    return directEndpoint;
+  }
+
+  const connectionEndpoint =
+    "connection" in source ? source.connection?.rpcEndpoint : undefined;
+  if (connectionEndpoint) {
+    return connectionEndpoint;
+  }
+
+  throw new Error("Unable to determine RPC endpoint for devnet-only guard.");
+}
+
+export function assertDevnetOnly(source: RpcEndpointSource): string {
+  const endpoint = resolveRpcEndpoint(source);
+
+  if (isMainnetEndpoint(endpoint)) {
+    throw new Error(
+      `Refusing to run Green Label Devnet script against Mainnet endpoint: ${endpoint}`,
+    );
+  }
+
+  if (!isDevnetEndpoint(endpoint)) {
+    throw new Error(
+      `Refusing to run Green Label Devnet script against non-devnet endpoint: ${endpoint}`,
+    );
+  }
+
+  return endpoint;
+}
+
+export function printDevnetScriptHeader(args: {
+  scriptName: string;
+  provider: anchor.AnchorProvider;
+  sendsTransactions: boolean;
+}): void {
+  const endpoint = assertDevnetOnly(args.provider);
+  const dryRun = isDryRun();
+
+  console.log(`Green Label V1 Devnet script: ${args.scriptName}`);
+  console.log("cluster:", "devnet");
+  console.log("RPC URL:", endpoint);
+  console.log("Program ID:", PROGRAM_ID.toBase58());
+  console.log("authority:", args.provider.wallet.publicKey.toBase58());
+  console.log("DRY_RUN:", String(dryRun));
+  console.log(
+    "will send transactions:",
+    args.sendsTransactions ? (dryRun ? "no (DRY_RUN=true)" : "yes") : "no (read-only)",
+  );
+  console.log("WARNING: This script is for Devnet only. Do not use it on Mainnet.");
+  if (args.sendsTransactions) {
+    console.log("WARNING: This script can send on-chain transactions on Devnet.");
+  }
 }
 
 export function printDevnetRiskBanner(scriptName: string): void {
@@ -434,6 +518,7 @@ export async function sendAndConfirmLabeled(
   label: string,
   tx: Transaction,
 ): Promise<string> {
+  assertDevnetOnly(provider);
   if (isDryRun()) {
     const dryRunSignature = `DRY_RUN_${label.replace(/[^a-z0-9]+/gi, "_").toUpperCase()}`;
     console.log(`[dry-run] Would send transaction: ${label}`);
