@@ -100,7 +100,13 @@ Before Mainnet, review `docs/mainnet-authority-and-parameter-migration-plan.md`.
 - The Go/No-Go checklist summarizes required evidence across technical checks, authority migration, sanity checks, frontend launch guard, and operations.
 - If any blocker remains unresolved, the Mainnet decision must be NO-GO.
 
-## 13. Funds-Flow Checks
+## 13. Mainnet Operational Runbook
+
+- Review `docs/mainnet-operational-runbook.md` as the Mainnet launch-day execution manual.
+- The runbook defines roles, command order, failure handling, emergency pause policy, communication, and mitigation flow.
+- If any blocker appears during runbook execution, stop the launch process and return to the Go/No-Go checklist.
+
+## 14. Funds-Flow Checks
 
 - Treasury V2 four-pool addresses must be confirmed.
 - Green Label `base_bond_treasury_vault` must be confirmed.
@@ -108,7 +114,7 @@ Before Mainnet, review `docs/mainnet-authority-and-parameter-migration-plan.md`.
 - Staking rewards vault must be confirmed.
 - Every vault owner / mint / authority must be checked.
 
-## 14. Tests That Must Not Be Skipped
+## 15. Tests That Must Not Be Skipped
 
 - `cargo test`
 - `anchor build --ignore-keys`
@@ -118,7 +124,7 @@ Before Mainnet, review `docs/mainnet-authority-and-parameter-migration-plan.md`.
 - Green Label refund / slash read-only verification
 - Treasury / Staking read-only verification
 
-## 15. Mainnet Blockers
+## 16. Mainnet Blockers
 
 Any one of the following unresolved items blocks Mainnet launch:
 

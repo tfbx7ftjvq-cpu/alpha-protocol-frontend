@@ -146,6 +146,12 @@ Open blockers:
 
 Manual review notes:
 
-## 10. Current Conclusion
+## 10. Operational Runbook
+
+- Review `docs/mainnet-operational-runbook.md` before any Mainnet launch-day execution.
+- After the Go/No-Go checklist reaches GO, Mainnet launch must follow the operational runbook.
+- The runbook cannot bypass blockers. If any blocker appears during execution, stop and return to this Go/No-Go checklist.
+
+## 11. Current Conclusion
 
 NO-GO for Mainnet production until Mainnet parameters, authorities, vaults, staking pool, and mainnet sanity check are completed and reviewed.
