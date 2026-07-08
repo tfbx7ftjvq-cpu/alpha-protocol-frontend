@@ -18,11 +18,9 @@ export const BPF_LOADER_UPGRADEABLE_PROGRAM_ID = new PublicKey(
   "BPFLoaderUpgradeab1e11111111111111111111111",
 );
 
-const GREEN_LABEL_CONFIG_DISCRIMINATOR = crypto
-  .createHash("sha256")
-  .update("account:GreenLabelConfigV1")
-  .digest()
-  .subarray(0, 8);
+const GREEN_LABEL_CONFIG_DISCRIMINATOR = anchorAccountDiscriminator("GreenLabelConfigV1");
+const SECURITY_GOVERNANCE_CONFIG_V1_DISCRIMINATOR =
+  anchorAccountDiscriminator("GovernanceConfigV1");
 
 const REQUIRED_GREEN_LABEL_INSTRUCTIONS = [
   "initialize_green_label_config",
@@ -53,6 +51,15 @@ export type GreenLabelConfigSummary = {
   reliefOrRiskVault: PublicKey;
   vaultAuthorityV2: PublicKey;
   securityGovernanceConfig: PublicKey;
+  isPaused: boolean;
+  bump: number;
+};
+
+export type SecurityGovernanceConfigV1Decoded = {
+  authority: PublicKey;
+  minExecutionDelaySeconds: bigint;
+  proposalCount: bigint;
+  emergencyGuardian: PublicKey;
   isPaused: boolean;
   bump: number;
 };
@@ -419,6 +426,7 @@ export async function checkSecurityGovernanceConfig(
   connection: Connection,
   governanceConfig: PublicKey,
   programId: PublicKey,
+  expectedMode: ExpectedMode,
   summary: CheckSummary,
 ): Promise<void> {
   console.log("");
@@ -442,7 +450,24 @@ export async function checkSecurityGovernanceConfig(
     addFail(summary, `Security governance config owner mismatch: ${info.owner.toBase58()}`);
   }
 
-  addManualReview(summary, "TODO decode Security governance config in a future phase");
+  if (info.data.subarray(0, 8).equals(SECURITY_GOVERNANCE_CONFIG_V1_DISCRIMINATOR)) {
+    addPass(summary, "Security governance config discriminator matches");
+  } else {
+    addFail(summary, "Security governance config discriminator mismatch");
+    return;
+  }
+
+  let config: SecurityGovernanceConfigV1Decoded;
+  try {
+    config = decodeSecurityGovernanceConfigV1(info.data);
+  } catch (error) {
+    addFail(summary, `Security governance config decode failed: ${formatError(error)}`);
+    return;
+  }
+
+  addPass(summary, "Security governance config decoded successfully");
+  printSecurityGovernanceConfig(config);
+  checkSecurityGovernancePolicy(config, expectedMode, summary);
 }
 
 export function checkAuthorityPolicy(
@@ -468,6 +493,14 @@ export function formatUsdc(amount: bigint): string {
   const whole = amount / 1_000_000n;
   const fractional = (amount % 1_000_000n).toString().padStart(6, "0");
   return `${whole}.${fractional}`;
+}
+
+function anchorAccountDiscriminator(accountName: string): Buffer {
+  return crypto
+    .createHash("sha256")
+    .update(`account:${accountName}`)
+    .digest()
+    .subarray(0, 8);
 }
 
 function decodeGreenLabelConfig(data: Buffer): GreenLabelConfigSummary {
@@ -529,6 +562,35 @@ function decodeGreenLabelConfig(data: Buffer): GreenLabelConfigSummary {
   };
 }
 
+function decodeSecurityGovernanceConfigV1(data: Buffer): SecurityGovernanceConfigV1Decoded {
+  const minimumLength = 8 + 32 + 8 + 8 + 32 + 1 + 1;
+  if (data.length < minimumLength) {
+    throw new Error(`account data too short. Expected at least ${minimumLength}, got ${data.length}`);
+  }
+
+  let offset = 8;
+  const authority = readPubkey(data, offset);
+  offset += 32;
+  const minExecutionDelaySeconds = data.readBigInt64LE(offset);
+  offset += 8;
+  const proposalCount = data.readBigUInt64LE(offset);
+  offset += 8;
+  const emergencyGuardian = readPubkey(data, offset);
+  offset += 32;
+  const isPaused = data.readUInt8(offset) !== 0;
+  offset += 1;
+  const bump = data.readUInt8(offset);
+
+  return {
+    authority,
+    minExecutionDelaySeconds,
+    proposalCount,
+    emergencyGuardian,
+    isPaused,
+    bump,
+  };
+}
+
 function readPubkey(data: Buffer, offset: number): PublicKey {
   return new PublicKey(data.subarray(offset, offset + 32));
 }
@@ -550,6 +612,91 @@ function printGreenLabelConfig(config: GreenLabelConfigSummary): void {
   console.log("security_governance_config:", config.securityGovernanceConfig.toBase58());
   console.log("is_paused:", config.isPaused);
   console.log("bump:", config.bump);
+}
+
+function printSecurityGovernanceConfig(config: SecurityGovernanceConfigV1Decoded): void {
+  console.log("authority:", config.authority.toBase58());
+  console.log(
+    "min_execution_delay_seconds:",
+    formatSecondsWithReadable(config.minExecutionDelaySeconds),
+  );
+  console.log("proposal_count:", config.proposalCount.toString());
+  console.log("emergency_guardian:", config.emergencyGuardian.toBase58());
+  console.log("is_paused:", config.isPaused);
+  console.log("bump:", config.bump);
+}
+
+function checkSecurityGovernancePolicy(
+  config: SecurityGovernanceConfigV1Decoded,
+  expectedMode: ExpectedMode,
+  summary: CheckSummary,
+): void {
+  console.log("");
+  console.log("=== Security Governance Policy ===");
+
+  if (expectedMode === "devnet-test") {
+    if (config.isPaused) {
+      addWarn(summary, "Security governance config is paused in Devnet test mode");
+    } else {
+      addPass(summary, "Security governance config is not paused in Devnet test mode");
+    }
+
+    if (config.minExecutionDelaySeconds <= 0n) {
+      addWarn(summary, "Security governance timelock delay is zero or negative in Devnet test mode");
+    } else {
+      addPass(summary, "Security governance timelock delay is nonzero in Devnet test mode");
+    }
+
+    addWarn(
+      summary,
+      "Devnet Security governance authority and emergency guardian may be test wallets; review before Mainnet",
+    );
+    return;
+  }
+
+  if (config.isPaused) {
+    addFail(summary, "Security governance config must not be paused for Mainnet production");
+  } else {
+    addPass(summary, "Security governance config is not paused for Mainnet production");
+  }
+
+  if (config.minExecutionDelaySeconds <= 0n) {
+    addFail(summary, "Security governance timelock delay must be greater than zero for Mainnet");
+  } else {
+    addPass(summary, "Security governance timelock delay is nonzero for Mainnet");
+  }
+
+  addManualReview(
+    summary,
+    "MANUAL_REVIEW_REQUIRED: Confirm Security governance authority is multisig/governance/timelock before Mainnet",
+  );
+  addManualReview(
+    summary,
+    "MANUAL_REVIEW_REQUIRED: Confirm emergency guardian permissions are pause-only before Mainnet",
+  );
+}
+
+function formatSecondsWithReadable(seconds: bigint): string {
+  const sign = seconds < 0n ? "-" : "";
+  const absolute = seconds < 0n ? -seconds : seconds;
+
+  if (absolute === 0n) {
+    return `${seconds.toString()} (0 seconds)`;
+  }
+
+  if (absolute % 86_400n === 0n) {
+    return `${seconds.toString()} (${sign}${(absolute / 86_400n).toString()} days)`;
+  }
+
+  if (absolute % 3_600n === 0n) {
+    return `${seconds.toString()} (${sign}${(absolute / 3_600n).toString()} hours)`;
+  }
+
+  if (absolute % 60n === 0n) {
+    return `${seconds.toString()} (${sign}${(absolute / 60n).toString()} minutes)`;
+  }
+
+  return `${seconds.toString()} (${sign}${absolute.toString()} seconds)`;
 }
 
 function parseProgramDataAddress(data: Buffer): PublicKey | null {

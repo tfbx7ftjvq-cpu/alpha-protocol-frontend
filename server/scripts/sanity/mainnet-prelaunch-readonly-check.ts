@@ -66,6 +66,7 @@ async function main(): Promise<void> {
     connection,
     greenLabelConfig.securityGovernanceConfig,
     runtime.programId,
+    runtime.expectedMode,
     summary,
   );
   checkAuthorityPolicy(greenLabelConfig, runtime.expectedMode, summary);
