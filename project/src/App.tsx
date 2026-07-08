@@ -5,15 +5,16 @@ import { WalletModalProvider, WalletMultiButton } from '@solana/wallet-adapter-r
 import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import '@solana/wallet-adapter-react-ui/styles.css';
-import { Globe, ShieldCheck, BookOpen, LayoutDashboard, Hexagon, Wallet, Coins } from 'lucide-react';
+import { Globe, ShieldCheck, BookOpen, LayoutDashboard, Hexagon, Wallet, Coins, Home } from 'lucide-react';
 import { type Lang } from './translations';
 import TreasuryDashboard from './components/TreasuryDashboard';
 import WallOfShame from './components/WallOfShame';
 import VictimRelief from './components/VictimRelief';
 import GreenLabelDashboard from './components/GreenLabelDashboard';
 import TokenRevenueDashboard from './components/TokenRevenueDashboard';
+import PublicLandingPage from './components/PublicLandingPage';
 
-type Tab = 'treasury' | 'shame' | 'relief' | 'greenLabel' | 'tokenRevenue';
+type Tab = 'home' | 'treasury' | 'shame' | 'relief' | 'greenLabel' | 'tokenRevenue';
 type RpcStatus = 'checking' | 'ok' | 'error';
 
 const endpoint = 'https://api.devnet.solana.com';
@@ -49,7 +50,7 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
   const { connection } = useConnection();
   const { publicKey, connected: walletConnected } = useWallet();
   const [lang, setLang] = useState<Lang>('zh');
-  const [activeTab, setActiveTab] = useState<Tab>('treasury');
+  const [activeTab, setActiveTab] = useState<Tab>('home');
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [rpcStatus, setRpcStatus] = useState<RpcStatus>('checking');
   const [rpcMessage, setRpcMessage] = useState<string | null>(null);
@@ -150,6 +151,7 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
     activeColor: string;
     activeBorder: string;
   }[] = [
+    { key: 'home', label: '协议首页', icon: Home, activeColor: 'text-cyan-400', activeBorder: 'border-cyan-400' },
     { key: 'treasury', label: h.tabTreasury, icon: BookOpen, activeColor: 'text-green-400', activeBorder: 'border-green-400' },
     { key: 'shame', label: h.tabShame, icon: ShieldCheck, activeColor: 'text-red-400', activeBorder: 'border-red-400' },
     { key: 'relief', label: h.tabRelief, icon: LayoutDashboard, activeColor: 'text-cyan-400', activeBorder: 'border-cyan-400' },
@@ -262,6 +264,7 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 relative z-10">
+        {activeTab === 'home' && <PublicLandingPage onNavigate={(target) => setActiveTab(target)} />}
         {activeTab === 'treasury' && (
           <TreasuryDashboard
             lang={lang}

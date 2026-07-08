@@ -159,6 +159,14 @@ Manual review notes:
 - Until the full voting layer is complete, Alpha Protocol must not be marketed as a fully decentralized DAO.
 - The read-only DAO Governance Dashboard may show Security Layer state, proposal decisions, and queue items, but must not expose voting or execution buttons.
 
-## 12. Current Conclusion
+## 12. Public MVP / Litepaper
+
+- Review `docs/alpha-protocol-litepaper.md` before Mainnet or token launch communications.
+- Mainnet / token launch must have clear public explanations of protocol scope, current status, and risk boundaries.
+- The Litepaper must not promise yield, insurance, fixed compensation, dividends, or token price appreciation.
+- Until the full ALPHA voting layer is complete, Alpha Protocol must not be marketed as a fully decentralized DAO.
+- Public MVP pages must keep Devnet verified / Mainnet not live / read-only status visible.
+
+## 13. Current Conclusion
 
 NO-GO for Mainnet production until Mainnet parameters, authorities, vaults, staking pool, and mainnet sanity check are completed and reviewed.

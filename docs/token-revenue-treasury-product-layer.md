@@ -92,7 +92,15 @@ Current front-end page status:
 - No chain write button.
 - No yield promise.
 
-## 9. Future Mainnet Requirements
+## 9. Relationship to Public MVP
+
+The Token / Revenue page is one of the core Public MVP modules because it explains why ALPHA, protocol revenue, Treasury V2, staking rewards, builders funding, relief reserves, and DAO oversight belong in the same product loop.
+
+However, this page cannot be used alone as a basis for token launch. It must be paired with the Litepaper, Mainnet Go/No-Go checklist, legal / risk review, authority migration plan, Mainnet sanity checks, and final build/test evidence.
+
+The Token / Revenue page must not imply guaranteed returns, insurance coverage, fixed compensation, dividends, or token price appreciation.
+
+## 10. Future Mainnet Requirements
 
 Before Mainnet production:
 
