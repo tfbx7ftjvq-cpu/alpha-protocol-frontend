@@ -263,7 +263,16 @@ Recommended language:
 - not credit rating.
 - community feedback welcome.
 
-## 11. Community Preheat Plan
+## 11. Tokenomics Communication Constraint
+
+- Communication must not present allocation as price support.
+- Staking Rewards Reserve must not be described as guaranteed yield or fixed APY.
+- Liquidity / Launch Pool must not be described as guaranteed buyback, price floor, or guaranteed exit liquidity.
+- Team allocation must be paired with lockup / vesting language if mentioned.
+- DAO Treasury allocation must be paired with governance / multisig / timelock language if mentioned.
+- Any airdrop language must avoid "free money" framing and must mention eligibility / anti-sybil review if applicable.
+
+## 12. Community Preheat Plan
 
 ### Phase A: Quiet Preview
 
@@ -288,7 +297,7 @@ Recommended language:
 - Decide whether to proceed to token launch.
 - Keep token launch NO-GO if blockers remain.
 
-## 12. Scam / Impersonation Warning
+## 13. Scam / Impersonation Warning
 
 Until officially confirmed, there is no official ALPHA buy address.
 
@@ -300,7 +309,7 @@ Users should:
 - Expect fake tokens, fake pools, and fake airdrops to appear.
 - Verify announcements through designated official channels only: `<OFFICIAL_ANNOUNCEMENT_CHANNEL>`.
 
-## 13. Launch Communication Checklist
+## 14. Launch Communication Checklist
 
 Before any formal public preheat:
 
@@ -317,7 +326,7 @@ Before any formal public preheat:
 - Scam warning pinned.
 - Feedback channel ready.
 
-## 14. Current Recommendation
+## 15. Current Recommendation
 
 - Community preheating may begin after final review.
 - Immediate token launch remains NO-GO.

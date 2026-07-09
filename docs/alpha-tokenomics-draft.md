@@ -73,7 +73,14 @@ This allocation is a draft and not a final issuance promise. Final allocation mu
 
 No allocation category should be described as guaranteed profit, guaranteed yield, dividend, or price support.
 
-## 6. Vesting / Lockup Draft
+## 6. Allocation Review Status
+
+- Review `docs/tokenomics-allocation-review.md` before tokenomics freeze.
+- The current allocation is a recommended freeze candidate, not the final freeze.
+- Final freeze requires user confirmation of LP policy, vesting, airdrop decision, authority policy, and launch platform.
+- Immediate token launch remains NO-GO until allocation and launch controls are finalized.
+
+## 7. Vesting / Lockup Draft
 
 ### DAO Treasury / Protocol Reserve
 
@@ -113,7 +120,7 @@ No allocation category should be described as guaranteed profit, guaranteed yiel
 - Exact schedule pending.
 - Any exceptions should require explicit review.
 
-## 7. Treasury and Revenue Relationship
+## 8. Treasury and Revenue Relationship
 
 Protocol revenue enters Treasury V2.
 
@@ -128,7 +135,7 @@ Treasury revenue split is separate from initial token allocation.
 
 Future changes to revenue split should require DAO / Security Layer governance. The relief pool is not automatic insurance. Staking rewards depend on pool balance and protocol rules.
 
-## 8. Launch Liquidity Draft
+## 9. Launch Liquidity Draft
 
 The following must be decided before launch:
 
@@ -143,7 +150,7 @@ The following must be decided before launch:
 
 This draft does not select a final launch platform. Platform selection requires a separate decision.
 
-## 9. Governance and Authority Requirements
+## 10. Governance and Authority Requirements
 
 - Token mint authority / freeze authority, if present, must be governance-controlled, closed, or multisig-controlled.
 - DAO Treasury wallet must not be controlled by a single hot wallet long term.
@@ -153,7 +160,7 @@ This draft does not select a final launch platform. Platform selection requires 
 
 Authority status must be reviewed before any token launch decision.
 
-## 10. Token Launch Preconditions
+## 11. Token Launch Preconditions
 
 Formal token launch requires:
 
@@ -174,7 +181,7 @@ Formal token launch requires:
 
 If any of these items are incomplete, token launch should remain NO-GO.
 
-## 11. Red Flag Language
+## 12. Red Flag Language
 
 Forbidden language:
 
@@ -202,7 +209,7 @@ Recommended language:
 - not insurance.
 - not credit rating.
 
-## 12. Communication Constraints
+## 13. Communication Constraints
 
 - This tokenomics draft must not be used as a return promise.
 - Allocation percentages must not be marketed as price support, price floor, or guaranteed buyback.
@@ -211,7 +218,7 @@ Recommended language:
 - Any public launch communication must follow `docs/launch-communication-and-community-preheat-plan.md`.
 - Token launch communication must keep token launch pending and Mainnet not live visible until those statuses change through an approved process.
 
-## 13. Open Questions
+## 14. Open Questions
 
 Questions to confirm before token launch:
 
@@ -226,7 +233,7 @@ Questions to confirm before token launch:
 - Should launch use a Devnet-preview narrative first, then a formal Mainnet narrative later?
 - Should the full ALPHA voting layer be complete before launch, or should launch use a Security Layer execution + voting roadmap narrative?
 
-## 14. Current Recommendation
+## 15. Current Recommendation
 
 Current recommendation: community preheating can begin.
 

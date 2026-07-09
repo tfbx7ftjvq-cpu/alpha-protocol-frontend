@@ -77,14 +77,22 @@ However, the project is close to a public preview / community preheating stage. 
 - Final allocation, vesting, liquidity plan, wallet authority, and risk disclosures must be reviewed before launch.
 - Immediate token launch remains NO-GO.
 
-## 6. Launch Communication and Community Preheat Plan
+## 6. Tokenomics Allocation Review
+
+- Review `docs/tokenomics-allocation-review.md` before tokenomics freeze or token launch decision.
+- Allocation review is completed as a draft.
+- The current `1B` supply and `35/20/15/15/10/5` allocation are a recommended freeze candidate, not final freeze.
+- Tokenomics freeze is pending user decision on LP policy, vesting, airdrop, authority, and launch platform.
+- Immediate token launch remains NO-GO.
+
+## 7. Launch Communication and Community Preheat Plan
 
 - Review `docs/launch-communication-and-community-preheat-plan.md` before publishing public preview messages, X threads, pinned community posts, Litepaper announcements, or token-related community updates.
 - Public preview / community preheating is currently allowed with warnings.
 - Immediate token launch remains NO-GO.
 - Launch communication must keep Mainnet not live, token launch pending, no guaranteed returns, no insurance, and ALPHA voting layer pending visible.
 
-## 7. Public Preview Recommendation
+## 8. Public Preview Recommendation
 
 Recommended public preview posture:
 
@@ -97,7 +105,7 @@ Recommended public preview posture:
 
 Public preview should be framed as transparency, research, Devnet verification, and community feedback.
 
-## 8. Required Before Token Launch
+## 9. Required Before Token Launch
 
 The following must be completed before a formal token launch:
 
@@ -116,7 +124,7 @@ The following must be completed before a formal token launch:
 
 These items should be tracked separately from Devnet feature completion.
 
-## 9. Red Flag Language Check
+## 10. Red Flag Language Check
 
 Forbidden or high-risk language:
 
@@ -141,7 +149,7 @@ Recommended language:
 
 Every public page, announcement, Litepaper excerpt, and community post should be checked against this list.
 
-## 10. Go / No-Go Conclusion
+## 11. Go / No-Go Conclusion
 
 Current conclusions:
 
@@ -152,7 +160,7 @@ Current conclusions:
 
 The warnings are material. Public preview should not be confused with Mainnet launch or token launch approval.
 
-## 11. Next Recommended Actions
+## 12. Next Recommended Actions
 
 1. Tokenomics finalization document.
 2. Launch communication draft.
@@ -161,7 +169,7 @@ The warnings are material. Public preview should not be confused with Mainnet la
 5. Community preheat plan.
 6. Decide whether token launches as Devnet-preview narrative or waits for Mainnet readiness.
 
-## 12. Reviewer Notes
+## 13. Reviewer Notes
 
 This review is a product and communication readiness snapshot. It does not replace:
 
