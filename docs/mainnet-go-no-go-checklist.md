@@ -167,6 +167,15 @@ Manual review notes:
 - Until the full ALPHA voting layer is complete, Alpha Protocol must not be marketed as a fully decentralized DAO.
 - Public MVP pages must keep Devnet verified / Mainnet not live / read-only status visible.
 
-## 13. Current Conclusion
+## 13. Public MVP Launch Readiness Review
+
+- Review `docs/public-mvp-launch-readiness-review.md` before public preview, community preheating, Mainnet launch, or token launch communication.
+- Current Public MVP preview can be GO with warnings.
+- Current community preheating can be GO with warnings.
+- Mainnet production remains NO-GO.
+- Immediate token launch remains NO-GO.
+- Public preview must not be confused with Mainnet readiness or token launch approval.
+
+## 14. Current Conclusion
 
 NO-GO for Mainnet production until Mainnet parameters, authorities, vaults, staking pool, and mainnet sanity check are completed and reviewed.
