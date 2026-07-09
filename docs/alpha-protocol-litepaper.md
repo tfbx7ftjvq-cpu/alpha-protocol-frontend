@@ -121,7 +121,15 @@ ALPHA token utility may include:
 
 ALPHA must not be described as providing guaranteed profit, fixed yield, dividends, guaranteed payouts, or token price appreciation.
 
-## 9. Staking
+## 9. Tokenomics Draft Status
+
+ALPHA tokenomics is documented separately in `docs/alpha-tokenomics-draft.md`.
+
+The Litepaper does not promise final allocation, final supply policy, launch platform, liquidity plan, vesting schedule, airdrop eligibility, or staking reward amounts.
+
+Final tokenomics must be frozen before launch. Until final tokenomics, allocation, vesting, liquidity, and authority reviews are complete, immediate token launch remains NO-GO.
+
+## 10. Staking
 
 Staking V1 has been verified on Devnet for stake / claim / unstake paths.
 
@@ -129,7 +137,7 @@ Staking rewards are protocol-rule-based incentives. They depend on pool balance,
 
 There is no guaranteed APY, fixed yield, or guaranteed return.
 
-## 10. Current Devnet Status
+## 11. Current Devnet Status
 
 Current verified status:
 
@@ -143,7 +151,7 @@ Current verified status:
 
 This status is a Devnet baseline and does not approve Mainnet production launch.
 
-## 11. Roadmap
+## 12. Roadmap
 
 Suggested roadmap:
 
@@ -155,7 +163,7 @@ Suggested roadmap:
 6. Future DAO-controlled treasury.
 7. Future Mainnet launch.
 
-## 12. Risk Disclosure
+## 13. Risk Disclosure
 
 Alpha Protocol involves technical, governance, and regulatory risks.
 

@@ -176,6 +176,13 @@ Manual review notes:
 - Immediate token launch remains NO-GO.
 - Public preview must not be confused with Mainnet readiness or token launch approval.
 
-## 14. Current Conclusion
+## 14. Tokenomics Finalization
+
+- Review `docs/alpha-tokenomics-draft.md` before any token launch decision.
+- Final tokenomics, allocation, vesting, liquidity plan, wallet / authority review, and risk disclosure review are token launch preconditions.
+- If tokenomics is not frozen, token launch decision must be NO-GO.
+- The tokenomics draft does not approve immediate token launch and must not be used as a yield, dividend, insurance, or price appreciation promise.
+
+## 15. Current Conclusion
 
 NO-GO for Mainnet production until Mainnet parameters, authorities, vaults, staking pool, and mainnet sanity check are completed and reviewed.

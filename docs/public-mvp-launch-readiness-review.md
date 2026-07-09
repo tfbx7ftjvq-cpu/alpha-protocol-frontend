@@ -69,7 +69,15 @@ Reasons:
 
 However, the project is close to a public preview / community preheating stage. The current product can be shown as a Devnet-verified Public MVP if every communication clearly states that Mainnet is not live and no token launch is currently approved.
 
-## 5. Public Preview Recommendation
+## 5. Tokenomics Draft
+
+- Review `docs/alpha-tokenomics-draft.md` before any token launch communication.
+- Tokenomics remains a draft.
+- Formal token launch should not proceed before tokenomics freeze.
+- Final allocation, vesting, liquidity plan, wallet authority, and risk disclosures must be reviewed before launch.
+- Immediate token launch remains NO-GO.
+
+## 6. Public Preview Recommendation
 
 Recommended public preview posture:
 
@@ -82,7 +90,7 @@ Recommended public preview posture:
 
 Public preview should be framed as transparency, research, Devnet verification, and community feedback.
 
-## 6. Required Before Token Launch
+## 7. Required Before Token Launch
 
 The following must be completed before a formal token launch:
 
@@ -101,7 +109,7 @@ The following must be completed before a formal token launch:
 
 These items should be tracked separately from Devnet feature completion.
 
-## 7. Red Flag Language Check
+## 8. Red Flag Language Check
 
 Forbidden or high-risk language:
 
@@ -126,7 +134,7 @@ Recommended language:
 
 Every public page, announcement, Litepaper excerpt, and community post should be checked against this list.
 
-## 8. Go / No-Go Conclusion
+## 9. Go / No-Go Conclusion
 
 Current conclusions:
 
@@ -137,7 +145,7 @@ Current conclusions:
 
 The warnings are material. Public preview should not be confused with Mainnet launch or token launch approval.
 
-## 9. Next Recommended Actions
+## 10. Next Recommended Actions
 
 1. Tokenomics finalization document.
 2. Launch communication draft.
@@ -146,7 +154,7 @@ The warnings are material. Public preview should not be confused with Mainnet la
 5. Community preheat plan.
 6. Decide whether token launches as Devnet-preview narrative or waits for Mainnet readiness.
 
-## 10. Reviewer Notes
+## 11. Reviewer Notes
 
 This review is a product and communication readiness snapshot. It does not replace:
 
