@@ -77,7 +77,14 @@ However, the project is close to a public preview / community preheating stage. 
 - Final allocation, vesting, liquidity plan, wallet authority, and risk disclosures must be reviewed before launch.
 - Immediate token launch remains NO-GO.
 
-## 6. Public Preview Recommendation
+## 6. Launch Communication and Community Preheat Plan
+
+- Review `docs/launch-communication-and-community-preheat-plan.md` before publishing public preview messages, X threads, pinned community posts, Litepaper announcements, or token-related community updates.
+- Public preview / community preheating is currently allowed with warnings.
+- Immediate token launch remains NO-GO.
+- Launch communication must keep Mainnet not live, token launch pending, no guaranteed returns, no insurance, and ALPHA voting layer pending visible.
+
+## 7. Public Preview Recommendation
 
 Recommended public preview posture:
 
@@ -90,7 +97,7 @@ Recommended public preview posture:
 
 Public preview should be framed as transparency, research, Devnet verification, and community feedback.
 
-## 7. Required Before Token Launch
+## 8. Required Before Token Launch
 
 The following must be completed before a formal token launch:
 
@@ -109,7 +116,7 @@ The following must be completed before a formal token launch:
 
 These items should be tracked separately from Devnet feature completion.
 
-## 8. Red Flag Language Check
+## 9. Red Flag Language Check
 
 Forbidden or high-risk language:
 
@@ -134,7 +141,7 @@ Recommended language:
 
 Every public page, announcement, Litepaper excerpt, and community post should be checked against this list.
 
-## 9. Go / No-Go Conclusion
+## 10. Go / No-Go Conclusion
 
 Current conclusions:
 
@@ -145,7 +152,7 @@ Current conclusions:
 
 The warnings are material. Public preview should not be confused with Mainnet launch or token launch approval.
 
-## 10. Next Recommended Actions
+## 11. Next Recommended Actions
 
 1. Tokenomics finalization document.
 2. Launch communication draft.
@@ -154,7 +161,7 @@ The warnings are material. Public preview should not be confused with Mainnet la
 5. Community preheat plan.
 6. Decide whether token launches as Devnet-preview narrative or waits for Mainnet readiness.
 
-## 11. Reviewer Notes
+## 12. Reviewer Notes
 
 This review is a product and communication readiness snapshot. It does not replace:
 

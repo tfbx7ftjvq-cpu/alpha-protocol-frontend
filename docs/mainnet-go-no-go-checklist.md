@@ -183,6 +183,13 @@ Manual review notes:
 - If tokenomics is not frozen, token launch decision must be NO-GO.
 - The tokenomics draft does not approve immediate token launch and must not be used as a yield, dividend, insurance, or price appreciation promise.
 
-## 15. Current Conclusion
+## 15. Launch Communication Review
+
+- Review `docs/launch-communication-and-community-preheat-plan.md` before any public preview announcement, Litepaper publication, community pinned message, X thread, or token launch communication.
+- Token launch requires completed communication review.
+- Red-flag language is prohibited, including guaranteed returns, fixed APY, passive income guarantee, insurance payout, risk-free, guaranteed buyback, price floor, Mainnet live before Mainnet is live, and official token live before token launch is approved.
+- Community preheating may proceed only with warnings: Mainnet not live, token launch pending, read-only Public MVP, and ALPHA voting layer pending.
+
+## 16. Current Conclusion
 
 NO-GO for Mainnet production until Mainnet parameters, authorities, vaults, staking pool, and mainnet sanity check are completed and reviewed.

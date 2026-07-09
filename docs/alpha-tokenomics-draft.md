@@ -202,7 +202,16 @@ Recommended language:
 - not insurance.
 - not credit rating.
 
-## 12. Open Questions
+## 12. Communication Constraints
+
+- This tokenomics draft must not be used as a return promise.
+- Allocation percentages must not be marketed as price support, price floor, or guaranteed buyback.
+- The Staking Rewards Reserve must not be described as fixed APY or guaranteed yield.
+- Liquidity / Launch Pool language must not imply guaranteed liquidity depth, guaranteed exit, or guaranteed price stability.
+- Any public launch communication must follow `docs/launch-communication-and-community-preheat-plan.md`.
+- Token launch communication must keep token launch pending and Mainnet not live visible until those statuses change through an approved process.
+
+## 13. Open Questions
 
 Questions to confirm before token launch:
 
@@ -217,7 +226,7 @@ Questions to confirm before token launch:
 - Should launch use a Devnet-preview narrative first, then a formal Mainnet narrative later?
 - Should the full ALPHA voting layer be complete before launch, or should launch use a Security Layer execution + voting roadmap narrative?
 
-## 13. Current Recommendation
+## 14. Current Recommendation
 
 Current recommendation: community preheating can begin.
 

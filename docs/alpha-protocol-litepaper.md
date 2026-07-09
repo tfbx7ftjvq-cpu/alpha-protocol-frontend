@@ -129,7 +129,15 @@ The Litepaper does not promise final allocation, final supply policy, launch pla
 
 Final tokenomics must be frozen before launch. Until final tokenomics, allocation, vesting, liquidity, and authority reviews are complete, immediate token launch remains NO-GO.
 
-## 10. Staking
+## 10. Communication Status
+
+Public communication drafts are maintained separately in `docs/launch-communication-and-community-preheat-plan.md`.
+
+Litepaper publication should follow the approved risk wording and red-flag language checks. Token launch pending and Mainnet not live must remain visible in public communication until those statuses change through an approved review.
+
+The Litepaper should not be used as a buy-token CTA, yield promise, insurance promise, or statement that the full ALPHA voting layer is complete.
+
+## 11. Staking
 
 Staking V1 has been verified on Devnet for stake / claim / unstake paths.
 
@@ -137,7 +145,7 @@ Staking rewards are protocol-rule-based incentives. They depend on pool balance,
 
 There is no guaranteed APY, fixed yield, or guaranteed return.
 
-## 11. Current Devnet Status
+## 12. Current Devnet Status
 
 Current verified status:
 
@@ -151,7 +159,7 @@ Current verified status:
 
 This status is a Devnet baseline and does not approve Mainnet production launch.
 
-## 12. Roadmap
+## 13. Roadmap
 
 Suggested roadmap:
 
@@ -163,7 +171,7 @@ Suggested roadmap:
 6. Future DAO-controlled treasury.
 7. Future Mainnet launch.
 
-## 13. Risk Disclosure
+## 14. Risk Disclosure
 
 Alpha Protocol involves technical, governance, and regulatory risks.
 
