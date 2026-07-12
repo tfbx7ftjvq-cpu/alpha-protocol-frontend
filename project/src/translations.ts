@@ -78,16 +78,16 @@ export const t = {
     connected: 'CONNECTED',
     connectWallet: 'Connect Wallet',
 
-    // Market status / price protection
-    marketStatus: 'Market Status',
-    priceNormal: 'Price Stable',
-    priceDropped: 'Price Volatility Detected',
-    priceDropToggleOn: 'Simulate Drop',
-    priceDropToggleOff: 'Simulate Recovery',
-    priceDropAlert: 'Market Volatility Detected: Price Protection Mechanism activated. The Track A buyback treasury is deploying hard USDC capital to support the floor. The lower the token price, the more aggressive the deflationary burn. Staking Days multipliers dynamically optimized.',
-    priceStableNote: 'All treasury pools operating normally. Price protection on standby.',
-    buybackActive: 'BUYBACK ACTIVE',
-    stakingBoost: 'STAKING BOOST',
+    // Market status / treasury transparency
+    marketStatus: 'Protocol Transparency Status',
+    priceNormal: 'Treasury Transparency Normal',
+    priceDropped: 'Market Volatility Observed',
+    priceDropToggleOn: 'Simulate Volatility',
+    priceDropToggleOff: 'Reset Simulation',
+    priceDropAlert: 'Market volatility simulation active. Treasury and buyback / burn allocations are shown for transparency only and remain subject to protocol rules and governance. No market support, automatic repurchase, or economic outcome is implied.',
+    priceStableNote: 'Treasury pools are displayed for transparency. Buyback / burn allocations are subject to protocol rules and governance, not market intervention promises.',
+    buybackActive: 'BUYBACK / BURN ALLOCATION',
+    stakingBoost: 'STAKING INCENTIVE STATUS',
 
     // DAO Impeachment
     impeachBtn: 'Impeach Verdict',
@@ -183,16 +183,16 @@ export const t = {
     connected: '已连接',
     connectWallet: '连接钱包',
 
-    // Market status / price protection
-    marketStatus: '市场状态',
-    priceNormal: '价格稳定',
-    priceDropped: '检测到价格波动',
-    priceDropToggleOn: '模拟下跌',
-    priceDropToggleOff: '模拟回稳',
-    priceDropAlert: '检测到二级市场价格波动：价格保护机制已自动激活。Track A 回购国库正在以真金白银 USDC 进行护盘。币价越低，通缩销毁效率越高。连续质押天数权重加成已自动微调。',
-    priceStableNote: '所有国库池运行正常，价格保护机制待机中。',
-    buybackActive: '回购激活中',
-    stakingBoost: '质押加成',
+    // Market status / treasury transparency
+    marketStatus: '协议透明度状态',
+    priceNormal: '国库透明度正常',
+    priceDropped: '市场波动观察',
+    priceDropToggleOn: '模拟波动',
+    priceDropToggleOff: '重置模拟',
+    priceDropAlert: '市场波动模拟已开启。国库与回购 / 销毁分配仅用于透明展示，并受协议规则和治理约束。不构成市场干预、自动回购或投资建议。',
+    priceStableNote: '国库池仅用于透明展示。回购 / 销毁分配受协议规则和治理约束，不代表市场干预承诺。',
+    buybackActive: '回购 / 销毁分配',
+    stakingBoost: '质押激励状态',
 
     // DAO Impeachment
     impeachBtn: '弹劾决议',

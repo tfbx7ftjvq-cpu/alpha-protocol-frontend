@@ -43,6 +43,7 @@ interface Props {
 
 const TEST_DEPOSIT_AMOUNT = 10000;
 const TREASURY_STATE_PDA = getTreasuryStatePda();
+const SHOW_DEVNET_ACTIONS = import.meta.env.VITE_SHOW_DEVNET_ACTIONS === 'true';
 
 const SPLIT_RULES = [
   {
@@ -616,9 +617,9 @@ export default function TreasuryDashboard({ lang, walletConnected, walletBalance
         <div className="rounded border border-zinc-800 bg-zinc-950/60 p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-sm font-black text-zinc-100">链上操作</p>
+              <p className="text-sm font-black text-zinc-100">链上只读状态</p>
               <p className="mt-1 text-xs text-zinc-500">
-                保留 initialize_protocol、deposit(10000) 与链上状态刷新，用于 Devnet Alpha 验证。
+                Public MVP 默认只显示 TreasuryState PDA 读取和刷新；Devnet 写入入口需要显式本地环境变量开启。
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
@@ -632,7 +633,7 @@ export default function TreasuryDashboard({ lang, walletConnected, walletBalance
                 {refreshStatus === 'loading' || isReading ? '刷新中...' : '刷新链上状态'}
               </button>
 
-              {chainReadStatus === 'missing' && (
+              {SHOW_DEVNET_ACTIONS && chainReadStatus === 'missing' && (
                 <button
                   type="button"
                   onClick={handleInitializeTreasury}
@@ -644,7 +645,7 @@ export default function TreasuryDashboard({ lang, walletConnected, walletBalance
                 </button>
               )}
 
-              {treasuryReady && (
+              {SHOW_DEVNET_ACTIONS && treasuryReady && (
                 <button
                   type="button"
                   onClick={handleTestDeposit}
@@ -658,12 +659,31 @@ export default function TreasuryDashboard({ lang, walletConnected, walletBalance
             </div>
           </div>
 
+          {SHOW_DEVNET_ACTIONS && (
+            <div className="mt-4 rounded border border-orange-400/30 bg-orange-400/10 p-3 text-xs text-orange-200">
+              <p className="font-black uppercase tracking-wide">Devnet-only developer actions</p>
+              <p className="mt-1">
+                Not part of Public MVP. Do not use for public preview. Requires explicit local env flag:
+                {' '}
+                <span className="font-mono text-orange-100">VITE_SHOW_DEVNET_ACTIONS=true</span>.
+                May send Devnet transactions.
+              </p>
+            </div>
+          )}
+
           <div className="mt-4 space-y-2">
             {chainReadStatus === 'idle' && <StatusNotice tone="neutral" message="钱包未连接。连接钱包后可读取 TreasuryState PDA。" />}
-            {chainReadStatus === 'missing' && <StatusNotice tone="warning" message="TreasuryState PDA 不存在。请使用初始化按钮创建链上国库。" />}
+            {chainReadStatus === 'missing' && (
+              <StatusNotice
+                tone="warning"
+                message={SHOW_DEVNET_ACTIONS
+                  ? 'TreasuryState PDA 不存在。开发者模式可使用初始化按钮创建 Devnet 链上国库。'
+                  : 'TreasuryState PDA 不存在。Public MVP 默认隐藏 Devnet 初始化写入入口。'}
+              />
+            )}
             {chainReadError && <StatusNotice tone="error" message={chainReadError} />}
-            {initializeMessage && <StatusNotice tone={initializeStatus === 'success' ? 'success' : 'error'} message={initializeMessage} />}
-            {depositMessage && <StatusNotice tone={depositStatus === 'success' ? 'success' : 'error'} message={depositMessage} />}
+            {SHOW_DEVNET_ACTIONS && initializeMessage && <StatusNotice tone={initializeStatus === 'success' ? 'success' : 'error'} message={initializeMessage} />}
+            {SHOW_DEVNET_ACTIONS && depositMessage && <StatusNotice tone={depositStatus === 'success' ? 'success' : 'error'} message={depositMessage} />}
             {refreshMessage && <StatusNotice tone={refreshStatus === 'success' ? 'success' : 'error'} message={refreshMessage} />}
           </div>
 

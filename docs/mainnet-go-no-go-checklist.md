@@ -197,6 +197,13 @@ Manual review notes:
 - Red-flag language is prohibited, including guaranteed returns, fixed APY, passive income guarantee, insurance payout, risk-free, guaranteed buyback, price floor, Mainnet live before Mainnet is live, and official token live before token launch is approved.
 - Community preheating may proceed only with warnings: Mainnet not live, token launch pending, read-only Public MVP, and ALPHA voting layer pending.
 
-## 17. Current Conclusion
+## 17. Public MVP Safety Cleanup
+
+- Public preview requires Devnet write buttons hidden by default.
+- Any developer-only Devnet actions must require an explicit environment flag, such as `VITE_SHOW_DEVNET_ACTIONS=true`.
+- Red-flag wording must be removed or replaced before public preview.
+- Public MVP must remain read-only by default with no buy button, real funds entry, or on-chain write action exposed.
+
+## 18. Current Conclusion
 
 NO-GO for Mainnet production until Mainnet parameters, authorities, vaults, staking pool, and mainnet sanity check are completed and reviewed.

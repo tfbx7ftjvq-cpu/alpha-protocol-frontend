@@ -309,7 +309,16 @@ Users should:
 - Expect fake tokens, fake pools, and fake airdrops to appear.
 - Verify announcements through designated official channels only: `<OFFICIAL_ANNOUNCEMENT_CHANNEL>`.
 
-## 14. Launch Communication Checklist
+## 14. Frontend Safety Cleanup Before Public Preview
+
+Before public preview communication, confirm:
+
+- No visible buy button.
+- No visible real funds entry.
+- No visible Devnet write action by default.
+- No price floor, guaranteed yield, automatic payout, or insurance wording is surfaced.
+
+## 15. Launch Communication Checklist
 
 Before any formal public preheat:
 
@@ -326,7 +335,7 @@ Before any formal public preheat:
 - Scam warning pinned.
 - Feedback channel ready.
 
-## 15. Current Recommendation
+## 16. Current Recommendation
 
 - Community preheating may begin after final review.
 - Immediate token launch remains NO-GO.
