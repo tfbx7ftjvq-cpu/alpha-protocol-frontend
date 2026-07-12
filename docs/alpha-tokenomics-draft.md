@@ -1,242 +1,186 @@
 # ALPHA Tokenomics Draft
 
-Date: 2026-07-09
-
 ## 1. Purpose
 
-This document is the initial ALPHA tokenomics draft.
+This document records the corrected ALPHA tokenomics model for Alpha Protocol.
 
-It is intended for internal pre-launch review and preparation of public materials. It does not represent immediate token launch approval.
+The previous initial token bucket allocation model has been superseded. ALPHA is now documented as a planned Fair Launch token, not a project-side reserved allocation model.
 
-This document is not investment advice, a return promise, a price promise, or a dividend promise. ALPHA must not be marketed as a guaranteed-profit asset, fixed-yield product, insurance product, or passive income instrument.
+This document is not investment advice, a return promise, a dividend promise, an insurance promise, a price promise, or token launch approval.
 
 ## 2. Token Overview
 
-- Token name: ALPHA
-- Ticker: ALPHA
-- Network: Solana
-- Status: token launch pending
-- Mainnet status: not live
-- Current product status: Devnet-verified read-only Public MVP
+- Token: ALPHA.
+- Network: Solana.
+- Launch model: Fair Launch.
+- Token launch status: pending.
+- Mainnet status: not live.
+- Total supply: `1,000,000,000 ALPHA` as draft / pending final confirmation.
 
-Current conclusion:
+## 3. Fair Launch Model
 
-- Public MVP preview: GO with warnings
-- Community preheating: GO with warnings
-- Immediate token launch: NO-GO
-- Mainnet production: NO-GO
+Correct launch model:
 
-## 3. Proposed Total Supply
+- Project-side reserved token allocation: none.
+- Founder / project-side preallocated bucket: none.
+- Team allocation: none.
+- VC allocation: none.
+- DAO treasury token allocation at launch: none.
+- Staking token reserve at launch: none.
+- Builders / contributors token allocation at launch: none.
+- Market access: market participants acquire ALPHA through the open market after launch.
 
-Recommended initial draft:
+There is no hidden project-side token reserve.
 
-- Total supply: `1,000,000,000 ALPHA`
+Any future contributor compensation should come from protocol revenue, DAO-approved contributor budget, transparent future governance, or separately disclosed arrangements. It should not be hidden inside an initial token allocation.
 
-This value is a draft and can be finalized before launch. It should be frozen before any public token launch decision.
+## 4. Superseded Allocation Model
 
-The protocol should not allow arbitrary future issuance unless explicitly approved by future governance. If mint authority exists, it must be governance-controlled, multisig-controlled, closed, or otherwise locked according to a documented policy before launch.
+The previous `35/20/15/15/10/5` allocation model is superseded and must not be treated as the recommended ALPHA launch model.
 
-## 4. Token Utility
+Superseded concepts:
 
-ALPHA utility may include:
+- DAO Treasury / Protocol Reserve `35%`.
+- Community / Ecosystem Incentives `20%`.
+- Liquidity / Launch Pool `15%`.
+- Staking Rewards Reserve `15%`.
+- Builders / Contributors `10%`.
+- Team / Founding Contributors `5%`.
+- Team vesting.
+- Builders token vesting.
+- Staking token reserve.
+- DAO treasury token allocation.
+- Airdrop bucket.
+- Allocation Option A / B / C.
+- Final allocation freeze candidate.
+
+These were historical draft concepts and are replaced by the Fair Launch model.
+
+## 5. Protocol Revenue Flow
+
+The `50 / 20 / 20 / 10` split is a protocol revenue split, not ALPHA token supply allocation.
+
+Correct model:
+
+Protocol Revenue / Project Revenue
+-> Treasury
+-> 50% Relief Pool
+-> 20% Buyback / Burn
+-> 20% DAO payroll / builders / contributors
+-> 10% Staking Rewards
+
+This split applies after future protocol revenue enters Treasury. It does not create initial ALPHA token buckets.
+
+## 6. Staking Rewards
+
+Staking rewards come from the `10%` Treasury revenue split.
+
+They do not come from a preallocated ALPHA staking reserve.
+
+Staking rules:
+
+- No fixed APY.
+- No guaranteed yield.
+- No guaranteed return.
+- Rewards depend on real protocol revenue, pool balance, protocol rules, and future governance.
+
+## 7. Buyback / Burn
+
+Buyback / burn allocation comes from `20%` of protocol revenue.
+
+It is not:
+
+- Guaranteed buyback.
+- Price floor support.
+- Price protection.
+- A promise of token price appreciation.
+- A guarantee of market liquidity.
+
+Any buyback / burn execution should be transparent, rule-bound, and governance-reviewed.
+
+## 8. DAO Payroll / Builders / Contributors
+
+`20%` of protocol revenue may support:
+
+- DAO payroll.
+- Builders.
+- Contributors.
+- Protocol maintenance.
+- Audits.
+- Operations.
+
+This is revenue-based, not a preallocated token bucket.
+
+Future spending should be transparent and governance-reviewed.
+
+## 9. Relief Pool
+
+`50%` of protocol revenue may support the Relief Pool.
+
+The Relief Pool is intended for risk response and future DAO-reviewed relief policy.
+
+The Relief Pool does not mean automatic payout and does not make Green Label insurance.
+
+## 10. Token Utility
+
+ALPHA may support:
 
 - DAO governance participation.
-- Future proposal voting / signaling.
+- Protocol coordination.
 - Staking participation.
-- Protocol-rule-based incentives.
-- Contributor / builders coordination.
-- Green Label ecosystem alignment.
-- Risk reporting / dispute governance participation.
-- Community reputation / participation layer, if implemented in a future phase.
+- Ecosystem alignment.
+- Risk reporting and dispute governance participation.
 
-Required utility boundaries:
+The full ALPHA voting layer is pending and should not be described as fully launched.
 
-- ALPHA does not represent equity.
-- ALPHA does not guarantee profit.
-- ALPHA does not guarantee fixed returns.
-- ALPHA does not guarantee dividends.
-- ALPHA does not guarantee price appreciation.
-- Staking rewards are protocol-rule-based incentives, not guaranteed yield.
+## 11. Launch Preconditions
 
-## 5. Proposed Allocation Draft
+Formal token launch remains pending and requires:
 
-This allocation is a draft and not a final issuance promise. Final allocation must be frozen before launch.
-
-| Category | Draft Allocation | Intended Use |
-| --- | ---: | --- |
-| DAO Treasury / Protocol Reserve | 35% | Long-term protocol reserve, governance-controlled initiatives, future risk reserves, ecosystem strategy, and protocol continuity. |
-| Community / Ecosystem Incentives | 20% | Community campaigns, ecosystem growth, grants, risk research incentives, and future DAO-approved participation programs. |
-| Liquidity / Launch Pool | 15% | Initial liquidity and launch operations. Final use depends on launch platform and liquidity plan. |
-| Staking Rewards Reserve | 15% | Protocol-rule-based staking incentive reserve. No fixed APY or guaranteed yield. |
-| Builders / Contributors | 10% | Contributors, maintenance, audits, infrastructure, product work, and ecosystem operations. |
-| Team / Founding Contributors | 5% | Long-term founding contributor alignment, subject to strong vesting / lockup. |
-
-No allocation category should be described as guaranteed profit, guaranteed yield, dividend, or price support.
-
-## 6. Allocation Review Status
-
-- Review `docs/tokenomics-allocation-review.md` before tokenomics freeze.
-- The current allocation is a recommended freeze candidate, not the final freeze.
-- Final freeze requires user confirmation of LP policy, vesting, airdrop decision, authority policy, and launch platform.
-- Immediate token launch remains NO-GO until allocation and launch controls are finalized.
-
-## 7. Vesting / Lockup Draft
-
-### DAO Treasury / Protocol Reserve
-
-- Governed reserve.
-- No immediate market sale by default.
-- Future spending requires governance / multisig / timelock policy.
-
-### Community / Ecosystem
-
-- Released through campaigns, grants, contribution rewards, or DAO-approved programs.
-- No guaranteed airdrop.
-- Eligibility, amount, timing, and claim rules must be documented before use.
-
-### Liquidity / Launch Pool
-
-- Used for initial liquidity and launch operations.
-- Final amount depends on launch platform and liquidity plan.
-- LP ownership, lock, burn, or custody policy must be documented before launch.
-
-### Staking Rewards Reserve
-
-- Distributed only through protocol rules or future governance-approved reward programs.
-- No fixed APY.
-- Reward availability depends on reserve, pool balance, and protocol rules.
-
-### Builders / Contributors
-
-- Vesting recommended.
-- Draft schedule: 6-12 month cliff / 12-36 month vesting.
-- Exact schedule pending.
-- Contributor grants and compensation should be documented.
-
-### Team / Founding Contributors
-
-- Strong lockup recommended.
-- Draft schedule: 12 month cliff / 24-48 month vesting.
-- Exact schedule pending.
-- Any exceptions should require explicit review.
-
-## 8. Treasury and Revenue Relationship
-
-Protocol revenue enters Treasury V2.
-
-Treasury V2 split:
-
-- 50% Relief Pool.
-- 20% Buyback / Burn.
-- 20% Builders / Contributors.
-- 10% Staking Rewards.
-
-Treasury revenue split is separate from initial token allocation.
-
-Future changes to revenue split should require DAO / Security Layer governance. The relief pool is not automatic insurance. Staking rewards depend on pool balance and protocol rules.
-
-## 9. Launch Liquidity Draft
-
-The following must be decided before launch:
-
-- Launch platform.
-- Initial liquidity amount.
-- LP ownership.
-- LP lock / burn policy.
-- Treasury wallet.
-- Deployer wallet.
-- Slippage / volatility risk.
-- Anti-snipe / launch fairness considerations, if applicable.
-
-This draft does not select a final launch platform. Platform selection requires a separate decision.
-
-## 10. Governance and Authority Requirements
-
-- Token mint authority / freeze authority, if present, must be governance-controlled, closed, or multisig-controlled.
-- DAO Treasury wallet must not be controlled by a single hot wallet long term.
-- Any treasury spending should be governed by DAO / multisig / Security Layer timelock.
-- Builders pool spending should be documented.
-- Emergency actions cannot bypass governance except for risk-limiting pause.
-
-Authority status must be reviewed before any token launch decision.
-
-## 11. Token Launch Preconditions
-
-Formal token launch requires:
-
-- Final tokenomics freeze.
-- Allocation / vesting finalized.
-- Launch platform selected.
-- Liquidity plan finalized.
-- Wallet / authority reviewed.
-- Risk disclosure reviewed.
-- Public announcement draft reviewed.
-- Litepaper updated.
-- Website screenshots reviewed.
-- No prohibited language.
-- Community preheat prepared.
-- Legal / regulatory risk review.
-- Final build and typecheck.
+- Final total supply confirmation.
+- Launch platform selection.
+- Initial liquidity setup.
+- Pairing asset decision, such as SOL or USDC.
+- Mint authority policy.
+- Freeze authority policy.
+- Liquidity custody / LP handling.
+- Official launch communication.
+- Anti-scam warnings.
+- Legal / risk wording review.
 - Final Go/No-Go review.
 
-If any of these items are incomplete, token launch should remain NO-GO.
+## 12. Decisions No Longer Required
 
-## 12. Red Flag Language
+Under Fair Launch, the user no longer needs to approve:
 
-Forbidden language:
+- Team allocation.
+- Team vesting.
+- Builders token vesting.
+- Staking token reserve.
+- DAO treasury token allocation.
+- Airdrop bucket.
+- Allocation Option A / B / C.
 
-- guaranteed returns.
-- fixed APY.
-- dividends.
-- passive income promise.
-- insurance payout guarantee.
-- risk-free.
-- price floor.
-- guaranteed buyback.
-- token will moon / price appreciation promise.
-- fully decentralized DAO, unless the voting layer is complete.
-- Mainnet live, unless Mainnet is truly live.
+## 13. Risk Language
 
-Recommended language:
+Required risk language:
 
-- protocol-rule-based incentives.
-- governance participation.
-- Devnet verified.
-- Read-only Public MVP.
-- token launch pending.
-- voting layer pending.
-- not financial advice.
-- not insurance.
-- not credit rating.
+- Not financial advice.
+- No guaranteed return.
+- No fixed APY.
+- No dividend promise.
+- No price appreciation promise.
+- Green Label is not insurance.
+- Green Label is not a credit rating.
+- Relief Pool does not mean automatic payout.
+- Fair Launch does not mean risk-free.
 
-## 13. Communication Constraints
+## 14. Current Recommendation
 
-- This tokenomics draft must not be used as a return promise.
-- Allocation percentages must not be marketed as price support, price floor, or guaranteed buyback.
-- The Staking Rewards Reserve must not be described as fixed APY or guaranteed yield.
-- Liquidity / Launch Pool language must not imply guaranteed liquidity depth, guaranteed exit, or guaranteed price stability.
-- Any public launch communication must follow `docs/launch-communication-and-community-preheat-plan.md`.
-- Token launch communication must keep token launch pending and Mainnet not live visible until those statuses change through an approved process.
+Recommended current position:
 
-## 14. Open Questions
-
-Questions to confirm before token launch:
-
-- Should Alpha Protocol adopt `1,000,000,000 ALPHA` total supply?
-- Is the proposed allocation percentage acceptable?
-- Should team allocation remain 5%, or should part / all of it move to builders or DAO treasury?
-- What is the preferred launch platform?
-- Is LP lock / burn required?
-- Is an airdrop needed?
-- Is 15% staking rewards reserve appropriate?
-- Is 35% DAO treasury appropriate?
-- Should launch use a Devnet-preview narrative first, then a formal Mainnet narrative later?
-- Should the full ALPHA voting layer be complete before launch, or should launch use a Security Layer execution + voting roadmap narrative?
-
-## 15. Current Recommendation
-
-Current recommendation: community preheating can begin.
-
-Current non-recommendation: immediate token launch.
-
-Next recommended step: complete the Launch Communication Draft and Community Preheat Plan, then perform a final token launch decision review.
+- Use Fair Launch model.
+- Keep `1,000,000,000 ALPHA` as draft total supply pending final confirmation.
+- Do not use project-side, team, VC, DAO treasury, staking reserve, builders, or airdrop token buckets at launch.
+- Keep immediate token launch as NO-GO until launch platform, liquidity setup, authority policy, communication, and risk review are complete.
+- Community preheating can explain Fair Launch with clear warnings.

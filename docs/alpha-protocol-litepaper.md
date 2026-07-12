@@ -1,190 +1,178 @@
 # Alpha Protocol Litepaper
 
-Date: 2026-07-09
-
 ## 1. Abstract
 
-Alpha Protocol is a DAO-governed risk protection and accountability protocol for on-chain ecosystems. It combines a Security Layer execution guard, Green Label risk bonds, Treasury V2 revenue routing, Staking V1 incentives, and public read-only dashboards.
+Alpha Protocol is a Devnet-verified Public MVP for on-chain risk accountability, treasury transparency, Green Label commitments, and DAO-controlled execution paths.
 
-The current implementation is a Devnet-verified Public MVP. Mainnet is not live, the public token launch is pending, and the full ALPHA voting layer has not yet launched.
+Current status: Devnet verified / read-only Public MVP. Mainnet is not live. ALPHA token launch is pending.
 
 ## 2. Problem
 
-On-chain ecosystems face recurring trust and execution problems:
+On-chain users often face:
 
-- On-chain fraud, rugs, and malicious project behavior.
-- Lack of transparent project accountability.
-- Weak treasury transparency and unclear protocol revenue use.
-- DAO execution without enough safety controls.
-- Lack of a structured dispute / refund / slash process.
-
-Many users see project claims, token incentives, or DAO language without a clear way to inspect risk commitments, treasury flows, or final execution rules.
+- Opaque project risk.
+- Weak accountability after rugs or malicious behavior.
+- Unclear treasury flows.
+- DAO interfaces without execution safety.
+- Risk labels that can be confused with insurance or credit ratings.
 
 ## 3. Solution
 
-Alpha Protocol introduces a transparent protocol stack:
+Alpha Protocol combines:
 
-- DAO Security Layer for proposal decisions, queueing, timelock, cancel, pause, and guarded execution.
-- Green Label risk bond flow for project accountability, observation windows, dispute windows, governance decisions, refund, and slash.
-- Treasury V2 for transparent USDC revenue routing across relief, buyback / burn, builders, and staking rewards.
-- Staking V1 for protocol-rule-based incentives.
-- Public read-only dashboards for Devnet state visibility.
+- Security Layer / DAO execution guard.
+- Green Label bond and dispute flow.
+- Treasury V2 revenue accounting.
+- Staking V1 incentive logic.
+- Public read-only dashboards.
 
-The protocol is designed to make critical state inspectable before Mainnet launch and to keep sensitive actions behind governance and execution guards.
+The protocol emphasizes verifiable process, not safety guarantees.
 
 ## 4. Protocol Architecture
 
-Alpha Protocol is organized into six product layers:
-
 ### DAO Governance / Security Layer
 
-The Security Layer is the execution guard for sensitive protocol actions. It records proposal decisions, queues execution, enforces timelocks, supports cancel paths, and provides pause / unpause controls.
+Security Layer V1 verifies proposal decision, queue, timelock, cancel, pause, and execute paths on Devnet.
+
+Full ALPHA voting layer is pending.
 
 ### Green Label
 
-Green Label allows project teams to lock a risk bond and move through observation, dispute, governance decision, refund, or slash flows. It is an accountability signal, not insurance and not a credit rating.
-
-### Treasury V2
-
-Treasury V2 routes USDC protocol revenue into four transparent pools:
-
-- 50% Relief Pool.
-- 20% Buyback / Burn Pool.
-- 20% Builders / Contributors Pool.
-- 10% Staking Rewards Pool.
-
-### Staking V1
-
-Staking V1 supports stake / claim / unstake flows on Devnet. Staking rewards are protocol-rule-based incentives, not guaranteed yield.
-
-### Token / Revenue
-
-ALPHA is intended as the protocol coordination asset for governance participation, staking participation, contributor coordination, ecosystem alignment, and risk reporting / dispute governance participation.
-
-### Public Dashboards
-
-Public dashboards expose Devnet state in read-only mode. They do not create transactions, execute governance, buy tokens, or move funds.
-
-## 5. DAO Governance
-
-DAO governance is core to Alpha Protocol because refund, slash, treasury, emergency, and parameter actions affect user trust and protocol credibility.
-
-The completed Devnet scope is the execution / security layer. The full ALPHA voting layer is pending.
-
-Refund, slash, treasury, and emergency actions must not bypass the Security Layer because:
-
-- Timelocks create review windows.
-- Queue accounts make execution visible before completion.
-- Cancel paths support stopping wrong or malicious actions.
-- Payload hash and action type checks reduce wrong-execution risk.
-- Pause controls support emergency containment.
-
-Until the voting layer is complete, Alpha Protocol must not be marketed as a fully decentralized DAO.
-
-## 6. Green Label
-
-Green Label is a project accountability mechanism based on risk bonds.
-
-Core concepts:
-
-- Base bond: the minimum configured project bond.
-- Extra bond: additional voluntary risk commitment.
-- Observation window: the period after successful bond lock.
-- Dispute window: the period in which disputes can be opened.
-- Governance decision: Security Layer decision and queued execution.
-- Refund: valid no-rug / no-malicious outcome can return bond according to protocol rules.
-- Slash: confirmed malicious / rug behavior can slash bond according to protocol rules.
+Green Label lets a project lock a risk commitment bond and pass through observation, dispute, and Security Layer decision paths.
 
 Green Label is not insurance, not a credit rating, and not investment advice.
 
-## 7. Treasury Model
+### Treasury V2
 
-Treasury V2 uses a 50 / 20 / 20 / 10 split:
+Treasury V2 records protocol revenue and splits revenue after it enters Treasury.
+
+The revenue split is:
 
 - 50% Relief Pool.
-- 20% Buyback / Burn Pool.
-- 20% Builders / Contributors Pool.
-- 10% Staking Rewards Pool.
+- 20% Buyback / Burn.
+- 20% DAO payroll / builders / contributors.
+- 10% Staking Rewards.
 
-Future changes to treasury parameters, builders spending, relief policy, and staking reward policy should require governance review and Security Layer execution controls.
+This is protocol revenue split, not ALPHA token supply allocation.
 
-## 8. ALPHA Token Utility
+### Staking V1
 
-ALPHA token utility may include:
+Staking V1 has verified stake / claim / unstake paths on Devnet.
 
-- Governance participation.
-- Staking participation.
-- Protocol incentives.
-- Contributor coordination.
-- Ecosystem alignment.
-- Risk reporting / dispute governance participation.
+Staking rewards come from the `10%` Treasury revenue split. They do not come from a preallocated ALPHA staking reserve.
 
-ALPHA must not be described as providing guaranteed profit, fixed yield, dividends, guaranteed payouts, or token price appreciation.
+No fixed APY or guaranteed yield is promised.
 
-## 9. Tokenomics Draft Status
+### Token / Revenue
 
-ALPHA tokenomics is documented separately in `docs/alpha-tokenomics-draft.md`.
+ALPHA is planned as a Fair Launch token.
 
-The Litepaper does not promise final allocation, final supply policy, launch platform, liquidity plan, vesting schedule, airdrop eligibility, or staking reward amounts.
+Project-side token allocation: none.
 
-Final tokenomics must be frozen before launch. Until final tokenomics, allocation, vesting, liquidity, and authority reviews are complete, immediate token launch remains NO-GO.
+Protocol revenue split is separate from token issuance.
 
-## 10. Communication Status
+### Public Dashboards
 
-Public communication drafts are maintained separately in `docs/launch-communication-and-community-preheat-plan.md`.
+The Public MVP frontend is read-only. It does not provide buy buttons, real funds entry, or chain write actions by default.
 
-Litepaper publication should follow the approved risk wording and red-flag language checks. Token launch pending and Mainnet not live must remain visible in public communication until those statuses change through an approved review.
+## 5. ALPHA Token Launch Model
 
-The Litepaper should not be used as a buy-token CTA, yield promise, insurance promise, or statement that the full ALPHA voting layer is complete.
+Planned launch model: Fair Launch.
 
-## 11. Staking
+- Project-side reserved token allocation: none.
+- Founder / project-side preallocated bucket: none.
+- Team allocation: none.
+- VC allocation: none.
+- DAO treasury token allocation at launch: none.
+- Staking token reserve at launch: none.
+- Builders / contributors token allocation at launch: none.
+- Market participants acquire ALPHA through the open market after launch.
 
-Staking V1 has been verified on Devnet for stake / claim / unstake paths.
+There is no hidden project-side token reserve.
 
-Staking rewards are protocol-rule-based incentives. They depend on pool balance, protocol rules, and future governance.
+Total supply draft: `1,000,000,000 ALPHA`, pending final confirmation.
 
-There is no guaranteed APY, fixed yield, or guaranteed return.
+## 6. Treasury Revenue Model
 
-## 12. Current Devnet Status
+The `50 / 20 / 20 / 10` split is a protocol revenue split:
 
-Current verified status:
+Protocol Revenue / Project Revenue
+-> Treasury
+-> 50% Relief Pool
+-> 20% Buyback / Burn
+-> 20% DAO payroll / builders / contributors
+-> 10% Staking Rewards
 
-- Treasury V2 verified.
-- Staking V1 verified.
-- Security Layer V1 verified.
-- Green Label refund / slash verified.
-- DAO dashboard completed.
-- Token / Revenue dashboard completed.
-- Mainnet safety docs and sanity checks completed.
+It is not token supply allocation.
 
-This status is a Devnet baseline and does not approve Mainnet production launch.
+## 7. Buyback / Burn Boundary
 
-## 13. Roadmap
+Buyback / burn allocation comes from `20%` of protocol revenue.
 
-Suggested roadmap:
+It is not:
 
-1. Phase 2A: DAO product layer.
-2. Phase 2B: Token / Revenue product layer.
-3. Phase 2C: Public MVP / Litepaper.
-4. Phase 2D: Launch readiness review.
-5. Future ALPHA voting layer.
-6. Future DAO-controlled treasury.
-7. Future Mainnet launch.
+- Guaranteed buyback.
+- Price floor support.
+- Price protection.
+- Guaranteed liquidity support.
+- A promise of token price appreciation.
 
-## 14. Risk Disclosure
+## 8. Staking Boundary
 
-Alpha Protocol involves technical, governance, and regulatory risks.
+Staking rewards are protocol-rule-based incentives.
 
-Important disclosures:
+They depend on real protocol revenue, pool balance, protocol rules, and future governance.
 
-- This document is not financial advice.
-- Alpha Protocol is not insurance.
+They are not fixed APY, guaranteed yield, dividends, or guaranteed returns.
+
+## 9. Relief Boundary
+
+The Relief Pool may support risk response and future DAO-reviewed relief policy.
+
+The Relief Pool does not mean automatic payout.
+
+Green Label is not insurance.
+
+## 10. Current Devnet Status
+
+- Treasury V2 Devnet USDC split verified.
+- Staking V1 Devnet stake / claim / unstake verified.
+- Security Layer V1 Devnet decision / queue / timelock / cancel / pause verified.
+- Green Label refund / slash E2E verified.
+- Green Label Dashboard reads config / project / dispute accounts.
+- DAO Governance Dashboard reads Security Layer config / proposal / queue accounts.
+- Token / Revenue Dashboard shows read-only Treasury V2 and revenue split.
+
+## 11. Mainnet / Token Launch Status
+
+- Mainnet production: NO-GO.
+- Immediate token launch: NO-GO.
+- Public MVP preview: GO with warnings.
+- Community preheating: GO with warnings.
+
+Before launch, the project must confirm:
+
+- Total supply.
+- Launch platform.
+- Initial liquidity setup.
+- Pairing asset, such as SOL or USDC.
+- Mint authority policy.
+- Freeze authority policy.
+- Liquidity custody / LP handling.
+- Official launch communication.
+- Anti-scam warnings.
+- Legal / risk wording review.
+
+## 12. Risk Disclosure
+
+- Not financial advice.
+- No guaranteed return.
+- No fixed APY.
+- No dividend promise.
+- No price appreciation promise.
+- Green Label is not insurance.
 - Green Label is not a credit rating.
-- ALPHA does not guarantee returns.
+- Relief Pool does not mean automatic payout.
+- Fair Launch does not mean risk-free.
 - Mainnet is not live.
-- Token launch is pending.
-- Smart contract risk remains.
-- Governance risk remains.
-- Regulatory risk remains.
-
-Public materials must not imply guaranteed returns, insurance protection, fixed compensation, or price appreciation.
+- ALPHA token launch is pending.

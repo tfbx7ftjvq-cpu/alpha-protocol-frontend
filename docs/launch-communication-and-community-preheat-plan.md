@@ -4,11 +4,11 @@ Date: 2026-07-09
 
 ## 1. Purpose
 
-This document prepares launch communication drafts and a community preheat plan for the Alpha Protocol Public MVP preview.
+This document prepares communication drafts and community preheat guidance for Alpha Protocol Public MVP preview.
 
-It does not represent token launch approval. It does not represent Mainnet production approval.
+It does not approve token launch. It does not approve Mainnet production.
 
-All public materials must avoid return promises, insurance promises, price promises, and overstatements about decentralization. Until the full ALPHA voting layer is complete, Alpha Protocol must not be marketed as a fully decentralized DAO.
+All public materials must avoid return promises, insurance promises, price promises, and overstatements about decentralization.
 
 ## 2. Current Launch Positioning
 
@@ -18,6 +18,7 @@ Current positioning:
 - Community preheating: GO with warnings.
 - Immediate token launch: NO-GO.
 - Mainnet production: NO-GO.
+- ALPHA launch model: planned Fair Launch.
 
 Currently allowed:
 
@@ -26,6 +27,7 @@ Currently allowed:
 - Show the DAO read-only dashboard.
 - Show the Token / Revenue / Treasury flow.
 - Show Green Label Devnet verification.
+- Explain planned Fair Launch model with warnings.
 - Collect community feedback.
 
 Currently not allowed:
@@ -37,40 +39,61 @@ Currently not allowed:
 - Claim token price upside.
 - Open a real funding entry.
 - Guide users to buy tokens.
+- Imply Fair Launch is risk-free.
+- Imply the project has hidden ALPHA reserves.
+- Imply buyback / burn is price protection.
 
-## 3. One-liner / Short Description
+## 3. One-Liner / Short Description
 
 English options:
 
-- Alpha Protocol is a DAO-governed accountability and treasury transparency protocol for on-chain risk protection, Green Label risk bonds, and public governance execution.
-- Alpha Protocol builds transparent risk accountability rails for Web3 projects through DAO execution, Green Label bonds, treasury splitting, and public read-only dashboards.
+- Alpha Protocol is a Devnet-verified, read-only Public MVP for on-chain risk accountability, Treasury transparency, Green Label bonds, and DAO execution safety.
+- ALPHA is planned as a Fair Launch token; future protocol revenue, not initial token allocation, funds Relief, Buyback / Burn, DAO payroll / builders / contributors, and Staking Rewards.
 
 Chinese options:
 
-- Alpha Protocol 是一个面向链上风险保护、Green Label 风险承诺金、透明国库分流与 DAO 治理执行的协议。
-- Alpha Protocol 通过 DAO 执行层、Green Label 保证金、国库分流和公开看板，为 Web3 项目建立更透明的风险责任机制。
+- Alpha Protocol 是一个 Devnet-verified、read-only Public MVP，用于链上风险责任机制、透明国库、Green Label 风险承诺金和 DAO 安全执行。
+- ALPHA 计划采用 Fair Launch / 公平发射；未来协议收入而非初始代币分配，用于 Relief、Buyback / Burn、DAO payroll / builders / contributors 和 Staking Rewards。
 
-Do not use words or phrases such as guaranteed returns, insurance payout, risk-free, must rise, fixed APY, or price appreciation.
+Do not use words or phrases such as guaranteed returns, insurance payout, risk-free, must rise, fixed APY, price protection, price floor, or guaranteed buyback.
 
-## 4. Long Description
+## 4. Fair Launch Public Messaging
 
-Alpha Protocol 是一个面向链上风险保护、项目责任机制和协议收入透明度的 Devnet-verified Public MVP。
+Approved Fair Launch language:
 
-协议当前展示五个核心层：
+- ALPHA is planned as a fair-launch token.
+- The project does not plan team, VC, or project-side reserved token allocations.
+- There is no planned hidden project-side ALPHA reserve.
+- Market participants acquire ALPHA through the open market after launch.
+- Future protocol revenue, not initial token allocation, funds relief, buyback / burn, DAO payroll / builders / contributors, and staking rewards.
 
-- DAO Security Layer: proposal decision / queue / timelock / cancel / pause 已在 Devnet 验证，用于保护敏感执行路径。
-- Green Label risk bond: 项目方未来可通过风险承诺金、观察期、争议期和治理裁决形成更透明的责任机制；Green Label 不是保险，也不是信用评级。
-- Treasury V2: 协议收入进入 USDC 国库并按 50/20/20/10 分流到 Relief、Buyback / Burn、Builders / Contributors、Staking Rewards。
-- Staking V1: staking rewards 是 protocol-rule-based incentives，不是固定收益或 guaranteed yield。
-- Public MVP dashboards: 当前前端以只读方式展示 Devnet 链上状态，不提供买币、真实资金入口或链上写入按钮。
+Required caveats:
+
+- Fair Launch does not mean risk-free.
+- Token launch is pending.
+- Mainnet is not live.
+- No official ALPHA buy address is live unless confirmed through official channels.
+
+## 5. Long Description
+
+Alpha Protocol is a Devnet-verified Public MVP for on-chain risk accountability, project responsibility mechanisms, and protocol revenue transparency.
+
+Current public modules:
+
+- DAO Security Layer: proposal decision / queue / timelock / cancel / pause verified on Devnet.
+- Green Label risk bond: risk commitment, observation, dispute, and governance decision flow. Green Label is not insurance and not a credit rating.
+- Treasury V2: future protocol revenue enters Treasury and follows the `50 / 20 / 20 / 10` revenue split.
+- Staking V1: staking rewards are protocol-rule-based incentives, not fixed APY or guaranteed yield.
+- Public MVP dashboards: read-only Devnet views with no buy button, no real funds entry, and no chain write action by default.
+- ALPHA tokenomics: planned Fair Launch; no team, VC, or project-side reserved token allocation.
 
 Mainnet is not live. Token launch is pending. The full ALPHA voting layer is pending.
 
-## 5. Public MVP Announcement Draft
+## 6. Public MVP Announcement Draft
 
 Title:
 
-Alpha Protocol Public MVP Preview is now live on Devnet
+Alpha Protocol Public MVP Preview is ready for Devnet community review
 
 Draft:
 
@@ -91,8 +114,15 @@ Current status:
 - Mainnet not live.
 - Token launch pending.
 - Full ALPHA voting layer pending.
+- ALPHA is planned as a Fair Launch token.
 
 Alpha Protocol is building transparent accountability rails for on-chain risk: DAO execution, Green Label risk bonds, Treasury V2 revenue splitting, and public dashboards.
+
+Fair Launch note:
+
+- The project does not plan team, VC, or project-side reserved token allocations.
+- Future protocol revenue, not initial token allocation, funds relief, buyback / burn, DAO payroll / builders / contributors, and staking rewards.
+- Fair Launch does not mean risk-free.
 
 This preview is not a Mainnet launch and not a token launch. There is no official buy button, no official token purchase address, and no real funding entry in this Public MVP.
 
@@ -103,6 +133,7 @@ Risk notes:
 - Green Label is not a credit rating.
 - Staking rewards are protocol-rule-based incentives, not guaranteed yield.
 - Relief pool does not mean automatic payout.
+- Buyback / burn is not price protection.
 
 CTA:
 
@@ -111,33 +142,35 @@ CTA:
 - Review the DAO governance layer.
 - Give feedback.
 
-## 6. X / Twitter Preheat Thread Draft
+## 7. X / Twitter Preheat Thread Draft
 
-1. Alpha Protocol Public MVP preview is ready for community review on Devnet. It is a read-only preview, not a Mainnet launch and not a token launch.
+1. Alpha Protocol Public MVP preview is ready for community review on Devnet. It is read-only, not a Mainnet launch and not a token launch.
 
-2. Alpha Protocol is a DAO-governed accountability and treasury transparency protocol for on-chain risk protection, Green Label risk bonds, and public governance execution.
+2. Alpha Protocol builds accountability rails for on-chain risk: DAO execution, Green Label bonds, Treasury revenue transparency, and public dashboards.
 
-3. Why Green Label? Web3 projects need clearer accountability rails: risk bonds, observation windows, dispute windows, governance decisions, refund paths, and slash paths.
+3. ALPHA is planned as a Fair Launch token.
 
-4. Green Label is not insurance and not a credit rating. It is a risk commitment and accountability mechanism verified through protocol rules and governance execution.
+4. The project does not plan team, VC, or project-side reserved token allocations.
 
-5. Why DAO? Sensitive actions like refund, slash, treasury policy, and emergency controls should not bypass execution safety. Alpha uses a Security Layer with decision / queue / timelock / cancel / pause paths.
+5. Fair Launch does not mean risk-free. Token launch is pending and there is no official buy address unless announced through official channels.
 
-6. Treasury V2 routes protocol revenue through a transparent 50/20/20/10 split: 50% Relief, 20% Buyback / Burn, 20% Builders / Contributors, 10% Staking Rewards.
+6. Treasury V2 routes future protocol revenue through a transparent 50/20/20/10 split: 50% Relief, 20% Buyback / Burn, 20% DAO payroll / builders / contributors, 10% Staking Rewards.
 
-7. Staking rewards are protocol-rule-based incentives. They are not fixed APY, not guaranteed yield, and not a dividend promise.
+7. This is protocol revenue split, not ALPHA token supply allocation.
 
-8. Current Devnet scope includes Treasury V2 split verification, Staking V1 stake / claim / unstake, Security Layer execution guard, and Green Label refund / slash E2E.
+8. Buyback / burn is not guaranteed buyback, price floor support, price protection, or a promise of token price appreciation.
 
-9. Mainnet is not live. ALPHA token launch is pending. The full ALPHA voting layer is pending.
+9. Staking rewards are protocol-rule-based incentives funded by revenue split. They are not fixed APY, guaranteed yield, or a dividend promise.
 
-10. Public MVP goal: make risk, treasury, DAO execution, Green Label outcomes, and token/revenue design easier to inspect before launch decisions.
+10. Green Label is not insurance and not a credit rating. It is a risk commitment and accountability mechanism.
 
-11. We invite community feedback on the landing page, Litepaper, dashboards, risk wording, and tokenomics draft.
+11. Mainnet is not live. ALPHA token launch is pending. The full ALPHA voting layer is pending.
 
-12. Safety note: no official token buy address is live unless explicitly announced through official channels. Beware fake contracts, fake pools, fake airdrops, and unsolicited DMs.
+12. We invite community feedback on the landing page, Litepaper, dashboards, risk wording, and Fair Launch tokenomics draft.
 
-## 7. Discord / Telegram Pinned Message Draft
+13. Safety note: beware fake contracts, fake pools, fake airdrops, and unsolicited DMs.
+
+## 8. Discord / Telegram Pinned Message Draft
 
 Alpha Protocol Public MVP Preview
 
@@ -147,6 +180,7 @@ Current status:
 - Read-only Public MVP.
 - Mainnet not live.
 - Token launch pending.
+- Planned Fair Launch model.
 - Full ALPHA voting layer pending.
 
 Official links:
@@ -156,27 +190,36 @@ Official links:
 - Litepaper: `<LITEPAPER_URL>`
 - Official announcements: `<OFFICIAL_ANNOUNCEMENT_CHANNEL>`
 
+Fair Launch note:
+
+- No planned team allocation.
+- No planned VC allocation.
+- No planned project-side reserved token allocation.
+- No hidden project-side ALPHA reserve.
+- Fair Launch does not mean risk-free.
+
 Risk notes:
 
 - No official token is live yet unless future official announcements confirm otherwise.
 - Green Label is not insurance.
 - Green Label is not a credit rating.
 - Staking rewards are not guaranteed yield.
+- Buyback / burn is not price protection.
 - This is not financial advice.
 
 Anti-scam reminders:
 
 - Beware fake contracts.
 - Admins will not DM first.
-- Never share your seed phrase.
+- Never share seed phrases.
 - Do not connect to unknown websites.
 - Verify all announcements through official channels.
 
-## 8. FAQ
+## 9. FAQ
 
 ### What is Alpha Protocol?
 
-Alpha Protocol is a DAO-governed accountability and treasury transparency protocol for on-chain risk protection, Green Label risk bonds, Treasury V2 revenue splitting, and public governance execution.
+Alpha Protocol is a Devnet-verified Public MVP for on-chain risk accountability, Green Label bonds, Treasury V2 revenue splitting, and DAO execution safety.
 
 ### Is Alpha Protocol live on Mainnet?
 
@@ -186,93 +229,90 @@ No. Current public status is Devnet verified / read-only Public MVP. Mainnet pro
 
 No. Token launch is pending. There is no official token buy address unless future official announcements confirm one.
 
+### What is the planned ALPHA launch model?
+
+ALPHA is planned as a Fair Launch token. The project does not plan team, VC, or project-side reserved token allocations.
+
+### Does Fair Launch mean risk-free?
+
+No. Fair Launch does not mean risk-free and does not remove market, smart contract, liquidity, operational, or regulatory risk.
+
+### Is the 50/20/20/10 split ALPHA token allocation?
+
+No. It is protocol revenue split after revenue enters Treasury. It is not ALPHA token supply allocation.
+
 ### Is Green Label insurance?
 
 No. Green Label is not insurance, not a credit rating, and not investment advice. It is a risk commitment and accountability mechanism.
 
 ### Does staking guarantee yield?
 
-No. Staking rewards are protocol-rule-based incentives. They are not fixed APY, not guaranteed yield, and not a dividend promise.
+No. Staking rewards are protocol-rule-based incentives funded by revenue split. They are not fixed APY, guaranteed yield, or a dividend promise.
+
+### Is buyback / burn price protection?
+
+No. Buyback / burn is not guaranteed buyback, price floor support, price protection, guaranteed liquidity support, or a promise of token price appreciation.
 
 ### Is Alpha Protocol fully decentralized?
 
 Not yet. The Security Layer execution guard is verified on Devnet, but the full ALPHA voting layer is pending.
 
-### What is completed on Devnet?
-
-Treasury V2 split verification, Staking V1 stake / claim / unstake, Security Layer decision / queue / timelock / cancel / pause, Green Label refund / slash E2E, DAO read-only dashboard, Token / Revenue dashboard, and Public Landing Page are completed.
-
-### What is still pending?
-
-Mainnet launch, final tokenomics freeze, legal / risk review, launch communication review, final community materials, full ALPHA voting layer, and token launch decision.
-
-### What is the role of DAO?
-
-DAO governance is intended to oversee sensitive protocol actions such as refund / slash, treasury policy, builders spending, relief policy, staking policy, and emergency controls. The current completed layer is the execution / security layer.
-
-### What is the Treasury split?
-
-Treasury V2 uses a 50/20/20/10 split: 50% Relief Pool, 20% Buyback / Burn, 20% Builders / Contributors, and 10% Staking Rewards.
-
-### What is the Relief Pool?
-
-The Relief Pool is intended for victim protection, risk response, Green Label slash proceeds, and future DAO-reviewed relief policy. It does not mean automatic insurance payout.
-
-### Can users receive automatic payouts?
-
-No automatic payout is promised. Any future relief policy must be defined by protocol rules and governance.
-
 ### What should users avoid?
 
-Avoid fake contracts, unknown token pools, unsolicited DMs, unknown websites, seed phrase requests, and any message claiming guaranteed returns or official token live status without official confirmation.
+Avoid fake contracts, unknown token pools, unsolicited DMs, unknown websites, seed phrase requests, any message claiming guaranteed returns, and any message claiming official token live status without official confirmation.
 
-### How can community members help?
-
-Community members can review the Litepaper, inspect the read-only dashboards, give feedback on risk wording, report unclear UI copy, help identify scams, and participate in future governance discussions.
-
-## 9. Red Flag / Prohibited Language
+## 10. Red Flag / Prohibited Language
 
 Do not use:
 
-- guaranteed returns.
-- fixed APY.
-- passive income guarantee.
-- dividend.
-- insurance payout.
-- risk-free.
-- guaranteed buyback.
-- price floor.
-- token will moon.
-- fully decentralized DAO, unless the voting layer is complete.
+- Guaranteed returns.
+- Fixed APY.
+- Passive income guarantee.
+- Dividend.
+- Insurance payout.
+- Risk-free.
+- Guaranteed buyback.
+- Price floor.
+- Price protection.
+- Token will moon.
+- Buyback / burn as price support.
+- Hidden project-side allocation.
+- Fair Launch means risk-free.
+- Fully decentralized DAO, unless the voting layer is complete.
 - Mainnet live, unless Mainnet is truly live.
-- official token live, unless the token is truly launched.
+- Official token live, unless the token is truly launched.
 
-## 10. Approved Language
+## 11. Approved Language
 
 Recommended language:
 
 - Devnet verified.
 - Read-only Public MVP.
-- token launch pending.
+- Token launch pending.
 - Mainnet not live.
+- Planned Fair Launch.
+- No planned team, VC, or project-side reserved token allocation.
+- Protocol revenue split, not token supply allocation.
 - DAO execution layer.
 - ALPHA voting layer pending.
-- protocol-rule-based incentives.
-- not financial advice.
-- not insurance.
-- not credit rating.
-- community feedback welcome.
+- Protocol-rule-based incentives.
+- Not financial advice.
+- Not insurance.
+- Not credit rating.
+- Community feedback welcome.
 
-## 11. Tokenomics Communication Constraint
+## 12. Tokenomics Communication Constraint
 
-- Communication must not present allocation as price support.
-- Staking Rewards Reserve must not be described as guaranteed yield or fixed APY.
-- Liquidity / Launch Pool must not be described as guaranteed buyback, price floor, or guaranteed exit liquidity.
-- Team allocation must be paired with lockup / vesting language if mentioned.
-- DAO Treasury allocation must be paired with governance / multisig / timelock language if mentioned.
-- Any airdrop language must avoid "free money" framing and must mention eligibility / anti-sybil review if applicable.
+- ALPHA is planned as a Fair Launch token.
+- The project does not plan team, VC, or project-side reserved token allocations.
+- Do not imply the project has hidden ALPHA reserves.
+- Future protocol revenue, not initial token allocation, funds Relief, Buyback / Burn, DAO payroll / builders / contributors, and Staking Rewards.
+- The `50 / 20 / 20 / 10` split is protocol revenue split, not token supply allocation.
+- Buyback / burn must not be described as guaranteed buyback, price floor, price protection, guaranteed liquidity support, or token price appreciation promise.
+- Staking rewards must not be described as fixed APY, guaranteed yield, guaranteed return, passive income guarantee, or dividend.
+- Fair Launch must not be described as risk-free.
 
-## 12. Community Preheat Plan
+## 13. Community Preheat Plan
 
 ### Phase A: Quiet Preview
 
@@ -287,17 +327,21 @@ Recommended language:
 - Publish X thread.
 - Open dashboard read-only viewing.
 - Continue emphasizing no token live / Mainnet not live.
+- Explain Fair Launch only with clear risk warnings.
 - Collect community feedback and moderation issues.
 
 ### Phase C: Token Launch Decision Review
 
-- Complete tokenomics freeze.
+- Complete Fair Launch sign-off.
+- Select launch platform.
+- Confirm initial liquidity setup and pairing asset.
+- Confirm mint / freeze authority policy.
 - Complete launch communication review.
 - Complete legal / risk wording cleanup.
 - Decide whether to proceed to token launch.
 - Keep token launch NO-GO if blockers remain.
 
-## 13. Scam / Impersonation Warning
+## 14. Scam / Impersonation Warning
 
 Until officially confirmed, there is no official ALPHA buy address.
 
@@ -309,7 +353,7 @@ Users should:
 - Expect fake tokens, fake pools, and fake airdrops to appear.
 - Verify announcements through designated official channels only: `<OFFICIAL_ANNOUNCEMENT_CHANNEL>`.
 
-## 14. Frontend Safety Cleanup Before Public Preview
+## 15. Frontend Safety Cleanup Before Public Preview
 
 Before public preview communication, confirm:
 
@@ -318,7 +362,7 @@ Before public preview communication, confirm:
 - No visible Devnet write action by default.
 - No price floor, guaranteed yield, automatic payout, or insurance wording is surfaced.
 
-## 15. Launch Communication Checklist
+## 16. Launch Communication Checklist
 
 Before any formal public preheat:
 
@@ -326,18 +370,21 @@ Before any formal public preheat:
 - Dashboard links reviewed.
 - Litepaper draft reviewed.
 - Tokenomics draft reviewed.
+- Fair Launch model reviewed.
+- Revenue split vs token supply allocation distinction reviewed.
 - No prohibited language.
 - No buy button.
 - No fake Mainnet claim.
 - No guaranteed yield wording.
 - No insurance claim.
+- No price protection claim.
 - Community moderators prepared.
 - Scam warning pinned.
 - Feedback channel ready.
 
-## 16. Current Recommendation
+## 17. Current Recommendation
 
 - Community preheating may begin after final review.
 - Immediate token launch remains NO-GO.
 - Mainnet production remains NO-GO.
-- Next step should be final communication review and tokenomics decision.
+- Next step should be final communication review and Fair Launch decision sign-off.

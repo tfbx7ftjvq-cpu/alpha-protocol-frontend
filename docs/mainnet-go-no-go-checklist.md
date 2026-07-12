@@ -179,31 +179,43 @@ Manual review notes:
 ## 14. Tokenomics Finalization
 
 - Review `docs/alpha-tokenomics-draft.md` before any token launch decision.
-- Final tokenomics, allocation, vesting, liquidity plan, wallet / authority review, and risk disclosure review are token launch preconditions.
-- If tokenomics is not frozen, token launch decision must be NO-GO.
+- Final Fair Launch model, total supply, launch platform, initial liquidity setup, pairing asset, mint / freeze authority policy, liquidity custody / LP handling, official communication, anti-scam warnings, and risk disclosure review are token launch preconditions.
+- If the Fair Launch model is not confirmed, token launch decision must be NO-GO.
 - The tokenomics draft does not approve immediate token launch and must not be used as a yield, dividend, insurance, or price appreciation promise.
 
 ## 15. Tokenomics Allocation Review
 
 - Review `docs/tokenomics-allocation-review.md` before tokenomics freeze or token launch decision.
-- Token launch remains NO-GO until allocation is frozen.
-- LP lock / burn / custody policy, team vesting, builders release policy, staking rewards release policy, authority policy, and launch platform must be finalized before token launch.
-- Current recommendation is `1B` total supply with Option A `35/20/15/15/10/5`, but this remains a freeze candidate until user approval.
+- The old allocation model is superseded.
+- Alpha Protocol will not use initial token allocation buckets at launch.
+- Token launch remains NO-GO until the Fair Launch model is signed off.
+- Launch platform, initial liquidity setup, pairing asset, liquidity custody / LP handling, authority policy, and communication must be finalized before token launch.
+- The `50 / 20 / 20 / 10` split is protocol revenue split, not token supply allocation.
 
-## 16. Launch Communication Review
+## 16. Tokenomics Final Decision Draft
+
+- Review `docs/alpha-tokenomics-final-decision-draft.md` before token launch approval.
+- The current recommended final decision draft is Fair Launch with no team, VC, project-side, DAO treasury, staking reserve, builders, or airdrop token buckets at launch.
+- `1,000,000,000 ALPHA` remains draft total supply pending final confirmation.
+- Token launch requires final project owner sign-off.
+- Unresolved launch platform, initial liquidity setup, pairing asset, mint / freeze authority policy, liquidity custody / LP handling, official communication, anti-scam warnings, and legal / risk review remain blockers.
+- The final decision draft does not approve immediate token launch.
+
+## 17. Launch Communication Review
 
 - Review `docs/launch-communication-and-community-preheat-plan.md` before any public preview announcement, Litepaper publication, community pinned message, X thread, or token launch communication.
 - Token launch requires completed communication review.
-- Red-flag language is prohibited, including guaranteed returns, fixed APY, passive income guarantee, insurance payout, risk-free, guaranteed buyback, price floor, Mainnet live before Mainnet is live, and official token live before token launch is approved.
-- Community preheating may proceed only with warnings: Mainnet not live, token launch pending, read-only Public MVP, and ALPHA voting layer pending.
+- Red-flag language is prohibited, including guaranteed returns, fixed APY, passive income guarantee, insurance payout, risk-free, guaranteed buyback, price floor, price protection, hidden project-side token reserve, Fair Launch means risk-free, Mainnet live before Mainnet is live, and official token live before token launch is approved.
+- Communication must clearly distinguish ALPHA Fair Launch from Treasury protocol revenue split.
+- Community preheating may proceed only with warnings: Mainnet not live, token launch pending, planned Fair Launch, read-only Public MVP, and ALPHA voting layer pending.
 
-## 17. Public MVP Safety Cleanup
+## 18. Public MVP Safety Cleanup
 
 - Public preview requires Devnet write buttons hidden by default.
 - Any developer-only Devnet actions must require an explicit environment flag, such as `VITE_SHOW_DEVNET_ACTIONS=true`.
 - Red-flag wording must be removed or replaced before public preview.
 - Public MVP must remain read-only by default with no buy button, real funds entry, or on-chain write action exposed.
 
-## 18. Current Conclusion
+## 19. Current Conclusion
 
 NO-GO for Mainnet production until Mainnet parameters, authorities, vaults, staking pool, and mainnet sanity check are completed and reviewed.
