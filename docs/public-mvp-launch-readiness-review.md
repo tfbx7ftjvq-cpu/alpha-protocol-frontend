@@ -96,21 +96,30 @@ However, the project is close to a public preview / community preheating stage. 
 - The draft is ready for project owner sign-off, but final sign-off is still pending.
 - Immediate token launch remains NO-GO until launch platform, liquidity setup, pairing asset, mint / freeze authority, LP handling, official communication, anti-scam warnings, and legal / risk review are complete.
 
-## 8. Launch Communication and Community Preheat Plan
+## 8. Fair Launch Decision Checklist Status
+
+- Fair Launch decision checklist added: `docs/fair-launch-decision-checklist.md`.
+- The checklist replaces old allocation / vesting / team allocation decision flows.
+- Token launch is still NO-GO.
+- Public MVP quiet preview is possible only after frontend copy / i18n review.
+- Community preheating remains GO with warnings after communication review.
+- The checklist must not be interpreted as approval to publish a buy link or announce a launch date.
+
+## 9. Launch Communication and Community Preheat Plan
 
 - Review `docs/launch-communication-and-community-preheat-plan.md` before publishing public preview messages, X threads, pinned community posts, Litepaper announcements, or token-related community updates.
 - Public preview / community preheating is currently allowed with warnings.
 - Immediate token launch remains NO-GO.
 - Launch communication must keep Mainnet not live, token launch pending, no guaranteed returns, no insurance, and ALPHA voting layer pending visible.
 
-## 9. Public MVP Safety Cleanup
+## 10. Public MVP Safety Cleanup
 
 - Treasury Devnet write buttons are hidden by default for Public MVP.
 - Devnet actions require an explicit local environment flag if retained, such as `VITE_SHOW_DEVNET_ACTIONS=true`.
 - High-risk legacy wording such as price floor, guaranteed buyback, guaranteed yield, insurance guarantee, or automatic payout should not be surfaced.
 - Public MVP remains read-only by default and should not expose buy buttons, real funds entries, or on-chain write actions.
 
-## 10. Public Preview Recommendation
+## 11. Public Preview Recommendation
 
 Recommended public preview posture:
 
@@ -124,7 +133,7 @@ Recommended public preview posture:
 
 Public preview should be framed as transparency, research, Devnet verification, and community feedback.
 
-## 11. Required Before Token Launch
+## 12. Required Before Token Launch
 
 The following must be completed before a formal token launch:
 
@@ -145,7 +154,7 @@ The following must be completed before a formal token launch:
 
 These items should be tracked separately from Devnet feature completion.
 
-## 12. Red Flag Language Check
+## 13. Red Flag Language Check
 
 Forbidden or high-risk language:
 
@@ -170,7 +179,7 @@ Recommended language:
 
 Every public page, announcement, Litepaper excerpt, and community post should be checked against this list.
 
-## 13. Go / No-Go Conclusion
+## 14. Go / No-Go Conclusion
 
 Current conclusions:
 
@@ -181,7 +190,7 @@ Current conclusions:
 
 The warnings are material. Public preview should not be confused with Mainnet launch or token launch approval.
 
-## 14. Next Recommended Actions
+## 15. Next Recommended Actions
 
 1. Tokenomics finalization document.
 2. Launch communication draft.
@@ -190,7 +199,7 @@ The warnings are material. Public preview should not be confused with Mainnet la
 5. Community preheat plan.
 6. Decide whether token launches as Devnet-preview narrative or waits for Mainnet readiness.
 
-## 15. Reviewer Notes
+## 16. Reviewer Notes
 
 This review is a product and communication readiness snapshot. It does not replace:
 

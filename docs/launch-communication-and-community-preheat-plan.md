@@ -382,7 +382,20 @@ Before any formal public preheat:
 - Scam warning pinned.
 - Feedback channel ready.
 
-## 17. Current Recommendation
+## 17. Fair Launch Communication Gate
+
+Before any token launch communication:
+
+- Do not announce a launch date until launch platform, liquidity setup, pairing asset, mint / freeze authority policy, and LP / custody decisions are confirmed.
+- Do not publish a buy link until official launch.
+- All communication must state no team / VC / project-side reserved token allocation.
+- All communication must state `50 / 20 / 20 / 10` is future protocol revenue split, not token allocation.
+- Include anti-scam warning in public posts, pinned messages, launch pages, and community updates.
+- Confirm communication does not imply Fair Launch is risk-free.
+- Confirm communication does not imply buyback / burn is price protection.
+- Confirm communication does not imply staking is fixed yield or guaranteed return.
+
+## 18. Current Recommendation
 
 - Community preheating may begin after final review.
 - Immediate token launch remains NO-GO.

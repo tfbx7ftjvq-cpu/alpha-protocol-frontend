@@ -201,7 +201,21 @@ Manual review notes:
 - Unresolved launch platform, initial liquidity setup, pairing asset, mint / freeze authority policy, liquidity custody / LP handling, official communication, anti-scam warnings, and legal / risk review remain blockers.
 - The final decision draft does not approve immediate token launch.
 
-## 17. Launch Communication Review
+## 17. Fair Launch Decision Gates
+
+- Review `docs/fair-launch-decision-checklist.md` before any token launch approval.
+- Fair Launch checklist must be reviewed by the project owner.
+- Total supply must be confirmed.
+- Launch platform must be confirmed.
+- Initial liquidity setup must be confirmed.
+- Pairing asset must be confirmed.
+- Mint / freeze authority policy must be handled and publicly disclosed.
+- Liquidity custody / LP handling must be confirmed if applicable.
+- Communication must clearly distinguish Fair Launch from Treasury protocol revenue split.
+- Communication must state that `50 / 20 / 20 / 10` is future protocol revenue split, not token allocation.
+- Token launch remains NO-GO until these gates are completed.
+
+## 18. Launch Communication Review
 
 - Review `docs/launch-communication-and-community-preheat-plan.md` before any public preview announcement, Litepaper publication, community pinned message, X thread, or token launch communication.
 - Token launch requires completed communication review.
@@ -209,13 +223,13 @@ Manual review notes:
 - Communication must clearly distinguish ALPHA Fair Launch from Treasury protocol revenue split.
 - Community preheating may proceed only with warnings: Mainnet not live, token launch pending, planned Fair Launch, read-only Public MVP, and ALPHA voting layer pending.
 
-## 18. Public MVP Safety Cleanup
+## 19. Public MVP Safety Cleanup
 
 - Public preview requires Devnet write buttons hidden by default.
 - Any developer-only Devnet actions must require an explicit environment flag, such as `VITE_SHOW_DEVNET_ACTIONS=true`.
 - Red-flag wording must be removed or replaced before public preview.
 - Public MVP must remain read-only by default with no buy button, real funds entry, or on-chain write action exposed.
 
-## 19. Current Conclusion
+## 20. Current Conclusion
 
 NO-GO for Mainnet production until Mainnet parameters, authorities, vaults, staking pool, and mainnet sanity check are completed and reviewed.

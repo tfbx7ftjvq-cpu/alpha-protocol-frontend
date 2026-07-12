@@ -32,7 +32,28 @@ There is no hidden project-side token reserve.
 - Mainnet production: NO-GO.
 - Community preheating: GO with warnings.
 
-## 4. Token Supply Draft
+## 4. Fair Launch Decision Checklist
+
+Review `docs/fair-launch-decision-checklist.md` before any token launch approval.
+
+The old allocation checklist has been replaced by the Fair Launch decision checklist. Under the corrected model, follow-up decisions should focus only on:
+
+- Total supply.
+- Launch platform.
+- Initial liquidity setup.
+- Pairing asset.
+- Mint authority policy.
+- Freeze authority policy.
+- Liquidity custody / LP handling.
+- Official communication.
+- Community preheating timing.
+- Token launch timing.
+
+The user no longer needs to approve team allocation, team vesting, builders token allocation, staking token reserve, DAO treasury token allocation, airdrop bucket, or Option A / B / C allocation models.
+
+The checklist is ready for user review, but it does not approve immediate token launch.
+
+## 5. Token Supply Draft
 
 - Token: ALPHA.
 - Network: Solana.
@@ -42,7 +63,7 @@ There is no hidden project-side token reserve.
 
 The user still needs to confirm whether `1,000,000,000 ALPHA` is the final supply.
 
-## 5. Team / Project / VC Allocation
+## 6. Team / Project / VC Allocation
 
 There is no team preallocation.
 
@@ -54,7 +75,7 @@ Because there is no reserved team / project allocation, no token vesting schedul
 
 Any future contributor compensation should come from protocol revenue, DAO-approved contributor budget, transparent future governance, or separately disclosed arrangements.
 
-## 6. Superseded Allocation Draft
+## 7. Superseded Allocation Draft
 
 The previous allocation model is superseded:
 
@@ -72,7 +93,7 @@ The previous allocation model is superseded:
 
 These should not be used as active launch recommendations.
 
-## 7. Treasury Revenue Split
+## 8. Treasury Revenue Split
 
 The `50 / 20 / 20 / 10` model is protocol revenue split, not token supply allocation.
 
@@ -83,7 +104,7 @@ Protocol Revenue / Project Revenue
 -> 20% DAO payroll / builders / contributors
 -> 10% Staking Rewards
 
-## 8. Staking Rewards
+## 9. Staking Rewards
 
 Staking rewards come from the `10%` Treasury revenue split.
 
@@ -96,13 +117,13 @@ Rules:
 - No guaranteed return.
 - Rewards depend on real protocol revenue, pool balance, protocol rules, and future governance.
 
-## 9. Buyback / Burn
+## 10. Buyback / Burn
 
 Buyback / burn allocation comes from `20%` of protocol revenue.
 
 It is not guaranteed buyback, price floor support, price protection, guaranteed liquidity support, or a promise of token price appreciation.
 
-## 10. DAO Payroll / Builders / Contributors
+## 11. DAO Payroll / Builders / Contributors
 
 `20%` of protocol revenue may support DAO payroll, builders, contributors, maintenance, audits, and operations.
 
@@ -110,7 +131,7 @@ This is revenue-based, not a preallocated token bucket.
 
 Future spending should be transparent and governance-reviewed.
 
-## 11. Final Sign-Off Checklist
+## 12. Final Sign-Off Checklist
 
 - [ ] Total supply confirmed: `1,000,000,000 ALPHA` or updated final value.
 - [ ] Fair Launch model confirmed.
@@ -131,7 +152,7 @@ Future spending should be transparent and governance-reviewed.
 - [ ] Legal / risk wording reviewed.
 - [ ] Final Go/No-Go review completed.
 
-## 12. Decisions No Longer Required
+## 13. Decisions No Longer Required
 
 Under the Fair Launch model, the user no longer needs to approve:
 
@@ -143,7 +164,7 @@ Under the Fair Launch model, the user no longer needs to approve:
 - Airdrop bucket.
 - Allocation Option A / B / C.
 
-## 13. Current Recommendation
+## 14. Current Recommendation
 
 Recommended current decision:
 
@@ -154,7 +175,7 @@ Recommended current decision:
 - Keep immediate token launch as NO-GO until final sign-off is complete.
 - Continue community preheating with warnings.
 
-## 14. Final Conclusion
+## 15. Final Conclusion
 
 - Tokenomics final decision: FAIR LAUNCH DRAFT READY FOR USER SIGN-OFF.
 - Token launch: NO-GO until sign-off and launch blockers are resolved.
