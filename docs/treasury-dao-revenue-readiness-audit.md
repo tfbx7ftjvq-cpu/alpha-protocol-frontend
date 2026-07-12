@@ -343,6 +343,26 @@ Mainnet Treasury readiness: PARTIAL / BLOCKER for production.
 
 ## 9. Recommended Next Phases
 
+### Phase 2E-2B Implementation Update
+
+Unified USDC revenue routing is now implemented at the contract layer:
+
+- `RevenueType` records typed protocol revenue categories.
+- `RevenueRoutingStatsV1` stores typed USDC revenue totals without modifying `TreasuryUsdcStateV2`.
+- `initialize_revenue_routing_stats_v1` initializes the typed stats PDA.
+- `route_usdc_revenue_v1` routes USDC revenue through the existing Treasury V2 50 / 20 / 20 / 10 split.
+- `deposit_usdc_revenue` remains available as the legacy/simple Treasury V2 USDC deposit path.
+
+Remaining gaps after this implementation:
+
+- Green Label certification fee integration is still not wired into the router.
+- Green Label forfeited bond routing is still not wired into the router.
+- Refundable Green Label escrow is still not implemented.
+- SOL revenue split is still unsupported.
+- Builders payout governance is still missing.
+- Full DAO voting is still missing.
+- Token launch remains NO-GO.
+
 ### Phase 2E-2: Revenue Routing Design
 
 Document and implement how real project revenue enters Treasury:

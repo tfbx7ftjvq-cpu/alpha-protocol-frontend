@@ -6,6 +6,7 @@ pub const SEED: &str = "anchor";
 pub const TREASURY_STATE_SEED: &[u8] = b"treasury_state";
 pub const TREASURY_CONFIG_V2_SEED: &[u8] = b"treasury_config_v2";
 pub const TREASURY_USDC_STATE_V2_SEED: &[u8] = b"treasury_usdc_state_v2";
+pub const REVENUE_ROUTING_STATS_V1_SEED: &[u8] = b"revenue_routing_stats_v1";
 pub const RELIEF_USDC_VAULT_SEED: &[u8] = b"relief_usdc_vault";
 pub const BUYBACK_USDC_VAULT_SEED: &[u8] = b"buyback_usdc_vault";
 pub const BUILDERS_USDC_VAULT_SEED: &[u8] = b"builders_usdc_vault";

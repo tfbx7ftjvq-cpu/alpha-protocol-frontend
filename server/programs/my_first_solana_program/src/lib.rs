@@ -38,6 +38,20 @@ pub mod my_first_solana_program {
         instructions::deposit_usdc_revenue::deposit_usdc_revenue_handler(ctx, amount)
     }
 
+    pub fn initialize_revenue_routing_stats_v1(
+        ctx: Context<InitializeRevenueRoutingStatsV1>,
+    ) -> Result<()> {
+        instructions::deposit_usdc_revenue::initialize_revenue_routing_stats_v1_handler(ctx)
+    }
+
+    pub fn route_usdc_revenue_v1(
+        ctx: Context<RouteUsdcRevenueV1>,
+        revenue_type: RevenueType,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::deposit_usdc_revenue::route_usdc_revenue_v1_handler(ctx, revenue_type, amount)
+    }
+
     pub fn initialize_staking_pool(
         ctx: Context<InitializeStakingPool>,
         min_claim_usdc: u64,

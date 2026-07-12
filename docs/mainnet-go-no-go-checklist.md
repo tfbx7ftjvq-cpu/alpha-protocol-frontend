@@ -241,6 +241,18 @@ Manual review notes:
 - Red-flag wording must be removed or replaced before public preview.
 - Public MVP must remain read-only by default with no buy button, real funds entry, or on-chain write action exposed.
 
-## 20. Current Conclusion
+## 20. Unified USDC Revenue Router
+
+- Review `docs/unified-usdc-revenue-routing-design.md` before claiming protocol revenue routing readiness.
+- `route_usdc_revenue_v1` is implemented for typed USDC protocol revenue routing.
+- `RevenueRoutingStatsV1` tracks typed USDC revenue totals without changing `TreasuryUsdcStateV2`.
+- `deposit_usdc_revenue` remains a legacy/simple Treasury V2 USDC deposit path.
+- Green Label certification fees and forfeited bonds are not yet wired into the router.
+- Refundable Green Label escrow is not implemented.
+- SOL revenue split is not supported.
+- Builders payout governance is not implemented.
+- Token launch remains NO-GO until real revenue integrations, builders payout governance, Mainnet authorities, and final launch checks are completed.
+
+## 21. Current Conclusion
 
 NO-GO for Mainnet production until Mainnet parameters, authorities, vaults, staking pool, and mainnet sanity check are completed and reviewed.

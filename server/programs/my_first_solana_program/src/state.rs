@@ -47,6 +47,34 @@ impl TreasuryUsdcStateV2 {
     pub const INIT_SPACE: usize = (8 * 5) + 1;
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RevenueType {
+    GreenLabelCertificationFee,
+    GreenLabelForfeitedBond,
+    ProtocolServiceFee,
+    PlatformRevenue,
+    PartnershipRevenue,
+    ManualGovernanceApprovedRevenue,
+}
+
+#[account]
+pub struct RevenueRoutingStatsV1 {
+    pub authority: Pubkey,
+    pub usdc_mint: Pubkey,
+    pub total_routed_usdc: u64,
+    pub green_label_certification_fee_total: u64,
+    pub green_label_forfeited_bond_total: u64,
+    pub protocol_service_fee_total: u64,
+    pub platform_revenue_total: u64,
+    pub partnership_revenue_total: u64,
+    pub manual_governance_approved_revenue_total: u64,
+    pub bump: u8,
+}
+
+impl RevenueRoutingStatsV1 {
+    pub const INIT_SPACE: usize = (32 * 2) + (8 * 7) + 1;
+}
+
 #[account]
 pub struct StakingPoolV1 {
     pub authority: Pubkey,

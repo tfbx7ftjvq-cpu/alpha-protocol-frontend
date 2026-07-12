@@ -157,4 +157,7 @@ pub enum CustomError {
 
     #[msg("Invalid Green Label window config")]
     InvalidGreenLabelWindowConfig,
+
+    #[msg("Unauthorized treasury authority")]
+    UnauthorizedTreasuryAuthority,
 }
