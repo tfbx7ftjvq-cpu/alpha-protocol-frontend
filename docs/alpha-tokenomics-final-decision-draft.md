@@ -26,13 +26,28 @@ There is no hidden project-side token reserve.
 
 ## 3. Current Decision Status
 
-- Tokenomics final decision: Fair Launch draft ready for user sign-off.
-- Token launch: NO-GO until sign-off and launch blockers are resolved.
+- Tokenomics core decision: Fair Launch core decisions confirmed.
+- Token launch: NO-GO until pending operational launch decisions are resolved.
 - Immediate token launch: NO-GO.
 - Mainnet production: NO-GO.
 - Community preheating: GO with warnings.
 
-## 4. Fair Launch Decision Checklist
+## 4. Confirmed Fair Launch Decisions
+
+Confirmed decision record: `docs/fair-launch-confirmed-decisions.md`.
+
+- Core Fair Launch decisions are confirmed.
+- Total supply confirmed: `1,000,000,000 ALPHA`.
+- Launch model confirmed: Fair Launch.
+- Project-side reserved allocation confirmed: `0`.
+- Team preallocation confirmed: `0`.
+- VC allocation confirmed: `0`.
+- Initial token bucket allocation confirmed: none.
+- Future protocol / project revenue entering Treasury follows `50 / 20 / 20 / 10`.
+
+Token launch remains NO-GO until pending operational launch decisions are resolved.
+
+## 5. Fair Launch Decision Checklist
 
 Review `docs/fair-launch-decision-checklist.md` before any token launch approval.
 
@@ -51,19 +66,19 @@ The old allocation checklist has been replaced by the Fair Launch decision check
 
 The user no longer needs to approve team allocation, team vesting, builders token allocation, staking token reserve, DAO treasury token allocation, airdrop bucket, or Option A / B / C allocation models.
 
-The checklist is ready for user review, but it does not approve immediate token launch.
+The checklist is partially complete. Core Fair Launch decisions are confirmed, while launch platform, liquidity, pairing asset, authority policy, LP handling, communication, preheating timing, and token launch timing remain pending.
 
-## 5. Token Supply Draft
+## 6. Token Supply
 
 - Token: ALPHA.
 - Network: Solana.
-- Total supply: `1,000,000,000 ALPHA` as draft / pending final confirmation.
+- Total supply: `1,000,000,000 ALPHA` confirmed.
 - Token launch status: pending.
 - Mainnet status: not live.
 
-The user still needs to confirm whether `1,000,000,000 ALPHA` is the final supply.
+The confirmed total supply does not approve token launch and does not create any project-side token allocation.
 
-## 6. Team / Project / VC Allocation
+## 7. Team / Project / VC Allocation
 
 There is no team preallocation.
 
@@ -75,7 +90,7 @@ Because there is no reserved team / project allocation, no token vesting schedul
 
 Any future contributor compensation should come from protocol revenue, DAO-approved contributor budget, transparent future governance, or separately disclosed arrangements.
 
-## 7. Superseded Allocation Draft
+## 8. Superseded Allocation Draft
 
 The previous allocation model is superseded:
 
@@ -93,7 +108,7 @@ The previous allocation model is superseded:
 
 These should not be used as active launch recommendations.
 
-## 8. Treasury Revenue Split
+## 9. Treasury Revenue Split
 
 The `50 / 20 / 20 / 10` model is protocol revenue split, not token supply allocation.
 
@@ -104,7 +119,7 @@ Protocol Revenue / Project Revenue
 -> 20% DAO payroll / builders / contributors
 -> 10% Staking Rewards
 
-## 9. Staking Rewards
+## 10. Staking Rewards
 
 Staking rewards come from the `10%` Treasury revenue split.
 
@@ -117,13 +132,13 @@ Rules:
 - No guaranteed return.
 - Rewards depend on real protocol revenue, pool balance, protocol rules, and future governance.
 
-## 10. Buyback / Burn
+## 11. Buyback / Burn
 
 Buyback / burn allocation comes from `20%` of protocol revenue.
 
 It is not guaranteed buyback, price floor support, price protection, guaranteed liquidity support, or a promise of token price appreciation.
 
-## 11. DAO Payroll / Builders / Contributors
+## 12. DAO Payroll / Builders / Contributors
 
 `20%` of protocol revenue may support DAO payroll, builders, contributors, maintenance, audits, and operations.
 
@@ -131,16 +146,17 @@ This is revenue-based, not a preallocated token bucket.
 
 Future spending should be transparent and governance-reviewed.
 
-## 12. Final Sign-Off Checklist
+## 13. Final Sign-Off Checklist
 
-- [ ] Total supply confirmed: `1,000,000,000 ALPHA` or updated final value.
-- [ ] Fair Launch model confirmed.
-- [ ] No project-side reserved token allocation confirmed.
-- [ ] No team preallocation confirmed.
-- [ ] No VC allocation confirmed.
-- [ ] No DAO treasury token allocation at launch confirmed.
-- [ ] No staking token reserve at launch confirmed.
-- [ ] No builders / contributors token allocation at launch confirmed.
+- [x] Total supply confirmed: `1,000,000,000 ALPHA`.
+- [x] Fair Launch model confirmed.
+- [x] No project-side reserved token allocation confirmed.
+- [x] No team preallocation confirmed.
+- [x] No VC allocation confirmed.
+- [x] No initial token bucket allocation confirmed.
+- [x] No DAO treasury token allocation at launch confirmed.
+- [x] No staking token reserve at launch confirmed.
+- [x] No builders / contributors token allocation at launch confirmed.
 - [ ] Launch platform confirmed.
 - [ ] Initial liquidity setup confirmed.
 - [ ] Pairing asset confirmed, such as SOL or USDC.
@@ -152,7 +168,7 @@ Future spending should be transparent and governance-reviewed.
 - [ ] Legal / risk wording reviewed.
 - [ ] Final Go/No-Go review completed.
 
-## 13. Decisions No Longer Required
+## 14. Decisions No Longer Required
 
 Under the Fair Launch model, the user no longer needs to approve:
 
@@ -164,20 +180,20 @@ Under the Fair Launch model, the user no longer needs to approve:
 - Airdrop bucket.
 - Allocation Option A / B / C.
 
-## 14. Current Recommendation
+## 15. Current Recommendation
 
 Recommended current decision:
 
 - Use Fair Launch model.
-- Keep `1,000,000,000 ALPHA` as draft supply pending final confirmation.
+- Use confirmed total supply: `1,000,000,000 ALPHA`.
 - Do not create project-side, team, VC, DAO treasury, staking reserve, builders, or airdrop token buckets.
 - Require launch platform, liquidity setup, mint / freeze authority policy, LP handling, official communication, anti-scam warnings, and legal / risk review before token launch.
-- Keep immediate token launch as NO-GO until final sign-off is complete.
+- Keep immediate token launch as NO-GO until pending operational launch decisions are complete.
 - Continue community preheating with warnings.
 
-## 15. Final Conclusion
+## 16. Final Conclusion
 
-- Tokenomics final decision: FAIR LAUNCH DRAFT READY FOR USER SIGN-OFF.
-- Token launch: NO-GO until sign-off and launch blockers are resolved.
+- Tokenomics core decision: FAIR LAUNCH CORE DECISIONS CONFIRMED.
+- Token launch: NO-GO until pending operational launch decisions are resolved.
 - Community preheating: GO with warnings.
 - Mainnet production: NO-GO.

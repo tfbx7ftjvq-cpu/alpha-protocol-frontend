@@ -4,7 +4,7 @@
 
 This document records the corrected ALPHA tokenomics model for Alpha Protocol.
 
-The previous initial token bucket allocation model has been superseded. ALPHA is now documented as a planned Fair Launch token, not a project-side reserved allocation model.
+The previous initial token bucket allocation model has been superseded. ALPHA is now documented as a confirmed Fair Launch token model, not a project-side reserved allocation model.
 
 This document is not investment advice, a return promise, a dividend promise, an insurance promise, a price promise, or token launch approval.
 
@@ -12,19 +12,23 @@ This document is not investment advice, a return promise, a dividend promise, an
 
 - Token: ALPHA.
 - Network: Solana.
-- Launch model: Fair Launch.
+- Launch model: Fair Launch confirmed.
 - Token launch status: pending.
 - Mainnet status: not live.
-- Total supply: `1,000,000,000 ALPHA` as draft / pending final confirmation.
+- Total supply: `1,000,000,000 ALPHA` confirmed.
+
+Confirmed decision record: `docs/fair-launch-confirmed-decisions.md`.
 
 ## 3. Fair Launch Model
 
 Correct launch model:
 
-- Project-side reserved token allocation: none.
+- Fair Launch: confirmed.
+- Project-side reserved token allocation: `0` confirmed.
 - Founder / project-side preallocated bucket: none.
-- Team allocation: none.
-- VC allocation: none.
+- Team allocation: `0` confirmed.
+- VC allocation: `0` confirmed.
+- Initial token bucket allocation: none confirmed.
 - DAO treasury token allocation at launch: none.
 - Staking token reserve at launch: none.
 - Builders / contributors token allocation at launch: none.
@@ -58,7 +62,7 @@ These were historical draft concepts and are replaced by the Fair Launch model.
 
 ## 5. Protocol Revenue Flow
 
-The `50 / 20 / 20 / 10` split is a protocol revenue split, not ALPHA token supply allocation.
+The `50 / 20 / 20 / 10` split is a confirmed protocol revenue split, not ALPHA token supply allocation.
 
 Correct model:
 
@@ -137,7 +141,6 @@ The full ALPHA voting layer is pending and should not be described as fully laun
 
 Formal token launch remains pending and requires:
 
-- Final total supply confirmation.
 - Launch platform selection.
 - Initial liquidity setup.
 - Pairing asset decision, such as SOL or USDC.
@@ -148,6 +151,14 @@ Formal token launch remains pending and requires:
 - Anti-scam warnings.
 - Legal / risk wording review.
 - Final Go/No-Go review.
+
+Already confirmed:
+
+- Total supply: `1,000,000,000 ALPHA`.
+- Fair Launch model.
+- No project-side / team / VC reserved allocation.
+- No initial token bucket allocation.
+- Treasury revenue split: `50 / 20 / 20 / 10` applies only to future protocol revenue.
 
 ## 12. Decisions No Longer Required
 
@@ -180,7 +191,7 @@ Required risk language:
 Recommended current position:
 
 - Use Fair Launch model.
-- Keep `1,000,000,000 ALPHA` as draft total supply pending final confirmation.
+- Use confirmed total supply: `1,000,000,000 ALPHA`.
 - Do not use project-side, team, VC, DAO treasury, staking reserve, builders, or airdrop token buckets at launch.
 - Keep immediate token launch as NO-GO until launch platform, liquidity setup, authority policy, communication, and risk review are complete.
 - Community preheating can explain Fair Launch with clear warnings.

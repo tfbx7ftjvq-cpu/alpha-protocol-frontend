@@ -48,7 +48,7 @@ Currently not allowed:
 English options:
 
 - Alpha Protocol is a Devnet-verified, read-only Public MVP for on-chain risk accountability, Treasury transparency, Green Label bonds, and DAO execution safety.
-- ALPHA is planned as a Fair Launch token; future protocol revenue, not initial token allocation, funds Relief, Buyback / Burn, DAO payroll / builders / contributors, and Staking Rewards.
+- ALPHA has confirmed core Fair Launch decisions, including a total supply of `1,000,000,000 ALPHA`; future protocol revenue, not initial token allocation, funds Relief, Buyback / Burn, DAO payroll / builders / contributors, and Staking Rewards.
 
 Chinese options:
 
@@ -61,17 +61,26 @@ Do not use words or phrases such as guaranteed returns, insurance payout, risk-f
 
 Approved Fair Launch language:
 
-- ALPHA is planned as a fair-launch token.
-- The project does not plan team, VC, or project-side reserved token allocations.
-- There is no planned hidden project-side ALPHA reserve.
+- ALPHA is planned as a fair-launch token with a confirmed total supply of `1,000,000,000`.
+- The project does not use team, VC, or project-side reserved token allocations.
+- There is no hidden project-side ALPHA reserve.
 - Market participants acquire ALPHA through the open market after launch.
-- Future protocol revenue, not initial token allocation, funds relief, buyback / burn, DAO payroll / builders / contributors, and staking rewards.
+- Future protocol revenue, not initial token allocation, funds relief, buyback / burn, DAO payroll / builders / contributors, and staking rewards through the `50 / 20 / 20 / 10` Treasury split.
+
+Reusable public wording:
+
+> ALPHA is planned as a fair-launch token with a confirmed total supply of 1,000,000,000. The project does not use team, VC, or project-side reserved token allocations. Future protocol revenue, not initial token allocation, funds relief, buyback/burn, DAO payroll/builders, and staking rewards through the 50/20/20/10 treasury split.
 
 Required caveats:
 
 - Fair Launch does not mean risk-free.
 - Token launch is pending.
 - Mainnet is not live.
+- Not financial advice.
+- No guaranteed yield.
+- No price protection.
+- Buyback / burn is not guaranteed buyback.
+- Green Label is not insurance.
 - No official ALPHA buy address is live unless confirmed through official channels.
 
 ## 5. Long Description
@@ -85,7 +94,7 @@ Current public modules:
 - Treasury V2: future protocol revenue enters Treasury and follows the `50 / 20 / 20 / 10` revenue split.
 - Staking V1: staking rewards are protocol-rule-based incentives, not fixed APY or guaranteed yield.
 - Public MVP dashboards: read-only Devnet views with no buy button, no real funds entry, and no chain write action by default.
-- ALPHA tokenomics: planned Fair Launch; no team, VC, or project-side reserved token allocation.
+- ALPHA tokenomics: Fair Launch core decisions confirmed; total supply `1,000,000,000 ALPHA`; no team, VC, or project-side reserved token allocation.
 
 Mainnet is not live. Token launch is pending. The full ALPHA voting layer is pending.
 
@@ -332,7 +341,7 @@ Recommended language:
 
 ### Phase C: Token Launch Decision Review
 
-- Complete Fair Launch sign-off.
+- Fair Launch core decisions are confirmed; complete operational launch decision review.
 - Select launch platform.
 - Confirm initial liquidity setup and pairing asset.
 - Confirm mint / freeze authority policy.
@@ -400,4 +409,4 @@ Before any token launch communication:
 - Community preheating may begin after final review.
 - Immediate token launch remains NO-GO.
 - Mainnet production remains NO-GO.
-- Next step should be final communication review and Fair Launch decision sign-off.
+- Next step should be final communication review and operational launch decision review.

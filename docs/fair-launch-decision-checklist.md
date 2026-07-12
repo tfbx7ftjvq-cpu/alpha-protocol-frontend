@@ -12,17 +12,21 @@ It does not constitute investment advice, a return promise, a price promise, a d
 
 ## 2. Confirmed Design Principles
 
-- Launch model: Fair Launch.
-- Project-side allocation: none.
-- Team preallocation: none.
-- VC allocation: none.
-- DAO Treasury token allocation at launch: none.
-- Staking token reserve at launch: none.
-- Builders token allocation at launch: none.
+- Total supply confirmed: `1,000,000,000 ALPHA`.
+- Launch model confirmed: Fair Launch.
+- Project-side allocation confirmed: `0`.
+- Team preallocation confirmed: `0`.
+- VC allocation confirmed: `0`.
+- Initial token bucket allocation confirmed: none.
+- DAO Treasury token allocation at launch confirmed: none.
+- Staking token reserve at launch confirmed: none.
+- Builders token allocation at launch confirmed: none.
 - Market access: open market after launch.
-- Revenue split: `50 / 20 / 20 / 10` applies only to future protocol revenue entering Treasury.
+- Revenue split confirmed: `50 / 20 / 20 / 10` applies only to future protocol revenue entering Treasury.
 
 Fair Launch means ALPHA does not launch with project-side token buckets. It does not mean risk-free trading, guaranteed liquidity, guaranteed yield, price protection, or guaranteed token appreciation.
+
+Confirmed decision record: `docs/fair-launch-confirmed-decisions.md`.
 
 ## 3. Superseded Old Decisions
 
@@ -45,12 +49,12 @@ These items are superseded and must not be treated as active ALPHA launch requir
 
 ## 4. Decision Area 1: Total Supply
 
-- Recommended draft: `1,000,000,000 ALPHA`.
-- Status: pending final confirmation.
+- Confirmed supply: `1,000,000,000 ALPHA`.
+- Status: CONFIRMED.
 
 Project owner checklist:
 
-- [ ] Confirm total supply as `1,000,000,000 ALPHA`.
+- [x] Confirm total supply as `1,000,000,000 ALPHA`.
 - [ ] Confirm no future arbitrary minting after launch.
 - [ ] Confirm supply figure is consistently used in docs and communication.
 
@@ -194,8 +198,13 @@ Checklist:
 
 Checklist:
 
-- [ ] Fair Launch model confirmed.
-- [ ] Total supply confirmed.
+- [x] Fair Launch model confirmed.
+- [x] Total supply confirmed.
+- [x] Project-side allocation confirmed as `0`.
+- [x] Team preallocation confirmed as `0`.
+- [x] VC allocation confirmed as `0`.
+- [x] Initial token bucket allocation confirmed as none.
+- [x] Treasury revenue split confirmed as `50 / 20 / 20 / 10` for future protocol revenue only.
 - [ ] Launch platform confirmed.
 - [ ] Initial liquidity setup confirmed.
 - [ ] Pairing asset confirmed.
@@ -219,7 +228,8 @@ Checklist:
 
 ## 15. Final Status
 
-- Fair Launch decision checklist: READY FOR USER REVIEW.
+- Fair Launch core decisions: CONFIRMED.
+- Fair Launch decision checklist: PARTIALLY COMPLETE; operational launch decisions remain pending.
 - Token launch: NO-GO.
 - Mainnet production: NO-GO.
 - Public MVP quiet preview: possible after frontend review.

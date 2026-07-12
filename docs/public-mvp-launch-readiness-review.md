@@ -52,7 +52,7 @@ The current product is best described as a Devnet-verified, read-only Public MVP
 | Mainnet Safety | Framework completed | Go/No-Go checklist, prelaunch hardening, authority migration plan, sanity scripts, and runbook exist. | Ready with warnings |
 | Legal / Regulatory Review | Not completed | No formal legal / regulatory sign-off recorded. | Not ready |
 | Community Materials | Drafting needed | Public landing and Litepaper exist, but announcement copy, screenshots, FAQ, and launch posts are not finalized. | Needs review |
-| Tokenomics Finalization | Corrected to Fair Launch draft | Initial token bucket allocation model is superseded. Launch platform, liquidity setup, mint / freeze authority, and communication remain pending. | Needs review |
+| Tokenomics Finalization | Core Fair Launch decisions confirmed | Total supply, Fair Launch model, no project / team / VC allocation, no initial token buckets, and Treasury revenue split are confirmed. Launch platform, liquidity setup, mint / freeze authority, and communication remain pending. | Ready with warnings |
 
 ## 4. Token Launch Readiness
 
@@ -62,7 +62,7 @@ Reasons:
 
 - Mainnet not live.
 - Legal / regulatory review not completed.
-- Final Fair Launch sign-off not completed.
+- Core Fair Launch decisions are confirmed, but operational token launch decisions remain pending.
 - Launch platform, liquidity setup, mint / freeze authority, and LP handling not finalized.
 - ALPHA voting layer not completed.
 - Public community materials not finalized.
@@ -74,8 +74,11 @@ However, the project is close to a public preview / community preheating stage. 
 
 - Review `docs/alpha-tokenomics-draft.md` before any token launch communication.
 - Tokenomics model has been corrected to Fair Launch.
-- Formal token launch should not proceed before Fair Launch sign-off.
-- Total supply, launch platform, liquidity setup, pairing asset, mint / freeze authority, LP handling, communication, and risk disclosures must be reviewed before launch.
+- Total supply confirmed: `1,000,000,000 ALPHA`.
+- Project-side / team / VC reserved allocation confirmed: `0`.
+- Initial token bucket allocation confirmed: none.
+- Formal token launch should not proceed before pending operational launch decisions are complete.
+- Launch platform, liquidity setup, pairing asset, mint / freeze authority, LP handling, communication, and risk disclosures must be reviewed before launch.
 - Immediate token launch remains NO-GO.
 
 ## 6. Tokenomics Allocation Review
@@ -84,7 +87,7 @@ However, the project is close to a public preview / community preheating stage. 
 - Previous allocation review is superseded by the Fair Launch model.
 - The old `35/20/15/15/10/5` token bucket model is no longer recommended.
 - Alpha Protocol will not use initial team, VC, project-side, DAO treasury, staking reserve, builders, or airdrop token buckets at launch.
-- Tokenomics freeze is pending user decision on total supply, launch platform, liquidity setup, pairing asset, mint / freeze authority, LP handling, official communication, and risk review.
+- Tokenomics freeze is pending operational decisions on launch platform, liquidity setup, pairing asset, mint / freeze authority, LP handling, official communication, and risk review.
 - Immediate token launch remains NO-GO.
 
 ## 7. Tokenomics Final Decision Draft
@@ -92,34 +95,43 @@ However, the project is close to a public preview / community preheating stage. 
 - Review `docs/alpha-tokenomics-final-decision-draft.md` before token launch approval.
 - Tokenomics has moved into a Fair Launch final decision draft stage.
 - Recommended draft: Fair Launch model with no project-side, team, VC, DAO treasury, staking reserve, builders, or airdrop token buckets at launch.
-- `1,000,000,000 ALPHA` remains draft total supply pending final confirmation.
-- The draft is ready for project owner sign-off, but final sign-off is still pending.
+- `1,000,000,000 ALPHA` is confirmed total supply.
+- Core Fair Launch decisions are confirmed, but operational launch decisions remain pending.
 - Immediate token launch remains NO-GO until launch platform, liquidity setup, pairing asset, mint / freeze authority, LP handling, official communication, anti-scam warnings, and legal / risk review are complete.
 
-## 8. Fair Launch Decision Checklist Status
+## 8. Fair Launch Core Decisions Confirmed
+
+- Confirmed decision record added: `docs/fair-launch-confirmed-decisions.md`.
+- Public MVP can now use confirmed Fair Launch language.
+- Confirmed language may state: total supply `1,000,000,000 ALPHA`, Fair Launch model, no project / team / VC reserved allocation, no initial token bucket allocation, and `50 / 20 / 20 / 10` future Treasury revenue split.
+- Token launch remains NO-GO.
+- Public communication still needs review before broader preheating.
+
+## 9. Fair Launch Decision Checklist Status
 
 - Fair Launch decision checklist added: `docs/fair-launch-decision-checklist.md`.
 - The checklist replaces old allocation / vesting / team allocation decision flows.
+- Core decisions are confirmed; operational launch decisions remain pending.
 - Token launch is still NO-GO.
 - Public MVP quiet preview is possible only after frontend copy / i18n review.
 - Community preheating remains GO with warnings after communication review.
 - The checklist must not be interpreted as approval to publish a buy link or announce a launch date.
 
-## 9. Launch Communication and Community Preheat Plan
+## 10. Launch Communication and Community Preheat Plan
 
 - Review `docs/launch-communication-and-community-preheat-plan.md` before publishing public preview messages, X threads, pinned community posts, Litepaper announcements, or token-related community updates.
 - Public preview / community preheating is currently allowed with warnings.
 - Immediate token launch remains NO-GO.
 - Launch communication must keep Mainnet not live, token launch pending, no guaranteed returns, no insurance, and ALPHA voting layer pending visible.
 
-## 10. Public MVP Safety Cleanup
+## 11. Public MVP Safety Cleanup
 
 - Treasury Devnet write buttons are hidden by default for Public MVP.
 - Devnet actions require an explicit local environment flag if retained, such as `VITE_SHOW_DEVNET_ACTIONS=true`.
 - High-risk legacy wording such as price floor, guaranteed buyback, guaranteed yield, insurance guarantee, or automatic payout should not be surfaced.
 - Public MVP remains read-only by default and should not expose buy buttons, real funds entries, or on-chain write actions.
 
-## 11. Public Preview Recommendation
+## 12. Public Preview Recommendation
 
 Recommended public preview posture:
 
@@ -133,12 +145,11 @@ Recommended public preview posture:
 
 Public preview should be framed as transparency, research, Devnet verification, and community feedback.
 
-## 12. Required Before Token Launch
+## 13. Required Before Token Launch
 
 The following must be completed before a formal token launch:
 
-- Final tokenomics.
-- Fair Launch final sign-off.
+- Final tokenomics operational review.
 - Launch platform decision.
 - Initial liquidity setup and pairing asset.
 - Mint / freeze authority policy.
@@ -154,7 +165,7 @@ The following must be completed before a formal token launch:
 
 These items should be tracked separately from Devnet feature completion.
 
-## 13. Red Flag Language Check
+## 14. Red Flag Language Check
 
 Forbidden or high-risk language:
 
@@ -179,7 +190,7 @@ Recommended language:
 
 Every public page, announcement, Litepaper excerpt, and community post should be checked against this list.
 
-## 14. Go / No-Go Conclusion
+## 15. Go / No-Go Conclusion
 
 Current conclusions:
 
@@ -190,7 +201,7 @@ Current conclusions:
 
 The warnings are material. Public preview should not be confused with Mainnet launch or token launch approval.
 
-## 15. Next Recommended Actions
+## 16. Next Recommended Actions
 
 1. Tokenomics finalization document.
 2. Launch communication draft.
@@ -199,7 +210,7 @@ The warnings are material. Public preview should not be confused with Mainnet la
 5. Community preheat plan.
 6. Decide whether token launches as Devnet-preview narrative or waits for Mainnet readiness.
 
-## 16. Reviewer Notes
+## 17. Reviewer Notes
 
 This review is a product and communication readiness snapshot. It does not replace:
 
