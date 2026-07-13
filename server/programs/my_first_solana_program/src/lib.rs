@@ -52,6 +52,46 @@ pub mod my_first_solana_program {
         instructions::deposit_usdc_revenue::route_usdc_revenue_v1_handler(ctx, revenue_type, amount)
     }
 
+    pub fn initialize_governance_proposal_v1(
+        ctx: Context<InitializeGovernanceProposalV1>,
+        proposal_id: u64,
+        proposal_type: GovernanceProposalTypeV1,
+        action_type: u8,
+        target_program: Pubkey,
+        target_account: Pubkey,
+        payload_hash: [u8; 32],
+        voting_start_ts: i64,
+        voting_end_ts: i64,
+    ) -> Result<()> {
+        instructions::governance_v1::initialize_governance_proposal_v1_handler(
+            ctx,
+            proposal_id,
+            proposal_type,
+            action_type,
+            target_program,
+            target_account,
+            payload_hash,
+            voting_start_ts,
+            voting_end_ts,
+        )
+    }
+
+    pub fn initialize_governance_position_v1(
+        ctx: Context<InitializeGovernancePositionV1>,
+    ) -> Result<()> {
+        instructions::governance_v1::initialize_governance_position_v1_handler(ctx)
+    }
+
+    pub fn initialize_governance_snapshot_v1(
+        ctx: Context<InitializeGovernanceSnapshotV1>,
+    ) -> Result<()> {
+        instructions::governance_v1::initialize_governance_snapshot_v1_handler(ctx)
+    }
+
+    pub fn initialize_vote_record_v1(ctx: Context<InitializeVoteRecordV1>) -> Result<()> {
+        instructions::governance_v1::initialize_vote_record_v1_handler(ctx)
+    }
+
     pub fn initialize_contributor_registry_v1(
         ctx: Context<InitializeContributorRegistryV1>,
         role: ContributorRoleV1,
@@ -88,6 +128,70 @@ pub mod my_first_solana_program {
             milestone_id,
             amount,
             destination_wallet,
+        )
+    }
+
+    pub fn execute_add_contributor(
+        ctx: Context<ExecuteAddContributor>,
+        proposal_id: u64,
+        contributor_role: ContributorRoleV1,
+    ) -> Result<()> {
+        instructions::contributor_v1::execute_add_contributor_handler(
+            ctx,
+            proposal_id,
+            contributor_role,
+        )
+    }
+
+    pub fn execute_remove_contributor(
+        ctx: Context<ExecuteRemoveContributor>,
+        proposal_id: u64,
+        reason_hash: [u8; 32],
+    ) -> Result<()> {
+        instructions::contributor_v1::execute_remove_contributor_handler(
+            ctx,
+            proposal_id,
+            reason_hash,
+        )
+    }
+
+    pub fn execute_update_contributor_role(
+        ctx: Context<ExecuteUpdateContributorRole>,
+        proposal_id: u64,
+        new_role: ContributorRoleV1,
+    ) -> Result<()> {
+        instructions::contributor_v1::execute_update_contributor_role_handler(
+            ctx,
+            proposal_id,
+            new_role,
+        )
+    }
+
+    pub fn execute_approve_contributor_milestone(
+        ctx: Context<ExecuteApproveContributorMilestone>,
+        proposal_id: u64,
+        milestone_id: u64,
+        approved_amount: u64,
+    ) -> Result<()> {
+        instructions::contributor_v1::execute_approve_contributor_milestone_handler(
+            ctx,
+            proposal_id,
+            milestone_id,
+            approved_amount,
+        )
+    }
+
+    pub fn execute_approve_builder_payout(
+        ctx: Context<ExecuteApproveBuilderPayout>,
+        proposal_id: u64,
+        milestone_id: u64,
+        approved_amount: u64,
+    ) -> Result<()> {
+        instructions::contributor_v1::execute_approve_builder_payout_handler(
+            ctx,
+            proposal_id,
+            milestone_id,
+            approved_amount,
         )
     }
 

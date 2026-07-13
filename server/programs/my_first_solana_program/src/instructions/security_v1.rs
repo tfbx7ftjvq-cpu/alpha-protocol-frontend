@@ -516,6 +516,26 @@ pub fn is_action_valid_for_proposal_type(
                 ActionType::TreasuryParamChange
             )
             | (ProposalType::EmergencyPause, ActionType::EmergencyPause)
+            | (
+                ProposalType::ContributorAddContributor,
+                ActionType::ContributorAddContributor
+            )
+            | (
+                ProposalType::ContributorRemoveContributor,
+                ActionType::ContributorRemoveContributor
+            )
+            | (
+                ProposalType::ContributorUpdateRole,
+                ActionType::ContributorUpdateRole
+            )
+            | (
+                ProposalType::ContributorApproveMilestone,
+                ActionType::ContributorApproveMilestone
+            )
+            | (
+                ProposalType::ContributorApproveBuilderPayout,
+                ActionType::ContributorApproveBuilderPayout
+            )
     )
 }
 
@@ -1059,6 +1079,66 @@ mod tests {
         assert_eq!(item.target_program, TARGET_PROGRAM);
         assert_eq!(item.target_account, TARGET_ACCOUNT);
         assert_eq!(item.status, ExecutionStatus::Executed);
+    }
+
+    #[test]
+    fn contributor_action_can_queue_with_matching_proposal_type() {
+        let config = governance_config();
+        let decision = proposal_decision(
+            1,
+            ProposalType::ContributorApproveBuilderPayout,
+            ProposalDecision::Approved,
+        );
+        let mut item = execution_queue_item(0);
+
+        queue_execution_state(
+            &config,
+            &decision,
+            &mut item,
+            AUTHORITY,
+            1,
+            ActionType::ContributorApproveBuilderPayout,
+            TARGET_PROGRAM,
+            TARGET_ACCOUNT,
+            HASH_ONE,
+            100,
+            44,
+        )
+        .unwrap();
+
+        assert_eq!(
+            item.action_type,
+            ActionType::ContributorApproveBuilderPayout
+        );
+        assert_eq!(item.status, ExecutionStatus::Queued);
+    }
+
+    #[test]
+    fn contributor_action_rejects_mismatched_proposal_type() {
+        let config = governance_config();
+        let decision = proposal_decision(
+            1,
+            ProposalType::ContributorApproveMilestone,
+            ProposalDecision::Approved,
+        );
+        let mut item = execution_queue_item(0);
+
+        let err = queue_execution_state(
+            &config,
+            &decision,
+            &mut item,
+            AUTHORITY,
+            1,
+            ActionType::ContributorApproveBuilderPayout,
+            TARGET_PROGRAM,
+            TARGET_ACCOUNT,
+            HASH_ONE,
+            100,
+            44,
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "InvalidActionForProposalType");
     }
 
     #[test]

@@ -1,6 +1,7 @@
 pub mod contributor_v1;
 pub mod deposit;
 pub mod deposit_usdc_revenue;
+pub mod governance_v1;
 pub mod green_label_v1;
 pub mod initialize_protocol;
 pub mod initialize_usdc_treasury;
@@ -10,6 +11,7 @@ pub mod staking_v1;
 pub use contributor_v1::*;
 pub use deposit::*;
 pub use deposit_usdc_revenue::*;
+pub use governance_v1::*;
 pub use green_label_v1::*;
 pub use initialize_protocol::*;
 pub use initialize_usdc_treasury::*;

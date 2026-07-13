@@ -199,4 +199,22 @@ pub enum CustomError {
 
     #[msg("Invalid contributor payout destination")]
     InvalidContributorPayoutDestination,
+
+    #[msg("Invalid contributor security execution")]
+    InvalidContributorSecurityExecution,
+
+    #[msg("Invalid contributor payload hash")]
+    InvalidContributorPayloadHash,
+
+    #[msg("Invalid governance proposal")]
+    InvalidGovernanceProposal,
+
+    #[msg("Invalid governance proposal time")]
+    InvalidGovernanceProposalTime,
+
+    #[msg("Invalid governance position")]
+    InvalidGovernancePosition,
+
+    #[msg("Unauthorized governance position owner")]
+    UnauthorizedGovernancePositionOwner,
 }

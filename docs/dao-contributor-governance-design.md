@@ -42,13 +42,13 @@ The 20% builders bucket is accounting-complete, but this phase does not transfer
 
 - wallet
 - role
-- status = `Active`
+- status = `Suspended` for direct self-initialized candidate records
 - joined timestamp
 - last active timestamp
 - zeroed milestone and payout counters
 - zeroed reputation score
 
-Current initialization is contributor-wallet controlled. Future DAO phases can add governed add-contributor flows using `ContributorProposalTypeV1::AddContributor`.
+Direct contributor-wallet initialization does not grant active contributor status. Active contributor status is granted through the Security Layer execution path using `ContributorProposalTypeV1::AddContributor`.
 
 ## Removing Contributors
 

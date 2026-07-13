@@ -128,6 +128,11 @@ pub enum ProposalType {
     PayrollPayout,
     TreasuryParamChange,
     EmergencyPause,
+    ContributorAddContributor,
+    ContributorRemoveContributor,
+    ContributorUpdateRole,
+    ContributorApproveMilestone,
+    ContributorApproveBuilderPayout,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -154,6 +159,11 @@ pub enum ActionType {
     PayrollPayout,
     TreasuryParamChange,
     EmergencyPause,
+    ContributorAddContributor,
+    ContributorRemoveContributor,
+    ContributorUpdateRole,
+    ContributorApproveMilestone,
+    ContributorApproveBuilderPayout,
 }
 
 #[account]
@@ -206,6 +216,109 @@ pub struct ExecutionQueueItemV1 {
 
 impl ExecutionQueueItemV1 {
     pub const INIT_SPACE: usize = 256;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GovernanceProposalTypeV1 {
+    Contributor,
+    Treasury,
+    Parameter,
+    Upgrade,
+    Emergency,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GovernanceProposalStatusV1 {
+    Draft,
+    Voting,
+    Passed,
+    Rejected,
+    Queued,
+    Executed,
+    Cancelled,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VoteChoiceV1 {
+    Yes,
+    No,
+    Abstain,
+}
+
+#[account]
+pub struct GovernanceProposalV1 {
+    pub proposal_id: u64,
+    pub proposer: Pubkey,
+    pub proposal_type: GovernanceProposalTypeV1,
+    pub action_type: u8,
+    pub target_program: Pubkey,
+    pub target_account: Pubkey,
+    pub payload_hash: [u8; 32],
+    pub status: GovernanceProposalStatusV1,
+    pub voting_start_ts: i64,
+    pub voting_end_ts: i64,
+    pub created_at: i64,
+    pub bump: u8,
+}
+
+impl GovernanceProposalV1 {
+    pub const INIT_SPACE: usize = 8 + 32 + 1 + 1 + 32 + 32 + 32 + 1 + (8 * 3) + 1;
+}
+
+#[account]
+pub struct GovernancePositionV1 {
+    pub owner: Pubkey,
+    pub alpha_mint: Pubkey,
+    pub locked_amount: u64,
+    pub lock_start_time: i64,
+    pub lock_end_time: i64,
+    pub reputation_snapshot: u64,
+    pub holding_multiplier_bps: u64,
+    pub reputation_multiplier_bps: u64,
+    pub voting_power: u64,
+    pub status: GovernancePositionStatusV1,
+    pub bump: u8,
+}
+
+impl GovernancePositionV1 {
+    pub const INIT_SPACE: usize = (32 * 2) + (8 * 6) + 1 + 1;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GovernancePositionStatusV1 {
+    Active,
+    Unlocking,
+    Closed,
+}
+
+#[account]
+pub struct GovernanceSnapshotV1 {
+    pub proposal: Pubkey,
+    pub total_voting_power: u64,
+    pub yes_weight: u64,
+    pub no_weight: u64,
+    pub abstain_weight: u64,
+    pub created_at: i64,
+    pub finalized: bool,
+    pub bump: u8,
+}
+
+impl GovernanceSnapshotV1 {
+    pub const INIT_SPACE: usize = 32 + (8 * 5) + 1 + 1;
+}
+
+#[account]
+pub struct VoteRecordV1 {
+    pub proposal: Pubkey,
+    pub voter_position: Pubkey,
+    pub choice: VoteChoiceV1,
+    pub voting_power_used: u64,
+    pub timestamp: i64,
+    pub bump: u8,
+}
+
+impl VoteRecordV1 {
+    pub const INIT_SPACE: usize = (32 * 2) + 1 + (8 * 2) + 1;
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -423,6 +536,45 @@ pub enum ContributorProposalTypeV1 {
     ApproveBuilderPayout,
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContributorActionTypeV1 {
+    AddContributor,
+    RemoveContributor,
+    UpdateContributorRole,
+    ApproveMilestone,
+    ApproveBuilderPayout,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AddContributorPayloadV1 {
+    pub contributor_wallet: Pubkey,
+    pub contributor_role: ContributorRoleV1,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RemoveContributorPayloadV1 {
+    pub contributor_registry: Pubkey,
+    pub reason_hash: [u8; 32],
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct UpdateContributorRolePayloadV1 {
+    pub contributor_registry: Pubkey,
+    pub new_role: ContributorRoleV1,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ApproveContributorMilestonePayloadV1 {
+    pub milestone: Pubkey,
+    pub approved_amount: u64,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ApproveBuilderPayoutPayloadV1 {
+    pub payout_request: Pubkey,
+    pub approved_amount: u64,
+}
+
 #[account]
 pub struct ContributorRegistryV1 {
     pub wallet: Pubkey,
@@ -478,4 +630,50 @@ pub struct BuilderPayoutRequestV1 {
 
 impl BuilderPayoutRequestV1 {
     pub const INIT_SPACE: usize = (32 * 3) + 8 + 1 + 8 + 1;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn governance_proposal_space_covers_fields() {
+        let minimum = 8 + 32 + 1 + 1 + 32 + 32 + 32 + 1 + (8 * 3) + 1;
+        assert!(GovernanceProposalV1::INIT_SPACE >= minimum);
+    }
+
+    #[test]
+    fn governance_position_space_covers_fields() {
+        let minimum = (32 * 2) + (8 * 6) + 1 + 1;
+        assert!(GovernancePositionV1::INIT_SPACE >= minimum);
+    }
+
+    #[test]
+    fn governance_snapshot_space_covers_fields() {
+        let minimum = 32 + (8 * 5) + 1 + 1;
+        assert!(GovernanceSnapshotV1::INIT_SPACE >= minimum);
+    }
+
+    #[test]
+    fn vote_record_space_covers_fields() {
+        let minimum = (32 * 2) + 1 + (8 * 2) + 1;
+        assert!(VoteRecordV1::INIT_SPACE >= minimum);
+    }
+
+    #[test]
+    fn governance_core_enums_are_copy_and_comparable() {
+        assert_eq!(
+            GovernanceProposalStatusV1::Draft,
+            GovernanceProposalStatusV1::Draft
+        );
+        assert_ne!(VoteChoiceV1::Yes, VoteChoiceV1::No);
+        assert_eq!(
+            GovernanceProposalTypeV1::Contributor,
+            GovernanceProposalTypeV1::Contributor
+        );
+        assert_eq!(
+            GovernancePositionStatusV1::Active,
+            GovernancePositionStatusV1::Active
+        );
+    }
 }
