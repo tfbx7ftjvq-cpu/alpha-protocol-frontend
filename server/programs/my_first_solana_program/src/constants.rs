@@ -24,6 +24,8 @@ pub const GOVERNANCE_PROPOSAL_V1_SEED: &[u8] = b"governance_proposal_v1";
 pub const GOVERNANCE_POSITION_V1_SEED: &[u8] = b"governance_position_v1";
 pub const GOVERNANCE_SNAPSHOT_V1_SEED: &[u8] = b"governance_snapshot_v1";
 pub const VOTE_RECORD_V1_SEED: &[u8] = b"vote_record_v1";
+pub const UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED: &[u8] =
+    b"universal_governance_decision_adapter_v1";
 pub const PROPOSAL_DECISION_V1_SEED: &[u8] = b"proposal_decision_v1";
 pub const EXECUTION_QUEUE_ITEM_V1_SEED: &[u8] = b"execution_queue_item_v1";
 pub const GREEN_LABEL_CONFIG_SEED: &[u8] = b"green_label_config_v1";

@@ -262,4 +262,7 @@ pub enum CustomError {
 
     #[msg("Invalid governance vote")]
     InvalidGovernanceVote,
+
+    #[msg("Invalid governance decision adapter")]
+    InvalidGovernanceDecisionAdapter,
 }

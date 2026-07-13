@@ -357,6 +357,23 @@ impl VoteRecordV1 {
     pub const INIT_SPACE: usize = (32 * 2) + 1 + (8 * 2) + 1;
 }
 
+#[account]
+pub struct UniversalGovernanceDecisionAdapterV1 {
+    pub governance_proposal: Pubkey,
+    pub proposal_decision: Pubkey,
+    pub action_type: ActionType,
+    pub target_program: Pubkey,
+    pub target_account: Pubkey,
+    pub payload_hash: [u8; 32],
+    pub created_at: i64,
+    pub executed: bool,
+    pub bump: u8,
+}
+
+impl UniversalGovernanceDecisionAdapterV1 {
+    pub const INIT_SPACE: usize = (32 * 5) + 1 + 8 + 1 + 1;
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GreenLabelStatus {
     PendingBondDeposit,
@@ -706,6 +723,12 @@ mod tests {
     fn vote_record_space_covers_fields() {
         let minimum = (32 * 2) + 1 + (8 * 2) + 1;
         assert!(VoteRecordV1::INIT_SPACE >= minimum);
+    }
+
+    #[test]
+    fn universal_governance_decision_adapter_space_covers_fields() {
+        let minimum = (32 * 5) + 1 + 8 + 1 + 1;
+        assert!(UniversalGovernanceDecisionAdapterV1::INIT_SPACE >= minimum);
     }
 
     #[test]

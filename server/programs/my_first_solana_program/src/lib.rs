@@ -134,6 +134,12 @@ pub mod my_first_solana_program {
         instructions::governance_v1::finalize_governance_vote_v1_handler(ctx)
     }
 
+    pub fn create_governance_decision_adapter_v1(
+        ctx: Context<CreateGovernanceDecisionAdapterV1>,
+    ) -> Result<()> {
+        instructions::governance_adapter_v1::create_governance_decision_adapter_v1_handler(ctx)
+    }
+
     pub fn initialize_vote_record_v1(ctx: Context<InitializeVoteRecordV1>) -> Result<()> {
         instructions::governance_v1::initialize_vote_record_v1_handler(ctx)
     }
