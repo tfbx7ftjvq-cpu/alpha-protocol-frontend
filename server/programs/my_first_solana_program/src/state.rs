@@ -1,7 +1,8 @@
 use anchor_lang::prelude::*;
 
 use crate::constants::{
-    ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES, GREEN_LABEL_CONFIG_RESERVED_BYTES,
+    ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES, CONTRIBUTOR_MILESTONE_DESCRIPTION_MAX_BYTES,
+    CONTRIBUTOR_MILESTONE_TITLE_MAX_BYTES, GREEN_LABEL_CONFIG_RESERVED_BYTES,
     GREEN_LABEL_CONFIG_SPACE, GREEN_LABEL_DISPUTE_RESERVED_BYTES, GREEN_LABEL_DISPUTE_SPACE,
     GREEN_LABEL_PROJECT_RESERVED_BYTES, GREEN_LABEL_PROJECT_SPACE,
 };
@@ -372,4 +373,109 @@ pub struct GreenLabelRefundableEscrowV1 {
 
 impl GreenLabelRefundableEscrowV1 {
     pub const INIT_SPACE: usize = (32 * 5) + (8 * 5) + (8 * 2) + 3;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContributorRoleV1 {
+    CoreDeveloper,
+    BackendDeveloper,
+    FrontendDeveloper,
+    SecurityResearcher,
+    ProtocolResearcher,
+    Designer,
+    CommunityManager,
+    Operations,
+    TreasuryReviewer,
+    Translator,
+    Ambassador,
+    Other,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContributorStatusV1 {
+    Active,
+    Suspended,
+    Removed,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MilestoneStatusV1 {
+    Pending,
+    Approved,
+    Rejected,
+    Paid,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PayoutStatusV1 {
+    Pending,
+    Approved,
+    Rejected,
+    Executed,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContributorProposalTypeV1 {
+    AddContributor,
+    RemoveContributor,
+    UpdateContributorRole,
+    ApproveMilestone,
+    ApproveBuilderPayout,
+}
+
+#[account]
+pub struct ContributorRegistryV1 {
+    pub wallet: Pubkey,
+    pub role: ContributorRoleV1,
+    pub status: ContributorStatusV1,
+    pub joined_at: i64,
+    pub last_active_at: i64,
+    pub completed_milestones: u32,
+    pub approved_payout_count: u32,
+    pub reputation_score: u64,
+    pub bump: u8,
+}
+
+impl ContributorRegistryV1 {
+    pub const INIT_SPACE: usize = 32 + 1 + 1 + (8 * 2) + (4 * 2) + 8 + 1;
+}
+
+#[account]
+pub struct ContributorMilestoneV1 {
+    pub contributor: Pubkey,
+    pub title: String,
+    pub description: String,
+    pub evidence_hash: [u8; 32],
+    pub requested_amount: u64,
+    pub status: MilestoneStatusV1,
+    pub created_at: i64,
+    pub bump: u8,
+}
+
+impl ContributorMilestoneV1 {
+    pub const INIT_SPACE: usize = 32
+        + 4
+        + CONTRIBUTOR_MILESTONE_TITLE_MAX_BYTES
+        + 4
+        + CONTRIBUTOR_MILESTONE_DESCRIPTION_MAX_BYTES
+        + 32
+        + 8
+        + 1
+        + 8
+        + 1;
+}
+
+#[account]
+pub struct BuilderPayoutRequestV1 {
+    pub contributor: Pubkey,
+    pub milestone: Pubkey,
+    pub amount: u64,
+    pub destination_wallet: Pubkey,
+    pub status: PayoutStatusV1,
+    pub created_at: i64,
+    pub bump: u8,
+}
+
+impl BuilderPayoutRequestV1 {
+    pub const INIT_SPACE: usize = (32 * 3) + 8 + 1 + 8 + 1;
 }

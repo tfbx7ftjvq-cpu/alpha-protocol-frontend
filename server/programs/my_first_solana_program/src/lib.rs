@@ -52,6 +52,45 @@ pub mod my_first_solana_program {
         instructions::deposit_usdc_revenue::route_usdc_revenue_v1_handler(ctx, revenue_type, amount)
     }
 
+    pub fn initialize_contributor_registry_v1(
+        ctx: Context<InitializeContributorRegistryV1>,
+        role: ContributorRoleV1,
+    ) -> Result<()> {
+        instructions::contributor_v1::initialize_contributor_registry_v1_handler(ctx, role)
+    }
+
+    pub fn initialize_contributor_milestone_v1(
+        ctx: Context<InitializeContributorMilestoneV1>,
+        milestone_id: u64,
+        title: String,
+        description: String,
+        evidence_hash: [u8; 32],
+        requested_amount: u64,
+    ) -> Result<()> {
+        instructions::contributor_v1::initialize_contributor_milestone_v1_handler(
+            ctx,
+            milestone_id,
+            title,
+            description,
+            evidence_hash,
+            requested_amount,
+        )
+    }
+
+    pub fn initialize_builder_payout_request_v1(
+        ctx: Context<InitializeBuilderPayoutRequestV1>,
+        milestone_id: u64,
+        amount: u64,
+        destination_wallet: Pubkey,
+    ) -> Result<()> {
+        instructions::contributor_v1::initialize_builder_payout_request_v1_handler(
+            ctx,
+            milestone_id,
+            amount,
+            destination_wallet,
+        )
+    }
+
     pub fn initialize_staking_pool(
         ctx: Context<InitializeStakingPool>,
         min_claim_usdc: u64,

@@ -172,4 +172,31 @@ pub enum CustomError {
 
     #[msg("Invalid Green Label escrow forfeit")]
     InvalidGreenLabelEscrowForfeit,
+
+    #[msg("Unauthorized contributor wallet")]
+    UnauthorizedContributorWallet,
+
+    #[msg("Invalid contributor status")]
+    InvalidContributorStatus,
+
+    #[msg("Invalid contributor role")]
+    InvalidContributorRole,
+
+    #[msg("Invalid contributor milestone")]
+    InvalidContributorMilestone,
+
+    #[msg("Invalid contributor milestone text")]
+    InvalidContributorMilestoneText,
+
+    #[msg("Invalid contributor milestone amount")]
+    InvalidContributorMilestoneAmount,
+
+    #[msg("Invalid contributor payout request")]
+    InvalidContributorPayoutRequest,
+
+    #[msg("Invalid contributor payout amount")]
+    InvalidContributorPayoutAmount,
+
+    #[msg("Invalid contributor payout destination")]
+    InvalidContributorPayoutDestination,
 }

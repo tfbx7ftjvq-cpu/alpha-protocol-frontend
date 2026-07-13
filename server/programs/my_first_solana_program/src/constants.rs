@@ -26,6 +26,9 @@ pub const GREEN_BOND_VAULT_SEED: &[u8] = b"green_bond_vault_v1";
 pub const GREEN_BOND_VAULT_AUTHORITY_SEED: &[u8] = b"green_bond_vault_authority_v1";
 pub const GREEN_LABEL_REFUNDABLE_ESCROW_SEED: &[u8] = b"green_label_refundable_escrow_v1";
 pub const GREEN_LABEL_REFUNDABLE_VAULT_SEED: &[u8] = b"green_label_refundable_vault_v1";
+pub const CONTRIBUTOR_REGISTRY_V1_SEED: &[u8] = b"contributor_registry_v1";
+pub const CONTRIBUTOR_MILESTONE_V1_SEED: &[u8] = b"contributor_milestone_v1";
+pub const BUILDER_PAYOUT_REQUEST_V1_SEED: &[u8] = b"builder_payout_request_v1";
 
 pub const BPS_DENOMINATOR: u64 = 10_000;
 pub const RELIEF_BPS: u64 = 5_000;
@@ -103,3 +106,6 @@ pub const GREEN_LABEL_DISPUTE_SPACE: usize = ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES
     + 3
     + 1
     + GREEN_LABEL_DISPUTE_RESERVED_BYTES;
+
+pub const CONTRIBUTOR_MILESTONE_TITLE_MAX_BYTES: usize = 96;
+pub const CONTRIBUTOR_MILESTONE_DESCRIPTION_MAX_BYTES: usize = 512;
