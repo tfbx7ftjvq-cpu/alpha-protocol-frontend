@@ -218,6 +218,37 @@ impl ExecutionQueueItemV1 {
     pub const INIT_SPACE: usize = 256;
 }
 
+#[account]
+pub struct GovernanceLockConfigV1 {
+    pub authority: Pubkey,
+    pub alpha_mint: Pubkey,
+    pub governance_vault: Pubkey,
+    pub min_lock_amount: u64,
+    pub min_lock_duration_seconds: i64,
+    pub max_lock_duration_seconds: i64,
+    pub max_time_multiplier_bps: u64,
+    pub created_at: i64,
+    pub bump: u8,
+}
+
+impl GovernanceLockConfigV1 {
+    pub const INIT_SPACE: usize = (32 * 3) + (8 * 5) + 1;
+}
+
+#[account]
+pub struct GovernanceVotingConfigV1 {
+    pub authority: Pubkey,
+    pub quorum_bps: u64,
+    pub approval_threshold_bps: u64,
+    pub voting_period_seconds: i64,
+    pub created_at: i64,
+    pub bump: u8,
+}
+
+impl GovernanceVotingConfigV1 {
+    pub const INIT_SPACE: usize = 32 + (8 * 4) + 1;
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GovernanceProposalTypeV1 {
     Contributor,
@@ -258,30 +289,35 @@ pub struct GovernanceProposalV1 {
     pub voting_start_ts: i64,
     pub voting_end_ts: i64,
     pub created_at: i64,
+    pub snapshot: Pubkey,
+    pub yes_weight: u64,
+    pub no_weight: u64,
+    pub abstain_weight: u64,
+    pub finalized_at: i64,
     pub bump: u8,
 }
 
 impl GovernanceProposalV1 {
-    pub const INIT_SPACE: usize = 8 + 32 + 1 + 1 + 32 + 32 + 32 + 1 + (8 * 3) + 1;
+    pub const INIT_SPACE: usize = 8 + 32 + 1 + 1 + 32 + 32 + 32 + 1 + (8 * 3) + 32 + (8 * 4) + 1;
 }
 
 #[account]
 pub struct GovernancePositionV1 {
     pub owner: Pubkey,
     pub alpha_mint: Pubkey,
+    pub vault: Pubkey,
     pub locked_amount: u64,
     pub lock_start_time: i64,
     pub lock_end_time: i64,
-    pub reputation_snapshot: u64,
     pub holding_multiplier_bps: u64,
-    pub reputation_multiplier_bps: u64,
     pub voting_power: u64,
     pub status: GovernancePositionStatusV1,
+    pub last_updated_at: i64,
     pub bump: u8,
 }
 
 impl GovernancePositionV1 {
-    pub const INIT_SPACE: usize = (32 * 2) + (8 * 6) + 1 + 1;
+    pub const INIT_SPACE: usize = (32 * 3) + (8 * 6) + 1 + 1;
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -638,14 +674,26 @@ mod tests {
 
     #[test]
     fn governance_proposal_space_covers_fields() {
-        let minimum = 8 + 32 + 1 + 1 + 32 + 32 + 32 + 1 + (8 * 3) + 1;
+        let minimum = 8 + 32 + 1 + 1 + 32 + 32 + 32 + 1 + (8 * 3) + 32 + (8 * 4) + 1;
         assert!(GovernanceProposalV1::INIT_SPACE >= minimum);
     }
 
     #[test]
     fn governance_position_space_covers_fields() {
-        let minimum = (32 * 2) + (8 * 6) + 1 + 1;
+        let minimum = (32 * 3) + (8 * 6) + 1 + 1;
         assert!(GovernancePositionV1::INIT_SPACE >= minimum);
+    }
+
+    #[test]
+    fn governance_lock_config_space_covers_fields() {
+        let minimum = (32 * 3) + (8 * 5) + 1;
+        assert!(GovernanceLockConfigV1::INIT_SPACE >= minimum);
+    }
+
+    #[test]
+    fn governance_voting_config_space_covers_fields() {
+        let minimum = 32 + (8 * 4) + 1;
+        assert!(GovernanceVotingConfigV1::INIT_SPACE >= minimum);
     }
 
     #[test]

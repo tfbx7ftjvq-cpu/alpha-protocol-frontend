@@ -10,7 +10,7 @@ This phase only creates core accounts and initialization instructions. It does n
 
 ## Hybrid Governance Model
 
-The intended future model is:
+The intended long-term model is:
 
 ```text
 sqrt(ALPHA locked amount)
@@ -23,7 +23,7 @@ Design limits:
 - holding time multiplier max: 2x
 - reputation multiplier max: 1.5x
 
-Phase 2E-4B stores the fields needed for this model but does not calculate voting power.
+Phase 2E-4B created the core proposal / position / snapshot / vote record skeleton. Phase 2E-4C-1 implements the lock foundation with `sqrt(locked_amount) * holding time multiplier`; reputation multiplier remains a future extension and is not stored in the current `GovernancePositionV1`.
 
 ## GovernanceProposal Lifecycle
 
@@ -65,14 +65,14 @@ Fields:
 
 - owner
 - alpha_mint
+- vault
 - locked_amount
 - lock_start_time
 - lock_end_time
-- reputation_snapshot
 - holding_multiplier_bps
-- reputation_multiplier_bps
 - voting_power
 - status
+- last_updated_at
 - bump
 
 Current position statuses:
@@ -86,7 +86,7 @@ Initialization defaults:
 - `status = Active`
 - `locked_amount = 0`
 - `voting_power = 0`
-- multipliers default to 10,000 bps, meaning 1x
+- `holding_multiplier_bps = 0` until ALPHA is locked
 
 Position PDA:
 
@@ -94,7 +94,7 @@ Position PDA:
 governance_position_v1 + owner.key().as_ref()
 ```
 
-This phase does not transfer or lock SPL tokens.
+Phase 2E-4C-1 adds ALPHA lock / unlock transfer support through the governance vault. It still does not implement proposal voting or vote finalization.
 
 ## Snapshot Design
 
@@ -161,12 +161,11 @@ This PDA design prevents one governance position from creating multiple vote rec
 
 Future phases should add:
 
-1. ALPHA governance lock / unlock instructions.
-2. Voting power calculation helpers.
-3. Snapshot creation and voting power freeze logic.
-4. Cast vote instruction.
-5. Proposal finalization with quorum / threshold rules.
-6. Conversion from passed governance proposal to `ProposalDecisionV1`.
+1. Snapshot creation and voting power freeze logic.
+2. Cast vote instruction.
+3. Proposal finalization with quorum / threshold rules.
+4. Conversion from passed governance proposal to `ProposalDecisionV1`.
+5. Optional reputation multiplier after the contributor reputation model is finalized.
 
 ## Future Security Layer Connection
 
@@ -191,11 +190,7 @@ This phase does not connect Governance V1 to Security Layer execution.
 
 - ALPHA voting
 - quorum
-- token-weighted voting calculation
-- SPL token transfer
-- ALPHA lock / unlock
 - snapshot execution
 - proposal finalization
 - Security Layer connection
 - frontend
-

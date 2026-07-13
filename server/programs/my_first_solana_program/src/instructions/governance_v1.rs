@@ -1,16 +1,71 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::Mint;
+use anchor_spl::token::{transfer_checked, Mint, Token, TokenAccount, TransferChecked};
 
 use crate::constants::{
-    BPS_DENOMINATOR, GOVERNANCE_POSITION_V1_SEED, GOVERNANCE_PROPOSAL_V1_SEED,
-    GOVERNANCE_SNAPSHOT_V1_SEED, VOTE_RECORD_V1_SEED,
+    BPS_DENOMINATOR, GOVERNANCE_180_DAY_MULTIPLIER_BPS, GOVERNANCE_30_DAY_MULTIPLIER_BPS,
+    GOVERNANCE_365_DAY_MULTIPLIER_BPS, GOVERNANCE_90_DAY_MULTIPLIER_BPS,
+    GOVERNANCE_DEFAULT_APPROVAL_THRESHOLD_BPS, GOVERNANCE_DEFAULT_MIN_LOCK_AMOUNT,
+    GOVERNANCE_DEFAULT_QUORUM_BPS, GOVERNANCE_DEFAULT_VOTING_PERIOD_SECONDS,
+    GOVERNANCE_LOCK_CONFIG_V1_SEED, GOVERNANCE_MAX_LOCK_DURATION_SECONDS,
+    GOVERNANCE_MAX_TIME_MULTIPLIER_BPS, GOVERNANCE_MIN_LOCK_DURATION_SECONDS,
+    GOVERNANCE_POSITION_V1_SEED, GOVERNANCE_PROPOSAL_V1_SEED, GOVERNANCE_SNAPSHOT_V1_SEED,
+    GOVERNANCE_VAULT_V1_SEED, GOVERNANCE_VOTING_CONFIG_V1_SEED, LOCK_180_DAYS_SECONDS,
+    LOCK_30_DAYS_SECONDS, LOCK_365_DAYS_SECONDS, LOCK_90_DAYS_SECONDS, VOTE_RECORD_V1_SEED,
 };
 use crate::error::CustomError;
 use crate::state::{
-    GovernancePositionStatusV1, GovernancePositionV1, GovernanceProposalStatusV1,
-    GovernanceProposalTypeV1, GovernanceProposalV1, GovernanceSnapshotV1, VoteChoiceV1,
-    VoteRecordV1,
+    GovernanceLockConfigV1, GovernancePositionStatusV1, GovernancePositionV1,
+    GovernanceProposalStatusV1, GovernanceProposalTypeV1, GovernanceProposalV1,
+    GovernanceSnapshotV1, GovernanceVotingConfigV1, VoteChoiceV1, VoteRecordV1,
 };
+
+#[derive(Accounts)]
+pub struct InitializeGovernanceConfigV1<'info> {
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + GovernanceLockConfigV1::INIT_SPACE,
+        seeds = [GOVERNANCE_LOCK_CONFIG_V1_SEED],
+        bump
+    )]
+    pub governance_config: Account<'info, GovernanceLockConfigV1>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    pub alpha_mint: Box<Account<'info, Mint>>,
+
+    #[account(
+        init,
+        payer = authority,
+        token::mint = alpha_mint,
+        token::authority = governance_config,
+        seeds = [GOVERNANCE_VAULT_V1_SEED, governance_config.key().as_ref()],
+        bump
+    )]
+    pub governance_vault: Box<Account<'info, TokenAccount>>,
+
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+}
+
+#[derive(Accounts)]
+pub struct InitializeGovernanceVotingConfigV1<'info> {
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + GovernanceVotingConfigV1::INIT_SPACE,
+        seeds = [GOVERNANCE_VOTING_CONFIG_V1_SEED],
+        bump
+    )]
+    pub governance_voting_config: Account<'info, GovernanceVotingConfigV1>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
 
 #[derive(Accounts)]
 #[instruction(proposal_id: u64)]
@@ -33,6 +88,12 @@ pub struct InitializeGovernanceProposalV1<'info> {
 #[derive(Accounts)]
 pub struct InitializeGovernancePositionV1<'info> {
     #[account(
+        seeds = [GOVERNANCE_LOCK_CONFIG_V1_SEED],
+        bump = governance_config.bump
+    )]
+    pub governance_config: Account<'info, GovernanceLockConfigV1>,
+
+    #[account(
         init,
         payer = owner,
         space = 8 + GovernancePositionV1::INIT_SPACE,
@@ -44,9 +105,111 @@ pub struct InitializeGovernancePositionV1<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
 
+    #[account(
+        constraint = alpha_mint.key() == governance_config.alpha_mint @ CustomError::InvalidMint
+    )]
     pub alpha_mint: Box<Account<'info, Mint>>,
 
+    #[account(
+        constraint = governance_vault.key() == governance_config.governance_vault @ CustomError::InvalidGovernanceVault,
+        constraint = governance_vault.mint == governance_config.alpha_mint @ CustomError::InvalidMint,
+        constraint = governance_vault.owner == governance_config.key() @ CustomError::InvalidGovernanceVault
+    )]
+    pub governance_vault: Box<Account<'info, TokenAccount>>,
+
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct LockAlphaForGovernance<'info> {
+    #[account(
+        seeds = [GOVERNANCE_LOCK_CONFIG_V1_SEED],
+        bump = governance_config.bump
+    )]
+    pub governance_config: Account<'info, GovernanceLockConfigV1>,
+
+    #[account(
+        mut,
+        seeds = [GOVERNANCE_POSITION_V1_SEED, owner.key().as_ref()],
+        bump = governance_position.bump,
+        constraint = governance_position.owner == owner.key() @ CustomError::UnauthorizedGovernancePositionOwner,
+        constraint = governance_position.alpha_mint == governance_config.alpha_mint @ CustomError::InvalidMint,
+        constraint = governance_position.vault == governance_config.governance_vault @ CustomError::InvalidGovernanceVault
+    )]
+    pub governance_position: Account<'info, GovernancePositionV1>,
+
+    #[account(mut)]
+    pub owner: Signer<'info>,
+
+    #[account(
+        mut,
+        constraint = owner_alpha_token_account.mint == governance_config.alpha_mint @ CustomError::InvalidMint,
+        constraint = owner_alpha_token_account.owner == owner.key() @ CustomError::InvalidTokenAccount
+    )]
+    pub owner_alpha_token_account: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        constraint = alpha_mint.key() == governance_config.alpha_mint @ CustomError::InvalidMint
+    )]
+    pub alpha_mint: Box<Account<'info, Mint>>,
+
+    #[account(
+        mut,
+        seeds = [GOVERNANCE_VAULT_V1_SEED, governance_config.key().as_ref()],
+        bump,
+        constraint = governance_vault.key() == governance_config.governance_vault @ CustomError::InvalidGovernanceVault,
+        constraint = governance_vault.mint == governance_config.alpha_mint @ CustomError::InvalidMint,
+        constraint = governance_vault.owner == governance_config.key() @ CustomError::InvalidGovernanceVault
+    )]
+    pub governance_vault: Box<Account<'info, TokenAccount>>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct UnlockAlphaFromGovernance<'info> {
+    #[account(
+        seeds = [GOVERNANCE_LOCK_CONFIG_V1_SEED],
+        bump = governance_config.bump
+    )]
+    pub governance_config: Account<'info, GovernanceLockConfigV1>,
+
+    #[account(
+        mut,
+        seeds = [GOVERNANCE_POSITION_V1_SEED, owner.key().as_ref()],
+        bump = governance_position.bump,
+        constraint = governance_position.owner == owner.key() @ CustomError::UnauthorizedGovernancePositionOwner,
+        constraint = governance_position.alpha_mint == governance_config.alpha_mint @ CustomError::InvalidMint,
+        constraint = governance_position.vault == governance_config.governance_vault @ CustomError::InvalidGovernanceVault
+    )]
+    pub governance_position: Account<'info, GovernancePositionV1>,
+
+    #[account(mut)]
+    pub owner: Signer<'info>,
+
+    #[account(
+        mut,
+        constraint = owner_alpha_token_account.mint == governance_config.alpha_mint @ CustomError::InvalidMint,
+        constraint = owner_alpha_token_account.owner == owner.key() @ CustomError::InvalidTokenAccount
+    )]
+    pub owner_alpha_token_account: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        constraint = alpha_mint.key() == governance_config.alpha_mint @ CustomError::InvalidMint
+    )]
+    pub alpha_mint: Box<Account<'info, Mint>>,
+
+    #[account(
+        mut,
+        seeds = [GOVERNANCE_VAULT_V1_SEED, governance_config.key().as_ref()],
+        bump,
+        constraint = governance_vault.key() == governance_config.governance_vault @ CustomError::InvalidGovernanceVault,
+        constraint = governance_vault.mint == governance_config.alpha_mint @ CustomError::InvalidMint,
+        constraint = governance_vault.owner == governance_config.key() @ CustomError::InvalidGovernanceVault
+    )]
+    pub governance_vault: Box<Account<'info, TokenAccount>>,
+
+    pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]
@@ -66,6 +229,105 @@ pub struct InitializeGovernanceSnapshotV1<'info> {
     pub payer: Signer<'info>,
 
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct CreateGovernanceSnapshotV1<'info> {
+    #[account(
+        seeds = [GOVERNANCE_VOTING_CONFIG_V1_SEED],
+        bump = governance_voting_config.bump
+    )]
+    pub governance_voting_config: Account<'info, GovernanceVotingConfigV1>,
+
+    #[account(
+        mut,
+        seeds = [GOVERNANCE_PROPOSAL_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
+        bump = governance_proposal.bump,
+        constraint = governance_proposal.proposer == proposer.key() @ CustomError::UnauthorizedSecurityAuthority
+    )]
+    pub governance_proposal: Account<'info, GovernanceProposalV1>,
+
+    #[account(
+        init,
+        payer = proposer,
+        space = 8 + GovernanceSnapshotV1::INIT_SPACE,
+        seeds = [GOVERNANCE_SNAPSHOT_V1_SEED, governance_proposal.key().as_ref()],
+        bump
+    )]
+    pub governance_snapshot: Account<'info, GovernanceSnapshotV1>,
+
+    #[account(mut)]
+    pub proposer: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct CastGovernanceVoteV1<'info> {
+    #[account(
+        mut,
+        seeds = [GOVERNANCE_PROPOSAL_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
+        bump = governance_proposal.bump
+    )]
+    pub governance_proposal: Account<'info, GovernanceProposalV1>,
+
+    #[account(
+        mut,
+        seeds = [GOVERNANCE_SNAPSHOT_V1_SEED, governance_proposal.key().as_ref()],
+        bump = governance_snapshot.bump,
+        constraint = governance_snapshot.proposal == governance_proposal.key() @ CustomError::InvalidGovernanceSnapshot
+    )]
+    pub governance_snapshot: Account<'info, GovernanceSnapshotV1>,
+
+    #[account(
+        seeds = [GOVERNANCE_POSITION_V1_SEED, voter.key().as_ref()],
+        bump = governance_position.bump,
+        constraint = governance_position.owner == voter.key() @ CustomError::UnauthorizedGovernancePositionOwner,
+        constraint = governance_position.status == GovernancePositionStatusV1::Active @ CustomError::InvalidGovernancePosition
+    )]
+    pub governance_position: Account<'info, GovernancePositionV1>,
+
+    #[account(
+        init_if_needed,
+        payer = voter,
+        space = 8 + VoteRecordV1::INIT_SPACE,
+        seeds = [
+            VOTE_RECORD_V1_SEED,
+            governance_proposal.key().as_ref(),
+            governance_position.key().as_ref()
+        ],
+        bump
+    )]
+    pub vote_record: Account<'info, VoteRecordV1>,
+
+    #[account(mut)]
+    pub voter: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct FinalizeGovernanceVoteV1<'info> {
+    #[account(
+        seeds = [GOVERNANCE_VOTING_CONFIG_V1_SEED],
+        bump = governance_voting_config.bump
+    )]
+    pub governance_voting_config: Account<'info, GovernanceVotingConfigV1>,
+
+    #[account(
+        mut,
+        seeds = [GOVERNANCE_PROPOSAL_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
+        bump = governance_proposal.bump
+    )]
+    pub governance_proposal: Account<'info, GovernanceProposalV1>,
+
+    #[account(
+        mut,
+        seeds = [GOVERNANCE_SNAPSHOT_V1_SEED, governance_proposal.key().as_ref()],
+        bump = governance_snapshot.bump,
+        constraint = governance_snapshot.proposal == governance_proposal.key() @ CustomError::InvalidGovernanceSnapshot
+    )]
+    pub governance_snapshot: Account<'info, GovernanceSnapshotV1>,
 }
 
 #[derive(Accounts)]
@@ -97,6 +359,32 @@ pub struct InitializeVoteRecordV1<'info> {
     pub voter: Signer<'info>,
 
     pub system_program: Program<'info, System>,
+}
+
+pub fn initialize_governance_config_v1_handler(
+    ctx: Context<InitializeGovernanceConfigV1>,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    record_governance_config_init(
+        &mut ctx.accounts.governance_config,
+        ctx.accounts.authority.key(),
+        ctx.accounts.alpha_mint.key(),
+        ctx.accounts.governance_vault.key(),
+        now,
+        ctx.bumps.governance_config,
+    )
+}
+
+pub fn initialize_governance_voting_config_v1_handler(
+    ctx: Context<InitializeGovernanceVotingConfigV1>,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    record_governance_voting_config_init(
+        &mut ctx.accounts.governance_voting_config,
+        ctx.accounts.authority.key(),
+        now,
+        ctx.bumps.governance_voting_config,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -131,12 +419,63 @@ pub fn initialize_governance_proposal_v1_handler(
 pub fn initialize_governance_position_v1_handler(
     ctx: Context<InitializeGovernancePositionV1>,
 ) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
     record_governance_position_init(
         &mut ctx.accounts.governance_position,
         ctx.accounts.owner.key(),
         ctx.accounts.alpha_mint.key(),
+        ctx.accounts.governance_vault.key(),
+        now,
         ctx.bumps.governance_position,
     )
+}
+
+pub fn lock_alpha_for_governance_handler(
+    ctx: Context<LockAlphaForGovernance>,
+    amount: u64,
+    lock_duration_seconds: i64,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    record_governance_lock(
+        &mut ctx.accounts.governance_position,
+        &ctx.accounts.governance_config,
+        amount,
+        lock_duration_seconds,
+        now,
+    )?;
+
+    let cpi_accounts = TransferChecked {
+        from: ctx.accounts.owner_alpha_token_account.to_account_info(),
+        mint: ctx.accounts.alpha_mint.to_account_info(),
+        to: ctx.accounts.governance_vault.to_account_info(),
+        authority: ctx.accounts.owner.to_account_info(),
+    };
+    let cpi_ctx = CpiContext::new(ctx.accounts.token_program.key(), cpi_accounts);
+
+    transfer_checked(cpi_ctx, amount, ctx.accounts.alpha_mint.decimals)
+}
+
+pub fn unlock_alpha_from_governance_handler(ctx: Context<UnlockAlphaFromGovernance>) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let unlock_amount = validate_governance_unlock(
+        &ctx.accounts.governance_position,
+        ctx.accounts.governance_vault.amount,
+        now,
+    )?;
+
+    let config_bump = ctx.accounts.governance_config.bump;
+    let signer_seeds: &[&[&[u8]]] = &[&[GOVERNANCE_LOCK_CONFIG_V1_SEED, &[config_bump]]];
+    let cpi_accounts = TransferChecked {
+        from: ctx.accounts.governance_vault.to_account_info(),
+        mint: ctx.accounts.alpha_mint.to_account_info(),
+        to: ctx.accounts.owner_alpha_token_account.to_account_info(),
+        authority: ctx.accounts.governance_config.to_account_info(),
+    };
+    let cpi_ctx =
+        CpiContext::new_with_signer(ctx.accounts.token_program.key(), cpi_accounts, signer_seeds);
+
+    transfer_checked(cpi_ctx, unlock_amount, ctx.accounts.alpha_mint.decimals)?;
+    record_governance_unlock(&mut ctx.accounts.governance_position, now)
 }
 
 pub fn initialize_governance_snapshot_v1_handler(
@@ -157,6 +496,55 @@ pub fn initialize_governance_snapshot_v1_handler(
     )
 }
 
+pub fn create_governance_snapshot_v1_handler(
+    ctx: Context<CreateGovernanceSnapshotV1>,
+    total_voting_power: u64,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let proposal_key = ctx.accounts.governance_proposal.key();
+    let snapshot_key = ctx.accounts.governance_snapshot.key();
+    record_governance_snapshot_create(
+        &mut ctx.accounts.governance_proposal,
+        &mut ctx.accounts.governance_snapshot,
+        &ctx.accounts.governance_voting_config,
+        proposal_key,
+        snapshot_key,
+        total_voting_power,
+        now,
+        ctx.bumps.governance_snapshot,
+    )
+}
+
+pub fn cast_governance_vote_v1_handler(
+    ctx: Context<CastGovernanceVoteV1>,
+    choice: VoteChoiceV1,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let proposal_key = ctx.accounts.governance_proposal.key();
+    let position_key = ctx.accounts.governance_position.key();
+    record_cast_governance_vote(
+        &mut ctx.accounts.governance_proposal,
+        &mut ctx.accounts.governance_snapshot,
+        &ctx.accounts.governance_position,
+        &mut ctx.accounts.vote_record,
+        proposal_key,
+        position_key,
+        choice,
+        now,
+        ctx.bumps.vote_record,
+    )
+}
+
+pub fn finalize_governance_vote_v1_handler(ctx: Context<FinalizeGovernanceVoteV1>) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    record_finalize_governance_vote(
+        &mut ctx.accounts.governance_proposal,
+        &mut ctx.accounts.governance_snapshot,
+        &ctx.accounts.governance_voting_config,
+        now,
+    )
+}
+
 pub fn initialize_vote_record_v1_handler(ctx: Context<InitializeVoteRecordV1>) -> Result<()> {
     record_vote_record_init(
         &mut ctx.accounts.vote_record,
@@ -164,6 +552,121 @@ pub fn initialize_vote_record_v1_handler(ctx: Context<InitializeVoteRecordV1>) -
         ctx.accounts.governance_position.key(),
         ctx.bumps.vote_record,
     )
+}
+
+pub fn validate_governance_lock_config(
+    min_lock_amount: u64,
+    min_lock_duration_seconds: i64,
+    max_lock_duration_seconds: i64,
+    max_time_multiplier_bps: u64,
+) -> Result<()> {
+    require!(
+        min_lock_amount > 0,
+        CustomError::InvalidGovernanceLockAmount
+    );
+    require!(
+        min_lock_duration_seconds == GOVERNANCE_MIN_LOCK_DURATION_SECONDS,
+        CustomError::InvalidGovernanceLockConfig
+    );
+    require!(
+        max_lock_duration_seconds == GOVERNANCE_MAX_LOCK_DURATION_SECONDS,
+        CustomError::InvalidGovernanceLockConfig
+    );
+    require!(
+        max_time_multiplier_bps == GOVERNANCE_MAX_TIME_MULTIPLIER_BPS,
+        CustomError::InvalidGovernanceLockConfig
+    );
+    require!(
+        min_lock_duration_seconds > 0 && max_lock_duration_seconds >= min_lock_duration_seconds,
+        CustomError::InvalidGovernanceLockDuration
+    );
+    Ok(())
+}
+
+pub fn record_governance_config_init(
+    governance_config: &mut GovernanceLockConfigV1,
+    authority: Pubkey,
+    alpha_mint: Pubkey,
+    governance_vault: Pubkey,
+    created_at: i64,
+    bump: u8,
+) -> Result<()> {
+    require!(
+        authority != Pubkey::default(),
+        CustomError::UnauthorizedSecurityAuthority
+    );
+    require!(
+        alpha_mint != Pubkey::default(),
+        CustomError::InvalidGovernanceLockConfig
+    );
+    require!(
+        governance_vault != Pubkey::default(),
+        CustomError::InvalidGovernanceVault
+    );
+    validate_governance_lock_config(
+        GOVERNANCE_DEFAULT_MIN_LOCK_AMOUNT,
+        GOVERNANCE_MIN_LOCK_DURATION_SECONDS,
+        GOVERNANCE_MAX_LOCK_DURATION_SECONDS,
+        GOVERNANCE_MAX_TIME_MULTIPLIER_BPS,
+    )?;
+
+    governance_config.authority = authority;
+    governance_config.alpha_mint = alpha_mint;
+    governance_config.governance_vault = governance_vault;
+    governance_config.min_lock_amount = GOVERNANCE_DEFAULT_MIN_LOCK_AMOUNT;
+    governance_config.min_lock_duration_seconds = GOVERNANCE_MIN_LOCK_DURATION_SECONDS;
+    governance_config.max_lock_duration_seconds = GOVERNANCE_MAX_LOCK_DURATION_SECONDS;
+    governance_config.max_time_multiplier_bps = GOVERNANCE_MAX_TIME_MULTIPLIER_BPS;
+    governance_config.created_at = created_at;
+    governance_config.bump = bump;
+
+    Ok(())
+}
+
+pub fn validate_governance_voting_config(
+    quorum_bps: u64,
+    approval_threshold_bps: u64,
+    voting_period_seconds: i64,
+) -> Result<()> {
+    require!(
+        quorum_bps > 0 && quorum_bps <= BPS_DENOMINATOR,
+        CustomError::InvalidGovernanceVotingConfig
+    );
+    require!(
+        approval_threshold_bps > 0 && approval_threshold_bps <= BPS_DENOMINATOR,
+        CustomError::InvalidGovernanceVotingConfig
+    );
+    require!(
+        voting_period_seconds > 0,
+        CustomError::InvalidGovernanceVotingConfig
+    );
+    Ok(())
+}
+
+pub fn record_governance_voting_config_init(
+    governance_voting_config: &mut GovernanceVotingConfigV1,
+    authority: Pubkey,
+    created_at: i64,
+    bump: u8,
+) -> Result<()> {
+    require!(
+        authority != Pubkey::default(),
+        CustomError::UnauthorizedSecurityAuthority
+    );
+    validate_governance_voting_config(
+        GOVERNANCE_DEFAULT_QUORUM_BPS,
+        GOVERNANCE_DEFAULT_APPROVAL_THRESHOLD_BPS,
+        GOVERNANCE_DEFAULT_VOTING_PERIOD_SECONDS,
+    )?;
+
+    governance_voting_config.authority = authority;
+    governance_voting_config.quorum_bps = GOVERNANCE_DEFAULT_QUORUM_BPS;
+    governance_voting_config.approval_threshold_bps = GOVERNANCE_DEFAULT_APPROVAL_THRESHOLD_BPS;
+    governance_voting_config.voting_period_seconds = GOVERNANCE_DEFAULT_VOTING_PERIOD_SECONDS;
+    governance_voting_config.created_at = created_at;
+    governance_voting_config.bump = bump;
+
+    Ok(())
 }
 
 pub fn validate_governance_proposal_init(
@@ -238,6 +741,11 @@ pub fn record_governance_proposal_init(
     governance_proposal.voting_start_ts = voting_start_ts;
     governance_proposal.voting_end_ts = voting_end_ts;
     governance_proposal.created_at = created_at;
+    governance_proposal.snapshot = Pubkey::default();
+    governance_proposal.yes_weight = 0;
+    governance_proposal.no_weight = 0;
+    governance_proposal.abstain_weight = 0;
+    governance_proposal.finalized_at = 0;
     governance_proposal.bump = bump;
 
     Ok(())
@@ -247,6 +755,8 @@ pub fn record_governance_position_init(
     governance_position: &mut GovernancePositionV1,
     owner: Pubkey,
     alpha_mint: Pubkey,
+    vault: Pubkey,
+    last_updated_at: i64,
     bump: u8,
 ) -> Result<()> {
     require!(
@@ -257,18 +767,188 @@ pub fn record_governance_position_init(
         alpha_mint != Pubkey::default(),
         CustomError::InvalidGovernancePosition
     );
+    require!(
+        vault != Pubkey::default(),
+        CustomError::InvalidGovernanceVault
+    );
 
     governance_position.owner = owner;
     governance_position.alpha_mint = alpha_mint;
+    governance_position.vault = vault;
     governance_position.locked_amount = 0;
     governance_position.lock_start_time = 0;
     governance_position.lock_end_time = 0;
-    governance_position.reputation_snapshot = 0;
-    governance_position.holding_multiplier_bps = BPS_DENOMINATOR;
-    governance_position.reputation_multiplier_bps = BPS_DENOMINATOR;
+    governance_position.holding_multiplier_bps = 0;
     governance_position.voting_power = 0;
     governance_position.status = GovernancePositionStatusV1::Active;
+    governance_position.last_updated_at = last_updated_at;
     governance_position.bump = bump;
+
+    Ok(())
+}
+
+pub fn validate_governance_lock_params(
+    governance_config: &GovernanceLockConfigV1,
+    amount: u64,
+    lock_duration_seconds: i64,
+) -> Result<()> {
+    require!(
+        amount >= governance_config.min_lock_amount,
+        CustomError::InvalidGovernanceLockAmount
+    );
+    require!(
+        lock_duration_seconds >= governance_config.min_lock_duration_seconds
+            && lock_duration_seconds <= governance_config.max_lock_duration_seconds,
+        CustomError::InvalidGovernanceLockDuration
+    );
+    Ok(())
+}
+
+pub fn governance_time_multiplier_bps(lock_duration_seconds: i64) -> Result<u64> {
+    require!(
+        lock_duration_seconds >= GOVERNANCE_MIN_LOCK_DURATION_SECONDS
+            && lock_duration_seconds <= GOVERNANCE_MAX_LOCK_DURATION_SECONDS,
+        CustomError::InvalidGovernanceLockDuration
+    );
+
+    if lock_duration_seconds >= LOCK_365_DAYS_SECONDS {
+        Ok(GOVERNANCE_365_DAY_MULTIPLIER_BPS)
+    } else if lock_duration_seconds >= LOCK_180_DAYS_SECONDS {
+        Ok(GOVERNANCE_180_DAY_MULTIPLIER_BPS)
+    } else if lock_duration_seconds >= LOCK_90_DAYS_SECONDS {
+        Ok(GOVERNANCE_90_DAY_MULTIPLIER_BPS)
+    } else if lock_duration_seconds >= LOCK_30_DAYS_SECONDS {
+        Ok(GOVERNANCE_30_DAY_MULTIPLIER_BPS)
+    } else {
+        err!(CustomError::InvalidGovernanceLockDuration)
+    }
+}
+
+pub fn integer_sqrt(value: u64) -> u64 {
+    if value < 2 {
+        return value;
+    }
+
+    let mut left = 1u64;
+    let mut right = value;
+    let mut answer = 1u64;
+
+    while left <= right {
+        let mid = left + ((right - left) / 2);
+        if mid <= value / mid {
+            answer = mid;
+            left = mid + 1;
+        } else {
+            right = mid - 1;
+        }
+    }
+
+    answer
+}
+
+pub fn calculate_governance_voting_power(
+    locked_amount: u64,
+    lock_duration_seconds: i64,
+) -> Result<u64> {
+    require!(locked_amount > 0, CustomError::InvalidGovernanceLockAmount);
+
+    let base_power = integer_sqrt(locked_amount);
+    let multiplier_bps = governance_time_multiplier_bps(lock_duration_seconds)?;
+    base_power
+        .checked_mul(multiplier_bps)
+        .and_then(|value| value.checked_div(BPS_DENOMINATOR))
+        .ok_or(CustomError::MathOverflow.into())
+}
+
+pub fn record_governance_lock(
+    governance_position: &mut GovernancePositionV1,
+    governance_config: &GovernanceLockConfigV1,
+    amount: u64,
+    lock_duration_seconds: i64,
+    now_ts: i64,
+) -> Result<()> {
+    validate_governance_lock_params(governance_config, amount, lock_duration_seconds)?;
+    require!(
+        governance_position.status == GovernancePositionStatusV1::Active,
+        CustomError::InvalidGovernancePosition
+    );
+    require_keys_eq!(
+        governance_position.alpha_mint,
+        governance_config.alpha_mint,
+        CustomError::InvalidMint
+    );
+    require_keys_eq!(
+        governance_position.vault,
+        governance_config.governance_vault,
+        CustomError::InvalidGovernanceVault
+    );
+
+    let new_locked_amount = governance_position
+        .locked_amount
+        .checked_add(amount)
+        .ok_or(CustomError::MathOverflow)?;
+    let new_lock_end = now_ts
+        .checked_add(lock_duration_seconds)
+        .ok_or(CustomError::MathOverflow)?;
+    let effective_lock_end = governance_position.lock_end_time.max(new_lock_end);
+    let effective_duration = effective_lock_end
+        .checked_sub(now_ts)
+        .ok_or(CustomError::MathOverflow)?;
+    let holding_multiplier_bps = governance_time_multiplier_bps(effective_duration)?;
+    let voting_power = calculate_governance_voting_power(new_locked_amount, effective_duration)?;
+
+    if governance_position.locked_amount == 0 {
+        governance_position.lock_start_time = now_ts;
+    }
+    governance_position.lock_end_time = effective_lock_end;
+    governance_position.locked_amount = new_locked_amount;
+    governance_position.holding_multiplier_bps = holding_multiplier_bps;
+    governance_position.voting_power = voting_power;
+    governance_position.last_updated_at = now_ts;
+
+    Ok(())
+}
+
+pub fn validate_governance_unlock(
+    governance_position: &GovernancePositionV1,
+    vault_balance: u64,
+    now_ts: i64,
+) -> Result<u64> {
+    require!(
+        governance_position.status == GovernancePositionStatusV1::Active,
+        CustomError::InvalidGovernancePosition
+    );
+    require!(
+        governance_position.locked_amount > 0,
+        CustomError::InvalidGovernanceLockAmount
+    );
+    require!(
+        now_ts >= governance_position.lock_end_time,
+        CustomError::GovernanceLockStillActive
+    );
+    require!(
+        vault_balance >= governance_position.locked_amount,
+        CustomError::InsufficientVaultBalance
+    );
+    Ok(governance_position.locked_amount)
+}
+
+pub fn record_governance_unlock(
+    governance_position: &mut GovernancePositionV1,
+    now_ts: i64,
+) -> Result<()> {
+    require!(
+        governance_position.locked_amount > 0,
+        CustomError::InvalidGovernanceLockAmount
+    );
+
+    governance_position.locked_amount = 0;
+    governance_position.lock_start_time = 0;
+    governance_position.lock_end_time = 0;
+    governance_position.holding_multiplier_bps = 0;
+    governance_position.voting_power = 0;
+    governance_position.status = GovernancePositionStatusV1::Closed;
+    governance_position.last_updated_at = now_ts;
 
     Ok(())
 }
@@ -292,6 +972,254 @@ pub fn record_governance_snapshot_init(
     governance_snapshot.created_at = created_at;
     governance_snapshot.finalized = false;
     governance_snapshot.bump = bump;
+
+    Ok(())
+}
+
+pub fn record_governance_snapshot_create(
+    governance_proposal: &mut GovernanceProposalV1,
+    governance_snapshot: &mut GovernanceSnapshotV1,
+    governance_voting_config: &GovernanceVotingConfigV1,
+    proposal_key: Pubkey,
+    snapshot_key: Pubkey,
+    total_voting_power: u64,
+    created_at: i64,
+    bump: u8,
+) -> Result<()> {
+    require!(
+        governance_proposal.status == GovernanceProposalStatusV1::Draft,
+        CustomError::InvalidGovernanceProposal
+    );
+    require!(
+        governance_proposal.snapshot == Pubkey::default(),
+        CustomError::InvalidGovernanceSnapshot
+    );
+    require!(
+        total_voting_power > 0,
+        CustomError::InvalidGovernanceSnapshot
+    );
+    require!(
+        !governance_snapshot.finalized,
+        CustomError::ProposalAlreadyFinalized
+    );
+    validate_governance_voting_config(
+        governance_voting_config.quorum_bps,
+        governance_voting_config.approval_threshold_bps,
+        governance_voting_config.voting_period_seconds,
+    )?;
+
+    let voting_end_ts = created_at
+        .checked_add(governance_voting_config.voting_period_seconds)
+        .ok_or(CustomError::MathOverflow)?;
+
+    governance_snapshot.proposal = proposal_key;
+    governance_snapshot.total_voting_power = total_voting_power;
+    governance_snapshot.yes_weight = 0;
+    governance_snapshot.no_weight = 0;
+    governance_snapshot.abstain_weight = 0;
+    governance_snapshot.created_at = created_at;
+    governance_snapshot.finalized = false;
+    governance_snapshot.bump = bump;
+
+    governance_proposal.status = GovernanceProposalStatusV1::Voting;
+    governance_proposal.voting_start_ts = created_at;
+    governance_proposal.voting_end_ts = voting_end_ts;
+    governance_proposal.snapshot = snapshot_key;
+    governance_proposal.yes_weight = 0;
+    governance_proposal.no_weight = 0;
+    governance_proposal.abstain_weight = 0;
+    governance_proposal.finalized_at = 0;
+
+    Ok(())
+}
+
+pub fn record_cast_governance_vote(
+    governance_proposal: &mut GovernanceProposalV1,
+    governance_snapshot: &mut GovernanceSnapshotV1,
+    governance_position: &GovernancePositionV1,
+    vote_record: &mut VoteRecordV1,
+    governance_proposal_key: Pubkey,
+    governance_position_key: Pubkey,
+    choice: VoteChoiceV1,
+    now_ts: i64,
+    bump: u8,
+) -> Result<()> {
+    require!(
+        governance_proposal.status == GovernanceProposalStatusV1::Voting,
+        CustomError::ProposalNotVoting
+    );
+    require!(
+        governance_proposal.snapshot != Pubkey::default()
+            && governance_snapshot.proposal != Pubkey::default(),
+        CustomError::SnapshotMissing
+    );
+    require!(
+        !governance_snapshot.finalized,
+        CustomError::ProposalAlreadyFinalized
+    );
+    require!(
+        now_ts >= governance_proposal.voting_start_ts,
+        CustomError::ProposalNotVoting
+    );
+    require!(
+        now_ts <= governance_proposal.voting_end_ts,
+        CustomError::VotingPeriodEnded
+    );
+    require!(
+        vote_record.proposal == Pubkey::default()
+            && vote_record.voter_position == Pubkey::default(),
+        CustomError::AlreadyVoted
+    );
+    require!(
+        governance_position.status == GovernancePositionStatusV1::Active,
+        CustomError::InvalidGovernancePosition
+    );
+    require!(
+        governance_position.last_updated_at <= governance_snapshot.created_at,
+        CustomError::InvalidGovernancePosition
+    );
+    require!(
+        governance_position.voting_power > 0,
+        CustomError::InvalidGovernanceVote
+    );
+
+    let voting_power = governance_position.voting_power;
+    match choice {
+        VoteChoiceV1::Yes => {
+            governance_snapshot.yes_weight = governance_snapshot
+                .yes_weight
+                .checked_add(voting_power)
+                .ok_or(CustomError::MathOverflow)?;
+        }
+        VoteChoiceV1::No => {
+            governance_snapshot.no_weight = governance_snapshot
+                .no_weight
+                .checked_add(voting_power)
+                .ok_or(CustomError::MathOverflow)?;
+        }
+        VoteChoiceV1::Abstain => {
+            governance_snapshot.abstain_weight = governance_snapshot
+                .abstain_weight
+                .checked_add(voting_power)
+                .ok_or(CustomError::MathOverflow)?;
+        }
+    }
+
+    let total_votes = checked_governance_total_votes(governance_snapshot)?;
+    require!(
+        total_votes <= governance_snapshot.total_voting_power,
+        CustomError::InvalidGovernanceVote
+    );
+
+    vote_record.proposal = governance_proposal_key;
+    vote_record.voter_position = governance_position_key;
+    vote_record.choice = choice;
+    vote_record.voting_power_used = voting_power;
+    vote_record.timestamp = now_ts;
+    vote_record.bump = bump;
+
+    Ok(())
+}
+
+pub fn checked_governance_total_votes(snapshot: &GovernanceSnapshotV1) -> Result<u64> {
+    snapshot
+        .yes_weight
+        .checked_add(snapshot.no_weight)
+        .and_then(|value| value.checked_add(snapshot.abstain_weight))
+        .ok_or(CustomError::MathOverflow.into())
+}
+
+pub fn has_governance_quorum(
+    total_votes: u64,
+    total_voting_power: u64,
+    quorum_bps: u64,
+) -> Result<bool> {
+    require!(
+        total_voting_power > 0,
+        CustomError::InvalidGovernanceSnapshot
+    );
+    let vote_bps_side = (total_votes as u128)
+        .checked_mul(BPS_DENOMINATOR as u128)
+        .ok_or(CustomError::MathOverflow)?;
+    let quorum_side = (total_voting_power as u128)
+        .checked_mul(quorum_bps as u128)
+        .ok_or(CustomError::MathOverflow)?;
+    Ok(vote_bps_side >= quorum_side)
+}
+
+pub fn has_governance_approval(
+    yes_weight: u64,
+    no_weight: u64,
+    approval_threshold_bps: u64,
+) -> Result<bool> {
+    let decisive_votes = yes_weight
+        .checked_add(no_weight)
+        .ok_or(CustomError::MathOverflow)?;
+    require!(decisive_votes > 0, CustomError::QuorumNotReached);
+
+    let yes_bps_side = (yes_weight as u128)
+        .checked_mul(BPS_DENOMINATOR as u128)
+        .ok_or(CustomError::MathOverflow)?;
+    let approval_side = (decisive_votes as u128)
+        .checked_mul(approval_threshold_bps as u128)
+        .ok_or(CustomError::MathOverflow)?;
+    Ok(yes_bps_side >= approval_side)
+}
+
+pub fn record_finalize_governance_vote(
+    governance_proposal: &mut GovernanceProposalV1,
+    governance_snapshot: &mut GovernanceSnapshotV1,
+    governance_voting_config: &GovernanceVotingConfigV1,
+    now_ts: i64,
+) -> Result<()> {
+    validate_governance_voting_config(
+        governance_voting_config.quorum_bps,
+        governance_voting_config.approval_threshold_bps,
+        governance_voting_config.voting_period_seconds,
+    )?;
+    require!(
+        governance_proposal.status == GovernanceProposalStatusV1::Voting,
+        CustomError::ProposalNotVoting
+    );
+    require!(
+        governance_proposal.snapshot != Pubkey::default()
+            && governance_snapshot.proposal != Pubkey::default(),
+        CustomError::SnapshotMissing
+    );
+    require!(
+        !governance_snapshot.finalized,
+        CustomError::ProposalAlreadyFinalized
+    );
+    require!(
+        now_ts >= governance_proposal.voting_end_ts,
+        CustomError::VotingPeriodNotEnded
+    );
+
+    let total_votes = checked_governance_total_votes(governance_snapshot)?;
+    require!(
+        has_governance_quorum(
+            total_votes,
+            governance_snapshot.total_voting_power,
+            governance_voting_config.quorum_bps,
+        )?,
+        CustomError::QuorumNotReached
+    );
+
+    governance_proposal.yes_weight = governance_snapshot.yes_weight;
+    governance_proposal.no_weight = governance_snapshot.no_weight;
+    governance_proposal.abstain_weight = governance_snapshot.abstain_weight;
+    governance_proposal.finalized_at = now_ts;
+    governance_snapshot.finalized = true;
+
+    if has_governance_approval(
+        governance_snapshot.yes_weight,
+        governance_snapshot.no_weight,
+        governance_voting_config.approval_threshold_bps,
+    )? {
+        governance_proposal.status = GovernanceProposalStatusV1::Passed;
+    } else {
+        governance_proposal.status = GovernanceProposalStatusV1::Rejected;
+    }
 
     Ok(())
 }
@@ -333,7 +1261,35 @@ mod tests {
     const TARGET_ACCOUNT: Pubkey = Pubkey::new_from_array([5; 32]);
     const PROPOSAL_KEY: Pubkey = Pubkey::new_from_array([6; 32]);
     const POSITION_KEY: Pubkey = Pubkey::new_from_array([7; 32]);
-    const PAYLOAD_HASH: [u8; 32] = [8; 32];
+    const GOVERNANCE_VAULT: Pubkey = Pubkey::new_from_array([8; 32]);
+    const SNAPSHOT_KEY: Pubkey = Pubkey::new_from_array([10; 32]);
+    const POSITION_TWO_KEY: Pubkey = Pubkey::new_from_array([11; 32]);
+    const PAYLOAD_HASH: [u8; 32] = [9; 32];
+
+    fn default_config() -> GovernanceLockConfigV1 {
+        GovernanceLockConfigV1 {
+            authority: PROPOSER,
+            alpha_mint: ALPHA_MINT,
+            governance_vault: GOVERNANCE_VAULT,
+            min_lock_amount: GOVERNANCE_DEFAULT_MIN_LOCK_AMOUNT,
+            min_lock_duration_seconds: GOVERNANCE_MIN_LOCK_DURATION_SECONDS,
+            max_lock_duration_seconds: GOVERNANCE_MAX_LOCK_DURATION_SECONDS,
+            max_time_multiplier_bps: GOVERNANCE_MAX_TIME_MULTIPLIER_BPS,
+            created_at: 1,
+            bump: 1,
+        }
+    }
+
+    fn default_voting_config() -> GovernanceVotingConfigV1 {
+        GovernanceVotingConfigV1 {
+            authority: PROPOSER,
+            quorum_bps: GOVERNANCE_DEFAULT_QUORUM_BPS,
+            approval_threshold_bps: GOVERNANCE_DEFAULT_APPROVAL_THRESHOLD_BPS,
+            voting_period_seconds: GOVERNANCE_DEFAULT_VOTING_PERIOD_SECONDS,
+            created_at: 1,
+            bump: 1,
+        }
+    }
 
     fn default_proposal() -> GovernanceProposalV1 {
         GovernanceProposalV1 {
@@ -348,6 +1304,11 @@ mod tests {
             voting_start_ts: 0,
             voting_end_ts: 0,
             created_at: 0,
+            snapshot: Pubkey::default(),
+            yes_weight: 0,
+            no_weight: 0,
+            abstain_weight: 0,
+            finalized_at: 0,
             bump: 0,
         }
     }
@@ -356,16 +1317,34 @@ mod tests {
         GovernancePositionV1 {
             owner: Pubkey::default(),
             alpha_mint: Pubkey::default(),
+            vault: Pubkey::default(),
             locked_amount: 1,
             lock_start_time: 2,
             lock_end_time: 3,
-            reputation_snapshot: 4,
-            holding_multiplier_bps: 5,
-            reputation_multiplier_bps: 6,
-            voting_power: 7,
+            holding_multiplier_bps: 4,
+            voting_power: 5,
             status: GovernancePositionStatusV1::Closed,
+            last_updated_at: 6,
             bump: 0,
         }
+    }
+
+    fn active_position() -> GovernancePositionV1 {
+        let mut position = default_position();
+        record_governance_position_init(&mut position, OWNER, ALPHA_MINT, GOVERNANCE_VAULT, 10, 2)
+            .unwrap();
+        position
+    }
+
+    fn active_position_with_power(voting_power: u64, last_updated_at: i64) -> GovernancePositionV1 {
+        let mut position = active_position();
+        position.locked_amount = voting_power * voting_power;
+        position.lock_start_time = 1;
+        position.lock_end_time = 1_000;
+        position.holding_multiplier_bps = BPS_DENOMINATOR;
+        position.voting_power = voting_power;
+        position.last_updated_at = last_updated_at;
+        position
     }
 
     fn default_snapshot() -> GovernanceSnapshotV1 {
@@ -381,6 +1360,19 @@ mod tests {
         }
     }
 
+    fn blank_snapshot() -> GovernanceSnapshotV1 {
+        GovernanceSnapshotV1 {
+            proposal: Pubkey::default(),
+            total_voting_power: 0,
+            yes_weight: 0,
+            no_weight: 0,
+            abstain_weight: 0,
+            created_at: 0,
+            finalized: false,
+            bump: 0,
+        }
+    }
+
     fn default_vote_record() -> VoteRecordV1 {
         VoteRecordV1 {
             proposal: Pubkey::default(),
@@ -390,6 +1382,82 @@ mod tests {
             timestamp: 100,
             bump: 0,
         }
+    }
+
+    fn voting_proposal_and_snapshot(
+        total_voting_power: u64,
+    ) -> (GovernanceProposalV1, GovernanceSnapshotV1) {
+        let mut proposal = default_proposal();
+        record_governance_proposal_init(
+            &mut proposal,
+            PROPOSAL_ID,
+            PROPOSER,
+            GovernanceProposalTypeV1::Contributor,
+            3,
+            TARGET_PROGRAM,
+            TARGET_ACCOUNT,
+            PAYLOAD_HASH,
+            0,
+            0,
+            80,
+            1,
+        )
+        .unwrap();
+        let mut snapshot = blank_snapshot();
+        record_governance_snapshot_create(
+            &mut proposal,
+            &mut snapshot,
+            &default_voting_config(),
+            PROPOSAL_KEY,
+            SNAPSHOT_KEY,
+            total_voting_power,
+            100,
+            3,
+        )
+        .unwrap();
+        (proposal, snapshot)
+    }
+
+    #[test]
+    fn initialize_governance_config_defaults_match_constants() {
+        let mut config = default_config();
+        record_governance_config_init(&mut config, PROPOSER, ALPHA_MINT, GOVERNANCE_VAULT, 100, 7)
+            .unwrap();
+
+        assert_eq!(config.authority, PROPOSER);
+        assert_eq!(config.alpha_mint, ALPHA_MINT);
+        assert_eq!(config.governance_vault, GOVERNANCE_VAULT);
+        assert_eq!(config.min_lock_amount, GOVERNANCE_DEFAULT_MIN_LOCK_AMOUNT);
+        assert_eq!(
+            config.min_lock_duration_seconds,
+            GOVERNANCE_MIN_LOCK_DURATION_SECONDS
+        );
+        assert_eq!(
+            config.max_lock_duration_seconds,
+            GOVERNANCE_MAX_LOCK_DURATION_SECONDS
+        );
+        assert_eq!(
+            config.max_time_multiplier_bps,
+            GOVERNANCE_MAX_TIME_MULTIPLIER_BPS
+        );
+        assert_eq!(config.created_at, 100);
+        assert_eq!(config.bump, 7);
+    }
+
+    #[test]
+    fn initialize_governance_voting_config_defaults_match_policy() {
+        let mut config = default_voting_config();
+        record_governance_voting_config_init(&mut config, PROPOSER, 100, 8).unwrap();
+
+        assert_eq!(config.authority, PROPOSER);
+        assert_eq!(config.quorum_bps, 500);
+        assert_eq!(config.approval_threshold_bps, 6_000);
+        assert_eq!(
+            config.voting_period_seconds,
+            GOVERNANCE_DEFAULT_VOTING_PERIOD_SECONDS
+        );
+        assert_eq!(config.created_at, 100);
+        assert_eq!(config.bump, 8);
     }
 
     #[test]
@@ -461,29 +1529,350 @@ mod tests {
     }
 
     #[test]
+    fn create_governance_snapshot_sets_proposal_voting() {
+        let mut proposal = default_proposal();
+        record_governance_proposal_init(
+            &mut proposal,
+            PROPOSAL_ID,
+            PROPOSER,
+            GovernanceProposalTypeV1::Contributor,
+            3,
+            TARGET_PROGRAM,
+            TARGET_ACCOUNT,
+            PAYLOAD_HASH,
+            0,
+            0,
+            80,
+            1,
+        )
+        .unwrap();
+        let mut snapshot = blank_snapshot();
+
+        record_governance_snapshot_create(
+            &mut proposal,
+            &mut snapshot,
+            &default_voting_config(),
+            PROPOSAL_KEY,
+            SNAPSHOT_KEY,
+            100,
+            100,
+            3,
+        )
+        .unwrap();
+
+        assert_eq!(proposal.status, GovernanceProposalStatusV1::Voting);
+        assert_eq!(proposal.snapshot, SNAPSHOT_KEY);
+        assert_eq!(proposal.voting_start_ts, 100);
+        assert_eq!(
+            proposal.voting_end_ts,
+            100 + GOVERNANCE_DEFAULT_VOTING_PERIOD_SECONDS
+        );
+        assert_eq!(snapshot.proposal, PROPOSAL_KEY);
+        assert_eq!(snapshot.total_voting_power, 100);
+        assert!(!snapshot.finalized);
+    }
+
+    #[test]
     fn initialize_governance_position_defaults_to_active_zero_lock() {
         let mut position = default_position();
-        record_governance_position_init(&mut position, OWNER, ALPHA_MINT, 2).unwrap();
+        record_governance_position_init(&mut position, OWNER, ALPHA_MINT, GOVERNANCE_VAULT, 11, 2)
+            .unwrap();
 
         assert_eq!(position.owner, OWNER);
         assert_eq!(position.alpha_mint, ALPHA_MINT);
+        assert_eq!(position.vault, GOVERNANCE_VAULT);
         assert_eq!(position.locked_amount, 0);
         assert_eq!(position.lock_start_time, 0);
         assert_eq!(position.lock_end_time, 0);
-        assert_eq!(position.reputation_snapshot, 0);
-        assert_eq!(position.holding_multiplier_bps, BPS_DENOMINATOR);
-        assert_eq!(position.reputation_multiplier_bps, BPS_DENOMINATOR);
+        assert_eq!(position.holding_multiplier_bps, 0);
         assert_eq!(position.voting_power, 0);
         assert_eq!(position.status, GovernancePositionStatusV1::Active);
+        assert_eq!(position.last_updated_at, 11);
         assert_eq!(position.bump, 2);
     }
 
     #[test]
     fn initialize_governance_position_rejects_default_owner() {
         let mut position = default_position();
-        let err = record_governance_position_init(&mut position, Pubkey::default(), ALPHA_MINT, 2)
-            .unwrap_err();
+        let err = record_governance_position_init(
+            &mut position,
+            Pubkey::default(),
+            ALPHA_MINT,
+            GOVERNANCE_VAULT,
+            11,
+            2,
+        )
+        .unwrap_err();
         assert_eq!(err, CustomError::InvalidGovernancePosition.into());
+    }
+
+    #[test]
+    fn lock_alpha_for_governance_records_10000_alpha() {
+        let config = default_config();
+        let mut position = active_position();
+        record_governance_lock(&mut position, &config, 10_000, LOCK_365_DAYS_SECONDS, 100).unwrap();
+
+        assert_eq!(position.locked_amount, 10_000);
+        assert_eq!(position.lock_start_time, 100);
+        assert_eq!(position.lock_end_time, 100 + LOCK_365_DAYS_SECONDS);
+        assert_eq!(
+            position.holding_multiplier_bps,
+            GOVERNANCE_365_DAY_MULTIPLIER_BPS
+        );
+        assert_eq!(position.voting_power, 200);
+        assert_eq!(position.last_updated_at, 100);
+    }
+
+    #[test]
+    fn governance_lock_duration_multipliers_match_design() {
+        assert_eq!(
+            governance_time_multiplier_bps(LOCK_30_DAYS_SECONDS).unwrap(),
+            GOVERNANCE_30_DAY_MULTIPLIER_BPS
+        );
+        assert_eq!(
+            governance_time_multiplier_bps(LOCK_90_DAYS_SECONDS).unwrap(),
+            GOVERNANCE_90_DAY_MULTIPLIER_BPS
+        );
+        assert_eq!(
+            governance_time_multiplier_bps(LOCK_180_DAYS_SECONDS).unwrap(),
+            GOVERNANCE_180_DAY_MULTIPLIER_BPS
+        );
+        assert_eq!(
+            governance_time_multiplier_bps(LOCK_365_DAYS_SECONDS).unwrap(),
+            GOVERNANCE_365_DAY_MULTIPLIER_BPS
+        );
+    }
+
+    #[test]
+    fn calculate_voting_power_uses_integer_sqrt_and_bps() {
+        assert_eq!(
+            calculate_governance_voting_power(10_000, LOCK_30_DAYS_SECONDS).unwrap(),
+            100
+        );
+        assert_eq!(
+            calculate_governance_voting_power(10_000, LOCK_90_DAYS_SECONDS).unwrap(),
+            110
+        );
+        assert_eq!(
+            calculate_governance_voting_power(10_000, LOCK_180_DAYS_SECONDS).unwrap(),
+            150
+        );
+        assert_eq!(
+            calculate_governance_voting_power(10_000, LOCK_365_DAYS_SECONDS).unwrap(),
+            200
+        );
+    }
+
+    #[test]
+    fn lock_alpha_rejects_below_min_lock_amount() {
+        let config = default_config();
+        let mut position = active_position();
+        let err = record_governance_lock(&mut position, &config, 0, LOCK_30_DAYS_SECONDS, 100)
+            .unwrap_err();
+        assert_eq!(err, CustomError::InvalidGovernanceLockAmount.into());
+    }
+
+    #[test]
+    fn lock_alpha_rejects_duration_below_minimum() {
+        let config = default_config();
+        let mut position = active_position();
+        let err = record_governance_lock(&mut position, &config, 10_000, 1, 100).unwrap_err();
+        assert_eq!(err, CustomError::InvalidGovernanceLockDuration.into());
+    }
+
+    #[test]
+    fn early_unlock_fails() {
+        let config = default_config();
+        let mut position = active_position();
+        record_governance_lock(&mut position, &config, 10_000, LOCK_30_DAYS_SECONDS, 100).unwrap();
+
+        let err =
+            validate_governance_unlock(&position, 10_000, 99 + LOCK_30_DAYS_SECONDS).unwrap_err();
+        assert_eq!(err, CustomError::GovernanceLockStillActive.into());
+    }
+
+    #[test]
+    fn unlock_after_lock_end_succeeds() {
+        let config = default_config();
+        let mut position = active_position();
+        record_governance_lock(&mut position, &config, 10_000, LOCK_30_DAYS_SECONDS, 100).unwrap();
+
+        let amount =
+            validate_governance_unlock(&position, 10_000, 100 + LOCK_30_DAYS_SECONDS).unwrap();
+        assert_eq!(amount, 10_000);
+        record_governance_unlock(&mut position, 100 + LOCK_30_DAYS_SECONDS).unwrap();
+
+        assert_eq!(position.locked_amount, 0);
+        assert_eq!(position.holding_multiplier_bps, 0);
+        assert_eq!(position.voting_power, 0);
+        assert_eq!(position.status, GovernancePositionStatusV1::Closed);
+        assert_eq!(position.last_updated_at, 100 + LOCK_30_DAYS_SECONDS);
+    }
+
+    #[test]
+    fn unlock_rejects_insufficient_vault_balance() {
+        let config = default_config();
+        let mut position = active_position();
+        record_governance_lock(&mut position, &config, 10_000, LOCK_30_DAYS_SECONDS, 100).unwrap();
+
+        let err =
+            validate_governance_unlock(&position, 9_999, 100 + LOCK_30_DAYS_SECONDS).unwrap_err();
+        assert_eq!(err, CustomError::InsufficientVaultBalance.into());
+    }
+
+    #[test]
+    fn cast_governance_vote_records_choice_and_weight() {
+        let (mut proposal, mut snapshot) = voting_proposal_and_snapshot(100);
+        let position = active_position_with_power(70, 90);
+        let mut vote_record = default_vote_record();
+
+        record_cast_governance_vote(
+            &mut proposal,
+            &mut snapshot,
+            &position,
+            &mut vote_record,
+            PROPOSAL_KEY,
+            POSITION_KEY,
+            VoteChoiceV1::Yes,
+            110,
+            4,
+        )
+        .unwrap();
+
+        assert_eq!(snapshot.yes_weight, 70);
+        assert_eq!(snapshot.no_weight, 0);
+        assert_eq!(snapshot.abstain_weight, 0);
+        assert_eq!(vote_record.proposal, PROPOSAL_KEY);
+        assert_eq!(vote_record.voter_position, POSITION_KEY);
+        assert_eq!(vote_record.choice, VoteChoiceV1::Yes);
+        assert_eq!(vote_record.voting_power_used, 70);
+        assert_eq!(vote_record.timestamp, 110);
+        assert_eq!(vote_record.bump, 4);
+    }
+
+    #[test]
+    fn duplicate_governance_vote_fails() {
+        let (mut proposal, mut snapshot) = voting_proposal_and_snapshot(100);
+        let position = active_position_with_power(70, 90);
+        let mut vote_record = default_vote_record();
+
+        record_cast_governance_vote(
+            &mut proposal,
+            &mut snapshot,
+            &position,
+            &mut vote_record,
+            PROPOSAL_KEY,
+            POSITION_KEY,
+            VoteChoiceV1::Yes,
+            110,
+            4,
+        )
+        .unwrap();
+        let err = record_cast_governance_vote(
+            &mut proposal,
+            &mut snapshot,
+            &position,
+            &mut vote_record,
+            PROPOSAL_KEY,
+            POSITION_KEY,
+            VoteChoiceV1::No,
+            111,
+            4,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::AlreadyVoted.into());
+        assert_eq!(snapshot.yes_weight, 70);
+        assert_eq!(snapshot.no_weight, 0);
+    }
+
+    #[test]
+    fn finalize_governance_vote_passes_with_sixty_percent_threshold() {
+        let (mut proposal, mut snapshot) = voting_proposal_and_snapshot(100);
+        let yes_position = active_position_with_power(70, 90);
+        let no_position = active_position_with_power(30, 90);
+        let mut yes_record = default_vote_record();
+        let mut no_record = default_vote_record();
+
+        record_cast_governance_vote(
+            &mut proposal,
+            &mut snapshot,
+            &yes_position,
+            &mut yes_record,
+            PROPOSAL_KEY,
+            POSITION_KEY,
+            VoteChoiceV1::Yes,
+            110,
+            4,
+        )
+        .unwrap();
+        record_cast_governance_vote(
+            &mut proposal,
+            &mut snapshot,
+            &no_position,
+            &mut no_record,
+            PROPOSAL_KEY,
+            POSITION_TWO_KEY,
+            VoteChoiceV1::No,
+            120,
+            5,
+        )
+        .unwrap();
+
+        let voting_end_ts = proposal.voting_end_ts;
+        record_finalize_governance_vote(
+            &mut proposal,
+            &mut snapshot,
+            &default_voting_config(),
+            voting_end_ts,
+        )
+        .unwrap();
+
+        assert_eq!(proposal.status, GovernanceProposalStatusV1::Passed);
+        assert_eq!(proposal.yes_weight, 70);
+        assert_eq!(proposal.no_weight, 30);
+        assert_eq!(proposal.abstain_weight, 0);
+        assert_eq!(proposal.finalized_at, voting_end_ts);
+        assert!(snapshot.finalized);
+    }
+
+    #[test]
+    fn finalize_governance_vote_fails_when_quorum_not_reached() {
+        let (mut proposal, mut snapshot) = voting_proposal_and_snapshot(10_000);
+        snapshot.yes_weight = 100;
+
+        let voting_end_ts = proposal.voting_end_ts;
+        let err = record_finalize_governance_vote(
+            &mut proposal,
+            &mut snapshot,
+            &default_voting_config(),
+            voting_end_ts,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::QuorumNotReached.into());
+        assert_eq!(proposal.status, GovernanceProposalStatusV1::Voting);
+        assert!(!snapshot.finalized);
+    }
+
+    #[test]
+    fn finalize_governance_vote_fails_before_voting_end() {
+        let (mut proposal, mut snapshot) = voting_proposal_and_snapshot(100);
+        snapshot.yes_weight = 70;
+        snapshot.no_weight = 30;
+
+        let before_voting_end_ts = proposal.voting_end_ts - 1;
+        let err = record_finalize_governance_vote(
+            &mut proposal,
+            &mut snapshot,
+            &default_voting_config(),
+            before_voting_end_ts,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::VotingPeriodNotEnded.into());
+        assert_eq!(proposal.status, GovernanceProposalStatusV1::Voting);
+        assert!(!snapshot.finalized);
     }
 
     #[test]

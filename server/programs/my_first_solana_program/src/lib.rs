@@ -52,6 +52,18 @@ pub mod my_first_solana_program {
         instructions::deposit_usdc_revenue::route_usdc_revenue_v1_handler(ctx, revenue_type, amount)
     }
 
+    pub fn initialize_governance_config_v1(
+        ctx: Context<InitializeGovernanceConfigV1>,
+    ) -> Result<()> {
+        instructions::governance_v1::initialize_governance_config_v1_handler(ctx)
+    }
+
+    pub fn initialize_governance_voting_config_v1(
+        ctx: Context<InitializeGovernanceVotingConfigV1>,
+    ) -> Result<()> {
+        instructions::governance_v1::initialize_governance_voting_config_v1_handler(ctx)
+    }
+
     pub fn initialize_governance_proposal_v1(
         ctx: Context<InitializeGovernanceProposalV1>,
         proposal_id: u64,
@@ -82,10 +94,44 @@ pub mod my_first_solana_program {
         instructions::governance_v1::initialize_governance_position_v1_handler(ctx)
     }
 
+    pub fn lock_alpha_for_governance(
+        ctx: Context<LockAlphaForGovernance>,
+        amount: u64,
+        lock_duration_seconds: i64,
+    ) -> Result<()> {
+        instructions::governance_v1::lock_alpha_for_governance_handler(
+            ctx,
+            amount,
+            lock_duration_seconds,
+        )
+    }
+
+    pub fn unlock_alpha_from_governance(ctx: Context<UnlockAlphaFromGovernance>) -> Result<()> {
+        instructions::governance_v1::unlock_alpha_from_governance_handler(ctx)
+    }
+
     pub fn initialize_governance_snapshot_v1(
         ctx: Context<InitializeGovernanceSnapshotV1>,
     ) -> Result<()> {
         instructions::governance_v1::initialize_governance_snapshot_v1_handler(ctx)
+    }
+
+    pub fn create_governance_snapshot_v1(
+        ctx: Context<CreateGovernanceSnapshotV1>,
+        total_voting_power: u64,
+    ) -> Result<()> {
+        instructions::governance_v1::create_governance_snapshot_v1_handler(ctx, total_voting_power)
+    }
+
+    pub fn cast_governance_vote_v1(
+        ctx: Context<CastGovernanceVoteV1>,
+        choice: VoteChoiceV1,
+    ) -> Result<()> {
+        instructions::governance_v1::cast_governance_vote_v1_handler(ctx, choice)
+    }
+
+    pub fn finalize_governance_vote_v1(ctx: Context<FinalizeGovernanceVoteV1>) -> Result<()> {
+        instructions::governance_v1::finalize_governance_vote_v1_handler(ctx)
     }
 
     pub fn initialize_vote_record_v1(ctx: Context<InitializeVoteRecordV1>) -> Result<()> {

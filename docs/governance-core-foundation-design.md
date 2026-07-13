@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Phase 2E-4B adds the core Governance V1 data model for a future hybrid voting layer.
+Phase 2E-4B adds the core Governance V1 data model for a future hybrid voting layer. Phase 2E-4C-1 extends that foundation with ALPHA lock / unlock, a governance vault, and deterministic voting power helpers.
 
-This phase is intentionally data-only. It does not implement ALPHA voting, voting power calculation, ALPHA token transfer, snapshot execution, proposal finalization, Security Layer connection, or frontend UI.
+This foundation still does not implement DAO proposal voting, snapshot execution, proposal finalization, Security Layer connection, or frontend UI.
 
 ## New Core Accounts
 
@@ -35,20 +35,20 @@ governance_proposal_v1 + proposal_id_le
 
 ### GovernancePositionV1
 
-Records the future governance lock position for a voter.
+Records the governance lock position for a voter.
 
 Fields:
 
 - `owner`
 - `alpha_mint`
+- `vault`
 - `locked_amount`
 - `lock_start_time`
 - `lock_end_time`
-- `reputation_snapshot`
 - `holding_multiplier_bps`
-- `reputation_multiplier_bps`
 - `voting_power`
 - `status`
+- `last_updated_at`
 - `bump`
 
 Suggested PDA seed:
@@ -57,7 +57,9 @@ Suggested PDA seed:
 governance_position_v1 + owner
 ```
 
-This account is separate from staking reward accounting. Future phases can decide whether ALPHA staking positions can be migrated or mirrored into governance positions, but this phase does not transfer ALPHA. Initialization defaults to `Active`, `locked_amount = 0`, and 1x multipliers.
+This account is separate from staking reward accounting. Future phases can decide whether ALPHA staking positions can be migrated or mirrored into governance positions.
+
+Phase 2E-4C-1 updates this account to support actual governance locks. Initialization defaults to `Active`, `locked_amount = 0`, `holding_multiplier_bps = 0`, and `voting_power = 0`.
 
 ### GovernanceSnapshotV1
 
@@ -114,7 +116,7 @@ These are Anchor-compatible enums reserved for future instructions.
 
 ## Future Hybrid Voting Model
 
-The intended future voting power model is:
+The long-term voting power model is:
 
 ```text
 sqrt(ALPHA locked amount)
@@ -127,7 +129,13 @@ Limits from design review:
 - holding time multiplier max: 2x
 - reputation multiplier max: 1.5x
 
-This phase only stores fields needed for that future calculation. It does not calculate or enforce voting power.
+Phase 2E-4C-1 implements the first two terms only:
+
+```text
+sqrt(ALPHA locked amount) * holding time multiplier
+```
+
+Reputation multiplier remains a future extension and is intentionally not part of the current lock account.
 
 ## Future Lifecycle
 
@@ -150,8 +158,6 @@ Security Layer integration remains a future phase. The existing `ProposalDecisio
 
 - ALPHA holder voting
 - quorum
-- token-weighted voting calculation
-- ALPHA lock or unlock transfer
 - snapshot execution
 - proposal finalization
 - conversion to `ProposalDecisionV1`

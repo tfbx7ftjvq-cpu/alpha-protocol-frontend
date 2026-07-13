@@ -217,4 +217,49 @@ pub enum CustomError {
 
     #[msg("Unauthorized governance position owner")]
     UnauthorizedGovernancePositionOwner,
+
+    #[msg("Invalid governance lock config")]
+    InvalidGovernanceLockConfig,
+
+    #[msg("Invalid governance lock duration")]
+    InvalidGovernanceLockDuration,
+
+    #[msg("Invalid governance lock amount")]
+    InvalidGovernanceLockAmount,
+
+    #[msg("Invalid governance vault")]
+    InvalidGovernanceVault,
+
+    #[msg("Governance lock is still active")]
+    GovernanceLockStillActive,
+
+    #[msg("Invalid governance voting config")]
+    InvalidGovernanceVotingConfig,
+
+    #[msg("Proposal is not voting")]
+    ProposalNotVoting,
+
+    #[msg("Vote record already exists")]
+    AlreadyVoted,
+
+    #[msg("Voting period has ended")]
+    VotingPeriodEnded,
+
+    #[msg("Voting period has not ended")]
+    VotingPeriodNotEnded,
+
+    #[msg("Governance snapshot is missing")]
+    SnapshotMissing,
+
+    #[msg("Quorum not reached")]
+    QuorumNotReached,
+
+    #[msg("Proposal already finalized")]
+    ProposalAlreadyFinalized,
+
+    #[msg("Invalid governance snapshot")]
+    InvalidGovernanceSnapshot,
+
+    #[msg("Invalid governance vote")]
+    InvalidGovernanceVote,
 }
