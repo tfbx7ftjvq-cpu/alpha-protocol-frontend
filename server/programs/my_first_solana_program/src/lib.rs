@@ -238,4 +238,38 @@ pub mod my_first_solana_program {
     pub fn execute_green_label_slash(ctx: Context<ExecuteGreenLabelSlash>) -> Result<()> {
         instructions::green_label_v1::execute_green_label_slash_handler(ctx)
     }
+
+    pub fn initialize_green_label_refundable_escrow_v1(
+        ctx: Context<InitializeGreenLabelRefundableEscrowV1>,
+        refund_available_after: i64,
+    ) -> Result<()> {
+        instructions::green_label_v1::initialize_green_label_refundable_escrow_v1_handler(
+            ctx,
+            refund_available_after,
+        )
+    }
+
+    pub fn deposit_green_label_refundable_bond_v1(
+        ctx: Context<DepositGreenLabelRefundableBondV1>,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::green_label_v1::deposit_green_label_refundable_bond_v1_handler(ctx, amount)
+    }
+
+    pub fn route_green_label_certification_fee_v1(
+        ctx: Context<RouteGreenLabelCertificationFeeV1>,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::green_label_v1::route_green_label_certification_fee_v1_handler(ctx, amount)
+    }
+
+    pub fn refund_green_label_escrow_v1(ctx: Context<RefundGreenLabelEscrowV1>) -> Result<()> {
+        instructions::green_label_v1::refund_green_label_escrow_v1_handler(ctx)
+    }
+
+    pub fn forfeit_green_label_escrow_to_treasury_v1<'info>(
+        ctx: Context<'info, ForfeitGreenLabelEscrowToTreasuryV1<'info>>,
+    ) -> Result<()> {
+        instructions::green_label_v1::forfeit_green_label_escrow_to_treasury_v1_handler(ctx)
+    }
 }

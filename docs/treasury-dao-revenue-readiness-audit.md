@@ -358,9 +358,36 @@ Remaining gaps after this implementation:
 - Green Label certification fee integration is still not wired into the router.
 - Green Label forfeited bond routing is still not wired into the router.
 - Refundable Green Label escrow is still not implemented.
+- Future refundable escrow must refund only to the original payer.
+- Future refundable escrow must not pass through Treasury split unless a valid slash / forfeit decision converts it into `RevenueType::GreenLabelForfeitedBond`.
+- Future forfeit must require a valid dispute, dispute-ready state, linked Security Layer / Green Label slash or forfeit decision, and non-terminal escrow state.
+- No one may forfeit Green Label escrow funds by time alone.
 - SOL revenue split is still unsupported.
 - Builders payout governance is still missing.
 - Full DAO voting is still missing.
+- Token launch remains NO-GO.
+
+### Phase 2E-2C Implementation Update
+
+Green Label refundable escrow and Treasury routing are now implemented at the contract layer:
+
+- `GreenLabelRefundableEscrowV1` stores project, payer, USDC mint, refundable vault, refundable amount, refunded amount, forfeited amount, refund availability, and terminal status.
+- `GreenLabelEscrowStatusV1` prevents repeat refund / repeat forfeit.
+- `initialize_green_label_refundable_escrow_v1` initializes the sidecar escrow and refundable token vault.
+- `deposit_green_label_refundable_bond_v1` transfers USDC into the refundable vault without updating Treasury revenue totals.
+- `route_green_label_certification_fee_v1` routes non-refundable Green Label certification fee revenue as `RevenueType::GreenLabelCertificationFee`.
+- `refund_green_label_escrow_v1` returns refundable escrow only to the original payer's USDC token account and does not pass through Treasury split.
+- `forfeit_green_label_escrow_to_treasury_v1` routes forfeited escrow as `RevenueType::GreenLabelForfeitedBond` through the Treasury router and 50 / 20 / 20 / 10 split.
+
+Important boundaries:
+
+- Refundable escrow funds are not Treasury revenue before forfeiture.
+- Normal refund does not update `TreasuryUsdcStateV2` or `RevenueRoutingStatsV1`.
+- No time-only forfeit path is implemented.
+- Forfeiture requires the linked Green Label / Security Layer slash decision path, including dispute, proposal decision, execution queue item, action type, payload hash, target account, and timelock checks.
+- SOL revenue split remains unsupported.
+- Builders payout governance remains missing.
+- Full DAO voting remains missing.
 - Token launch remains NO-GO.
 
 ### Phase 2E-2: Revenue Routing Design

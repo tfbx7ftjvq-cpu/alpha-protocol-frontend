@@ -255,6 +255,14 @@ pub enum DisputeStatus {
     Cancelled,
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GreenLabelEscrowStatusV1 {
+    Locked,
+    Refundable,
+    Refunded,
+    Forfeited,
+}
+
 #[account]
 pub struct GreenLabelConfigV1 {
     pub authority: Pubkey,
@@ -341,4 +349,27 @@ pub struct GreenLabelDisputeV1 {
 
 impl GreenLabelDisputeV1 {
     pub const INIT_SPACE: usize = GREEN_LABEL_DISPUTE_SPACE - ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES;
+}
+
+#[account]
+pub struct GreenLabelRefundableEscrowV1 {
+    pub authority: Pubkey,
+    pub project: Pubkey,
+    pub project_id: u64,
+    pub payer: Pubkey,
+    pub usdc_mint: Pubkey,
+    pub refundable_vault: Pubkey,
+    pub deposited_amount: u64,
+    pub refundable_amount: u64,
+    pub refunded_amount: u64,
+    pub forfeited_amount: u64,
+    pub deposit_ts: i64,
+    pub refund_available_after: i64,
+    pub status: GreenLabelEscrowStatusV1,
+    pub bump: u8,
+    pub vault_bump: u8,
+}
+
+impl GreenLabelRefundableEscrowV1 {
+    pub const INIT_SPACE: usize = (32 * 5) + (8 * 5) + (8 * 2) + 3;
 }

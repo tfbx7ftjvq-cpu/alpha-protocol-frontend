@@ -247,8 +247,12 @@ Manual review notes:
 - `route_usdc_revenue_v1` is implemented for typed USDC protocol revenue routing.
 - `RevenueRoutingStatsV1` tracks typed USDC revenue totals without changing `TreasuryUsdcStateV2`.
 - `deposit_usdc_revenue` remains a legacy/simple Treasury V2 USDC deposit path.
-- Green Label certification fees and forfeited bonds are not yet wired into the router.
-- Refundable Green Label escrow is not implemented.
+- Green Label certification fee routing is implemented as `RevenueType::GreenLabelCertificationFee`.
+- Refundable Green Label escrow is implemented as `GreenLabelRefundableEscrowV1`.
+- Refundable escrow refunds only to the original payer and does not pass through Treasury split.
+- Green Label forfeited escrow routes to Treasury as `RevenueType::GreenLabelForfeitedBond`.
+- Green Label forfeits must require a valid dispute, dispute-ready / decision-queued state, linked Security Layer / Green Label slash decision, and non-terminal escrow state.
+- No time-only forfeit path is allowed.
 - SOL revenue split is not supported.
 - Builders payout governance is not implemented.
 - Token launch remains NO-GO until real revenue integrations, builders payout governance, Mainnet authorities, and final launch checks are completed.

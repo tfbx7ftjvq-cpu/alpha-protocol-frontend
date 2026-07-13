@@ -160,4 +160,16 @@ pub enum CustomError {
 
     #[msg("Unauthorized treasury authority")]
     UnauthorizedTreasuryAuthority,
+
+    #[msg("Invalid Green Label escrow status")]
+    InvalidGreenLabelEscrowStatus,
+
+    #[msg("Invalid Green Label escrow amount")]
+    InvalidGreenLabelEscrowAmount,
+
+    #[msg("Invalid Green Label escrow refund")]
+    InvalidGreenLabelEscrowRefund,
+
+    #[msg("Invalid Green Label escrow forfeit")]
+    InvalidGreenLabelEscrowForfeit,
 }

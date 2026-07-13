@@ -296,65 +296,25 @@ pub fn route_usdc_revenue_v1_handler(
     revenue_type: RevenueType,
     amount: u64,
 ) -> Result<()> {
-    require!(amount > 0, CustomError::InvalidAmount);
-    require_keys_eq!(
+    route_usdc_revenue_from_token_account(
+        ctx.accounts.token_program.key(),
+        ctx.accounts
+            .revenue_payer_usdc_token_account
+            .to_account_info(),
+        ctx.accounts.revenue_payer.to_account_info(),
+        None,
+        ctx.accounts.usdc_mint.to_account_info(),
+        ctx.accounts.relief_usdc_vault.to_account_info(),
+        ctx.accounts.buyback_usdc_vault.to_account_info(),
+        ctx.accounts.builders_usdc_vault.to_account_info(),
+        ctx.accounts.staking_usdc_vault.to_account_info(),
+        &mut ctx.accounts.treasury_usdc_state,
+        &mut ctx.accounts.revenue_routing_stats,
         ctx.accounts.usdc_mint.key(),
-        ctx.accounts.revenue_routing_stats.usdc_mint,
-        CustomError::InvalidMint
-    );
-
-    let split = calculate_usdc_treasury_split(amount)?;
-    let (
-        new_total_usdc_inflow,
-        new_relief_usdc_total,
-        new_buyback_usdc_total,
-        new_builders_usdc_total,
-        new_staking_usdc_total,
-    ) = checked_usdc_treasury_totals_after_route(&ctx.accounts.treasury_usdc_state, amount, split)?;
-
-    let stats_after_route = calculate_revenue_routing_stats_after_route(
-        &ctx.accounts.revenue_routing_stats,
         revenue_type,
         amount,
-    )?;
-
-    let decimals = ctx.accounts.usdc_mint.decimals;
-
-    transfer_usdc_revenue_to_vault(
-        &ctx,
-        ctx.accounts.relief_usdc_vault.to_account_info(),
-        split.relief,
-        decimals,
-    )?;
-    transfer_usdc_revenue_to_vault(
-        &ctx,
-        ctx.accounts.buyback_usdc_vault.to_account_info(),
-        split.buyback,
-        decimals,
-    )?;
-    transfer_usdc_revenue_to_vault(
-        &ctx,
-        ctx.accounts.builders_usdc_vault.to_account_info(),
-        split.builders,
-        decimals,
-    )?;
-    transfer_usdc_revenue_to_vault(
-        &ctx,
-        ctx.accounts.staking_usdc_vault.to_account_info(),
-        split.staking,
-        decimals,
-    )?;
-
-    let treasury_usdc_state = &mut ctx.accounts.treasury_usdc_state;
-    treasury_usdc_state.total_usdc_inflow = new_total_usdc_inflow;
-    treasury_usdc_state.relief_usdc_total = new_relief_usdc_total;
-    treasury_usdc_state.buyback_usdc_total = new_buyback_usdc_total;
-    treasury_usdc_state.builders_usdc_total = new_builders_usdc_total;
-    treasury_usdc_state.staking_usdc_total = new_staking_usdc_total;
-
-    record_revenue_routing_stats(&mut ctx.accounts.revenue_routing_stats, stats_after_route);
-
-    Ok(())
+        ctx.accounts.usdc_mint.decimals,
+    )
 }
 
 pub fn calculate_usdc_treasury_split(amount: u64) -> Result<UsdcTreasurySplit> {
@@ -386,6 +346,95 @@ pub fn calculate_usdc_treasury_split(amount: u64) -> Result<UsdcTreasurySplit> {
         builders,
         staking,
     })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn route_usdc_revenue_from_token_account<'info>(
+    token_program: Pubkey,
+    source_token_account: AccountInfo<'info>,
+    source_authority: AccountInfo<'info>,
+    signer_seeds: Option<&[&[&[u8]]]>,
+    usdc_mint: AccountInfo<'info>,
+    relief_usdc_vault: AccountInfo<'info>,
+    buyback_usdc_vault: AccountInfo<'info>,
+    builders_usdc_vault: AccountInfo<'info>,
+    staking_usdc_vault: AccountInfo<'info>,
+    treasury_usdc_state: &mut TreasuryUsdcStateV2,
+    revenue_routing_stats: &mut RevenueRoutingStatsV1,
+    expected_usdc_mint: Pubkey,
+    revenue_type: RevenueType,
+    amount: u64,
+    decimals: u8,
+) -> Result<()> {
+    require!(amount > 0, CustomError::InvalidAmount);
+    require_keys_eq!(
+        expected_usdc_mint,
+        revenue_routing_stats.usdc_mint,
+        CustomError::InvalidMint
+    );
+
+    let split = calculate_usdc_treasury_split(amount)?;
+    let (
+        new_total_usdc_inflow,
+        new_relief_usdc_total,
+        new_buyback_usdc_total,
+        new_builders_usdc_total,
+        new_staking_usdc_total,
+    ) = checked_usdc_treasury_totals_after_route(treasury_usdc_state, amount, split)?;
+
+    let stats_after_route =
+        calculate_revenue_routing_stats_after_route(revenue_routing_stats, revenue_type, amount)?;
+
+    transfer_usdc_checked_with_optional_signer(
+        token_program,
+        source_token_account.clone(),
+        usdc_mint.clone(),
+        relief_usdc_vault,
+        source_authority.clone(),
+        signer_seeds,
+        split.relief,
+        decimals,
+    )?;
+    transfer_usdc_checked_with_optional_signer(
+        token_program,
+        source_token_account.clone(),
+        usdc_mint.clone(),
+        buyback_usdc_vault,
+        source_authority.clone(),
+        signer_seeds,
+        split.buyback,
+        decimals,
+    )?;
+    transfer_usdc_checked_with_optional_signer(
+        token_program,
+        source_token_account.clone(),
+        usdc_mint.clone(),
+        builders_usdc_vault,
+        source_authority.clone(),
+        signer_seeds,
+        split.builders,
+        decimals,
+    )?;
+    transfer_usdc_checked_with_optional_signer(
+        token_program,
+        source_token_account,
+        usdc_mint,
+        staking_usdc_vault,
+        source_authority,
+        signer_seeds,
+        split.staking,
+        decimals,
+    )?;
+
+    treasury_usdc_state.total_usdc_inflow = new_total_usdc_inflow;
+    treasury_usdc_state.relief_usdc_total = new_relief_usdc_total;
+    treasury_usdc_state.buyback_usdc_total = new_buyback_usdc_total;
+    treasury_usdc_state.builders_usdc_total = new_builders_usdc_total;
+    treasury_usdc_state.staking_usdc_total = new_staking_usdc_total;
+
+    record_revenue_routing_stats(revenue_routing_stats, stats_after_route);
+
+    Ok(())
 }
 
 fn split_amount(amount: u64, bps: u64) -> Result<u64> {
@@ -528,25 +577,6 @@ fn transfer_usdc_to_vault<'info>(
     )
 }
 
-fn transfer_usdc_revenue_to_vault<'info>(
-    ctx: &Context<RouteUsdcRevenueV1<'info>>,
-    vault: AccountInfo<'info>,
-    amount: u64,
-    decimals: u8,
-) -> Result<()> {
-    transfer_usdc_checked(
-        ctx.accounts.token_program.key(),
-        ctx.accounts
-            .revenue_payer_usdc_token_account
-            .to_account_info(),
-        ctx.accounts.usdc_mint.to_account_info(),
-        vault,
-        ctx.accounts.revenue_payer.to_account_info(),
-        amount,
-        decimals,
-    )
-}
-
 fn transfer_usdc_checked<'info>(
     token_program: Pubkey,
     from: AccountInfo<'info>,
@@ -563,6 +593,32 @@ fn transfer_usdc_checked<'info>(
         authority,
     };
     let cpi_ctx = CpiContext::new(token_program, cpi_accounts);
+
+    transfer_checked(cpi_ctx, amount, decimals)
+}
+
+fn transfer_usdc_checked_with_optional_signer<'info>(
+    token_program: Pubkey,
+    from: AccountInfo<'info>,
+    mint: AccountInfo<'info>,
+    to: AccountInfo<'info>,
+    authority: AccountInfo<'info>,
+    signer_seeds: Option<&[&[&[u8]]]>,
+    amount: u64,
+    decimals: u8,
+) -> Result<()> {
+    let cpi_accounts = TransferChecked {
+        from,
+        mint,
+        to,
+        authority,
+    };
+
+    let cpi_ctx = if let Some(seeds) = signer_seeds {
+        CpiContext::new_with_signer(token_program, cpi_accounts, seeds)
+    } else {
+        CpiContext::new(token_program, cpi_accounts)
+    };
 
     transfer_checked(cpi_ctx, amount, decimals)
 }

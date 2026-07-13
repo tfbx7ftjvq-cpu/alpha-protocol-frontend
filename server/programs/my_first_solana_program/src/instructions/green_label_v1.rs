@@ -2,21 +2,27 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{transfer_checked, Mint, Token, TokenAccount, TransferChecked};
 
 use crate::constants::{
-    BASE_BOND_REFUND_BPS, BASE_BOND_TREASURY_BPS, DEFAULT_DISPUTE_WINDOW_SECONDS,
-    DEFAULT_OBSERVATION_PERIOD_SECONDS, DEFAULT_RESPONSE_WINDOW_SECONDS,
-    GREEN_BOND_VAULT_AUTHORITY_SEED, GREEN_BOND_VAULT_SEED, GREEN_LABEL_BRONZE_TIER_THRESHOLD_USDC,
-    GREEN_LABEL_CONFIG_RESERVED_BYTES, GREEN_LABEL_CONFIG_SEED, GREEN_LABEL_CONFIG_SPACE,
-    GREEN_LABEL_DISPUTE_RESERVED_BYTES, GREEN_LABEL_DISPUTE_SEED, GREEN_LABEL_DISPUTE_SPACE,
-    GREEN_LABEL_GOLD_TIER_THRESHOLD_USDC, GREEN_LABEL_PLATINUM_TIER_THRESHOLD_USDC,
-    GREEN_LABEL_PROJECT_RESERVED_BYTES, GREEN_LABEL_PROJECT_SEED, GREEN_LABEL_PROJECT_SPACE,
-    GREEN_LABEL_SILVER_TIER_THRESHOLD_USDC, GREEN_LABEL_USDC_DECIMALS, MAX_BPS,
-    MIN_GREEN_LABEL_BASE_BOND_USDC,
+    BASE_BOND_REFUND_BPS, BASE_BOND_TREASURY_BPS, BUILDERS_USDC_VAULT_SEED,
+    BUYBACK_USDC_VAULT_SEED, DEFAULT_DISPUTE_WINDOW_SECONDS, DEFAULT_OBSERVATION_PERIOD_SECONDS,
+    DEFAULT_RESPONSE_WINDOW_SECONDS, GREEN_BOND_VAULT_AUTHORITY_SEED, GREEN_BOND_VAULT_SEED,
+    GREEN_LABEL_BRONZE_TIER_THRESHOLD_USDC, GREEN_LABEL_CONFIG_RESERVED_BYTES,
+    GREEN_LABEL_CONFIG_SEED, GREEN_LABEL_CONFIG_SPACE, GREEN_LABEL_DISPUTE_RESERVED_BYTES,
+    GREEN_LABEL_DISPUTE_SEED, GREEN_LABEL_DISPUTE_SPACE, GREEN_LABEL_GOLD_TIER_THRESHOLD_USDC,
+    GREEN_LABEL_PLATINUM_TIER_THRESHOLD_USDC, GREEN_LABEL_PROJECT_RESERVED_BYTES,
+    GREEN_LABEL_PROJECT_SEED, GREEN_LABEL_PROJECT_SPACE, GREEN_LABEL_REFUNDABLE_ESCROW_SEED,
+    GREEN_LABEL_REFUNDABLE_VAULT_SEED, GREEN_LABEL_SILVER_TIER_THRESHOLD_USDC,
+    GREEN_LABEL_USDC_DECIMALS, MAX_BPS, MIN_GREEN_LABEL_BASE_BOND_USDC, RELIEF_USDC_VAULT_SEED,
+    REVENUE_ROUTING_STATS_V1_SEED, STAKING_USDC_VAULT_SEED, TREASURY_CONFIG_V2_SEED,
+    TREASURY_USDC_STATE_V2_SEED, VAULT_AUTHORITY_V2_SEED,
 };
 use crate::error::CustomError;
+use crate::instructions::deposit_usdc_revenue::route_usdc_revenue_from_token_account;
 use crate::state::{
     ActionType, BondTier, DisputeStatus, ExecutionQueueItemV1, ExecutionStatus, GreenLabelConfigV1,
-    GreenLabelDisputeV1, GreenLabelProjectV1, GreenLabelStatus, ProposalDecision,
-    ProposalDecisionV1, ProposalType, RugReasonCode,
+    GreenLabelDisputeV1, GreenLabelEscrowStatusV1, GreenLabelProjectV1,
+    GreenLabelRefundableEscrowV1, GreenLabelStatus, ProposalDecision, ProposalDecisionV1,
+    ProposalType, RevenueRoutingStatsV1, RevenueType, RugReasonCode, TreasuryConfigV2,
+    TreasuryUsdcStateV2,
 };
 
 pub const MAX_GREEN_LABEL_WINDOW_SECONDS: i64 = 30 * 24 * 60 * 60;
@@ -490,6 +496,351 @@ pub struct ExecuteGreenLabelSlash<'info> {
         constraint = usdc_mint.key() == green_label_config.usdc_mint @ CustomError::InvalidGreenLabelMint
     )]
     pub usdc_mint: Box<Account<'info, Mint>>,
+
+    pub executor: Signer<'info>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct InitializeGreenLabelRefundableEscrowV1<'info> {
+    #[account(
+        seeds = [GREEN_LABEL_CONFIG_SEED],
+        bump = green_label_config.bump
+    )]
+    pub green_label_config: Box<Account<'info, GreenLabelConfigV1>>,
+
+    #[account(
+        seeds = [
+            GREEN_LABEL_PROJECT_SEED,
+            &green_label_project.project_id.to_le_bytes()
+        ],
+        bump = green_label_project.bump
+    )]
+    pub green_label_project: Box<Account<'info, GreenLabelProjectV1>>,
+
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + GreenLabelRefundableEscrowV1::INIT_SPACE,
+        seeds = [
+            GREEN_LABEL_REFUNDABLE_ESCROW_SEED,
+            green_label_project.key().as_ref()
+        ],
+        bump
+    )]
+    pub green_label_refundable_escrow: Box<Account<'info, GreenLabelRefundableEscrowV1>>,
+
+    #[account(
+        init,
+        payer = payer,
+        seeds = [
+            GREEN_LABEL_REFUNDABLE_VAULT_SEED,
+            green_label_refundable_escrow.key().as_ref()
+        ],
+        bump,
+        token::mint = usdc_mint,
+        token::authority = green_label_refundable_escrow
+    )]
+    pub refundable_vault: Box<Account<'info, TokenAccount>>,
+
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    #[account(
+        constraint = usdc_mint.key() == green_label_config.usdc_mint @ CustomError::InvalidGreenLabelMint
+    )]
+    pub usdc_mint: Box<Account<'info, Mint>>,
+
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+}
+
+#[derive(Accounts)]
+pub struct DepositGreenLabelRefundableBondV1<'info> {
+    #[account(
+        seeds = [
+            GREEN_LABEL_PROJECT_SEED,
+            &green_label_project.project_id.to_le_bytes()
+        ],
+        bump = green_label_project.bump
+    )]
+    pub green_label_project: Box<Account<'info, GreenLabelProjectV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            GREEN_LABEL_REFUNDABLE_ESCROW_SEED,
+            green_label_project.key().as_ref()
+        ],
+        bump = green_label_refundable_escrow.bump,
+        constraint = green_label_refundable_escrow.project == green_label_project.key() @ CustomError::InvalidGreenLabelTargetAccount,
+        constraint = green_label_refundable_escrow.payer == payer.key() @ CustomError::InvalidGreenLabelProjectOwner
+    )]
+    pub green_label_refundable_escrow: Box<Account<'info, GreenLabelRefundableEscrowV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            GREEN_LABEL_REFUNDABLE_VAULT_SEED,
+            green_label_refundable_escrow.key().as_ref()
+        ],
+        bump = green_label_refundable_escrow.vault_bump,
+        constraint = refundable_vault.mint == green_label_refundable_escrow.usdc_mint @ CustomError::InvalidGreenLabelMint,
+        constraint = refundable_vault.owner == green_label_refundable_escrow.key() @ CustomError::InvalidGreenLabelTokenAccount
+    )]
+    pub refundable_vault: Box<Account<'info, TokenAccount>>,
+
+    pub payer: Signer<'info>,
+
+    #[account(
+        mut,
+        constraint = payer_usdc_account.owner == payer.key() @ CustomError::InvalidGreenLabelTokenAccount,
+        constraint = payer_usdc_account.mint == green_label_refundable_escrow.usdc_mint @ CustomError::InvalidGreenLabelMint
+    )]
+    pub payer_usdc_account: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        constraint = usdc_mint.key() == green_label_refundable_escrow.usdc_mint @ CustomError::InvalidGreenLabelMint
+    )]
+    pub usdc_mint: Box<Account<'info, Mint>>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct RouteGreenLabelCertificationFeeV1<'info> {
+    #[account(
+        seeds = [GREEN_LABEL_CONFIG_SEED],
+        bump = green_label_config.bump
+    )]
+    pub green_label_config: Box<Account<'info, GreenLabelConfigV1>>,
+
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    #[account(
+        mut,
+        constraint = payer_usdc_account.mint == green_label_config.usdc_mint @ CustomError::InvalidGreenLabelMint,
+        constraint = payer_usdc_account.owner == payer.key() @ CustomError::InvalidGreenLabelTokenAccount
+    )]
+    pub payer_usdc_account: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        seeds = [TREASURY_CONFIG_V2_SEED],
+        bump = treasury_config.bump,
+        constraint = treasury_config.usdc_mint == green_label_config.usdc_mint @ CustomError::InvalidGreenLabelMint
+    )]
+    pub treasury_config: Box<Account<'info, TreasuryConfigV2>>,
+
+    #[account(
+        mut,
+        seeds = [TREASURY_USDC_STATE_V2_SEED],
+        bump = treasury_usdc_state.bump
+    )]
+    pub treasury_usdc_state: Box<Account<'info, TreasuryUsdcStateV2>>,
+
+    #[account(
+        mut,
+        seeds = [REVENUE_ROUTING_STATS_V1_SEED, treasury_config.key().as_ref()],
+        bump = revenue_routing_stats.bump,
+        constraint = revenue_routing_stats.authority == treasury_config.authority @ CustomError::UnauthorizedTreasuryAuthority,
+        constraint = revenue_routing_stats.usdc_mint == treasury_config.usdc_mint @ CustomError::InvalidMint
+    )]
+    pub revenue_routing_stats: Box<Account<'info, RevenueRoutingStatsV1>>,
+
+    #[account(
+        constraint = usdc_mint.key() == treasury_config.usdc_mint @ CustomError::InvalidGreenLabelMint
+    )]
+    pub usdc_mint: Box<Account<'info, Mint>>,
+
+    /// CHECK: This PDA only owns the USDC vault token accounts.
+    #[account(
+        seeds = [VAULT_AUTHORITY_V2_SEED],
+        bump
+    )]
+    pub vault_authority: UncheckedAccount<'info>,
+
+    #[account(
+        mut,
+        seeds = [RELIEF_USDC_VAULT_SEED],
+        bump,
+        constraint = relief_usdc_vault.mint == treasury_config.usdc_mint @ CustomError::InvalidMint,
+        constraint = relief_usdc_vault.owner == vault_authority.key() @ CustomError::InvalidVault
+    )]
+    pub relief_usdc_vault: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        mut,
+        seeds = [BUYBACK_USDC_VAULT_SEED],
+        bump,
+        constraint = buyback_usdc_vault.mint == treasury_config.usdc_mint @ CustomError::InvalidMint,
+        constraint = buyback_usdc_vault.owner == vault_authority.key() @ CustomError::InvalidVault
+    )]
+    pub buyback_usdc_vault: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        mut,
+        seeds = [BUILDERS_USDC_VAULT_SEED],
+        bump,
+        constraint = builders_usdc_vault.mint == treasury_config.usdc_mint @ CustomError::InvalidMint,
+        constraint = builders_usdc_vault.owner == vault_authority.key() @ CustomError::InvalidVault
+    )]
+    pub builders_usdc_vault: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        mut,
+        seeds = [STAKING_USDC_VAULT_SEED],
+        bump,
+        constraint = staking_usdc_vault.mint == treasury_config.usdc_mint @ CustomError::InvalidMint,
+        constraint = staking_usdc_vault.owner == vault_authority.key() @ CustomError::InvalidVault
+    )]
+    pub staking_usdc_vault: Box<Account<'info, TokenAccount>>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct RefundGreenLabelEscrowV1<'info> {
+    #[account(
+        seeds = [
+            GREEN_LABEL_PROJECT_SEED,
+            &green_label_project.project_id.to_le_bytes()
+        ],
+        bump = green_label_project.bump
+    )]
+    pub green_label_project: Box<Account<'info, GreenLabelProjectV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            GREEN_LABEL_REFUNDABLE_ESCROW_SEED,
+            green_label_project.key().as_ref()
+        ],
+        bump = green_label_refundable_escrow.bump,
+        constraint = green_label_refundable_escrow.project == green_label_project.key() @ CustomError::InvalidGreenLabelTargetAccount
+    )]
+    pub green_label_refundable_escrow: Box<Account<'info, GreenLabelRefundableEscrowV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            GREEN_LABEL_REFUNDABLE_VAULT_SEED,
+            green_label_refundable_escrow.key().as_ref()
+        ],
+        bump = green_label_refundable_escrow.vault_bump,
+        constraint = refundable_vault.mint == green_label_refundable_escrow.usdc_mint @ CustomError::InvalidGreenLabelMint,
+        constraint = refundable_vault.owner == green_label_refundable_escrow.key() @ CustomError::InvalidGreenLabelTokenAccount
+    )]
+    pub refundable_vault: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        mut,
+        constraint = payer_refund_usdc_account.owner == green_label_refundable_escrow.payer @ CustomError::InvalidGreenLabelEscrowRefund,
+        constraint = payer_refund_usdc_account.mint == green_label_refundable_escrow.usdc_mint @ CustomError::InvalidGreenLabelMint
+    )]
+    pub payer_refund_usdc_account: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        constraint = usdc_mint.key() == green_label_refundable_escrow.usdc_mint @ CustomError::InvalidGreenLabelMint
+    )]
+    pub usdc_mint: Box<Account<'info, Mint>>,
+
+    pub caller: Signer<'info>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct ForfeitGreenLabelEscrowToTreasuryV1<'info> {
+    #[account(
+        seeds = [GREEN_LABEL_CONFIG_SEED],
+        bump = green_label_config.bump
+    )]
+    pub green_label_config: Box<Account<'info, GreenLabelConfigV1>>,
+
+    #[account(
+        seeds = [
+            GREEN_LABEL_PROJECT_SEED,
+            &green_label_project.project_id.to_le_bytes()
+        ],
+        bump = green_label_project.bump
+    )]
+    pub green_label_project: Box<Account<'info, GreenLabelProjectV1>>,
+
+    #[account(
+        seeds = [
+            GREEN_LABEL_DISPUTE_SEED,
+            green_label_project.key().as_ref(),
+            &green_label_dispute.dispute_id.to_le_bytes()
+        ],
+        bump = green_label_dispute.bump
+    )]
+    pub green_label_dispute: Box<Account<'info, GreenLabelDisputeV1>>,
+
+    pub proposal_decision: Box<Account<'info, ProposalDecisionV1>>,
+
+    pub execution_queue_item: Box<Account<'info, ExecutionQueueItemV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            GREEN_LABEL_REFUNDABLE_ESCROW_SEED,
+            green_label_project.key().as_ref()
+        ],
+        bump = green_label_refundable_escrow.bump,
+        constraint = green_label_refundable_escrow.project == green_label_project.key() @ CustomError::InvalidGreenLabelTargetAccount,
+        constraint = green_label_refundable_escrow.usdc_mint == green_label_config.usdc_mint @ CustomError::InvalidGreenLabelMint
+    )]
+    pub green_label_refundable_escrow: Box<Account<'info, GreenLabelRefundableEscrowV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            GREEN_LABEL_REFUNDABLE_VAULT_SEED,
+            green_label_refundable_escrow.key().as_ref()
+        ],
+        bump = green_label_refundable_escrow.vault_bump,
+        constraint = refundable_vault.mint == green_label_refundable_escrow.usdc_mint @ CustomError::InvalidGreenLabelMint,
+        constraint = refundable_vault.owner == green_label_refundable_escrow.key() @ CustomError::InvalidGreenLabelTokenAccount
+    )]
+    pub refundable_vault: Box<Account<'info, TokenAccount>>,
+
+    /// CHECK: Loaded and validated in handler to keep the Anchor accounts stack small.
+    pub treasury_config: UncheckedAccount<'info>,
+
+    #[account(mut)]
+    /// CHECK: Loaded, validated, and serialized in handler to keep the Anchor accounts stack small.
+    pub treasury_usdc_state: UncheckedAccount<'info>,
+
+    #[account(mut)]
+    /// CHECK: Loaded, validated, and serialized in handler to keep the Anchor accounts stack small.
+    pub revenue_routing_stats: UncheckedAccount<'info>,
+
+    #[account(
+        constraint = usdc_mint.key() == green_label_config.usdc_mint @ CustomError::InvalidGreenLabelMint
+    )]
+    pub usdc_mint: Box<Account<'info, Mint>>,
+
+    /// CHECK: This PDA only owns the USDC vault token accounts.
+    pub vault_authority: UncheckedAccount<'info>,
+
+    #[account(mut)]
+    /// CHECK: Loaded and validated in handler to keep the Anchor accounts stack small.
+    pub relief_usdc_vault: UncheckedAccount<'info>,
+
+    #[account(mut)]
+    /// CHECK: Loaded and validated in handler to keep the Anchor accounts stack small.
+    pub buyback_usdc_vault: UncheckedAccount<'info>,
+
+    #[account(mut)]
+    /// CHECK: Loaded and validated in handler to keep the Anchor accounts stack small.
+    pub builders_usdc_vault: UncheckedAccount<'info>,
+
+    #[account(mut)]
+    /// CHECK: Loaded and validated in handler to keep the Anchor accounts stack small.
+    pub staking_usdc_vault: UncheckedAccount<'info>,
 
     pub executor: Signer<'info>,
 
@@ -1004,6 +1355,279 @@ pub fn execute_green_label_slash_handler(ctx: Context<ExecuteGreenLabelSlash>) -
         &mut ctx.accounts.green_label_project,
         &mut ctx.accounts.green_label_dispute,
         now,
+    )
+}
+
+pub fn initialize_green_label_refundable_escrow_v1_handler(
+    ctx: Context<InitializeGreenLabelRefundableEscrowV1>,
+    refund_available_after: i64,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    validate_green_label_refundable_escrow_initialization(
+        ctx.accounts.green_label_config.is_paused,
+        ctx.accounts.green_label_project.project_owner,
+        ctx.accounts.payer.key(),
+        ctx.accounts.green_label_config.usdc_mint,
+        ctx.accounts.usdc_mint.key(),
+        now,
+        refund_available_after,
+    )?;
+
+    let escrow = &mut ctx.accounts.green_label_refundable_escrow;
+    escrow.authority = ctx.accounts.green_label_config.authority;
+    escrow.project = ctx.accounts.green_label_project.key();
+    escrow.project_id = ctx.accounts.green_label_project.project_id;
+    escrow.payer = ctx.accounts.payer.key();
+    escrow.usdc_mint = ctx.accounts.usdc_mint.key();
+    escrow.refundable_vault = ctx.accounts.refundable_vault.key();
+    escrow.deposited_amount = 0;
+    escrow.refundable_amount = 0;
+    escrow.refunded_amount = 0;
+    escrow.forfeited_amount = 0;
+    escrow.deposit_ts = 0;
+    escrow.refund_available_after = refund_available_after;
+    escrow.status = GreenLabelEscrowStatusV1::Locked;
+    escrow.bump = ctx.bumps.green_label_refundable_escrow;
+    escrow.vault_bump = ctx.bumps.refundable_vault;
+
+    Ok(())
+}
+
+pub fn deposit_green_label_refundable_bond_v1_handler(
+    ctx: Context<DepositGreenLabelRefundableBondV1>,
+    amount: u64,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    validate_green_label_refundable_bond_deposit(
+        ctx.accounts.green_label_refundable_escrow.status,
+        ctx.accounts.green_label_refundable_escrow.payer,
+        ctx.accounts.payer.key(),
+        ctx.accounts.green_label_refundable_escrow.usdc_mint,
+        ctx.accounts.payer_usdc_account.mint,
+        ctx.accounts.refundable_vault.mint,
+        ctx.accounts.refundable_vault.owner,
+        ctx.accounts.green_label_refundable_escrow.key(),
+        ctx.accounts.usdc_mint.key(),
+        ctx.accounts.usdc_mint.decimals,
+        amount,
+    )?;
+
+    let cpi_accounts = TransferChecked {
+        from: ctx.accounts.payer_usdc_account.to_account_info(),
+        mint: ctx.accounts.usdc_mint.to_account_info(),
+        to: ctx.accounts.refundable_vault.to_account_info(),
+        authority: ctx.accounts.payer.to_account_info(),
+    };
+    let cpi_ctx = CpiContext::new(ctx.accounts.token_program.key(), cpi_accounts);
+    transfer_checked(cpi_ctx, amount, GREEN_LABEL_USDC_DECIMALS)?;
+
+    record_green_label_refundable_bond_deposit(
+        &mut ctx.accounts.green_label_refundable_escrow,
+        amount,
+        now,
+    )
+}
+
+pub fn route_green_label_certification_fee_v1_handler(
+    ctx: Context<RouteGreenLabelCertificationFeeV1>,
+    amount: u64,
+) -> Result<()> {
+    require!(
+        !ctx.accounts.green_label_config.is_paused,
+        CustomError::InvalidGreenLabelStatus
+    );
+    require!(
+        ctx.accounts.usdc_mint.decimals == GREEN_LABEL_USDC_DECIMALS,
+        CustomError::InvalidGreenLabelMint
+    );
+
+    route_usdc_revenue_from_token_account(
+        ctx.accounts.token_program.key(),
+        ctx.accounts.payer_usdc_account.to_account_info(),
+        ctx.accounts.payer.to_account_info(),
+        None,
+        ctx.accounts.usdc_mint.to_account_info(),
+        ctx.accounts.relief_usdc_vault.to_account_info(),
+        ctx.accounts.buyback_usdc_vault.to_account_info(),
+        ctx.accounts.builders_usdc_vault.to_account_info(),
+        ctx.accounts.staking_usdc_vault.to_account_info(),
+        &mut ctx.accounts.treasury_usdc_state,
+        &mut ctx.accounts.revenue_routing_stats,
+        ctx.accounts.usdc_mint.key(),
+        RevenueType::GreenLabelCertificationFee,
+        amount,
+        GREEN_LABEL_USDC_DECIMALS,
+    )
+}
+
+pub fn refund_green_label_escrow_v1_handler(ctx: Context<RefundGreenLabelEscrowV1>) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let refund_amount = validate_green_label_escrow_refund(
+        ctx.accounts.green_label_refundable_escrow.status,
+        ctx.accounts.green_label_refundable_escrow.refundable_amount,
+        ctx.accounts.green_label_refundable_escrow.refunded_amount,
+        ctx.accounts.green_label_refundable_escrow.forfeited_amount,
+        ctx.accounts
+            .green_label_refundable_escrow
+            .refund_available_after,
+        now,
+        ctx.accounts.green_label_project.active_dispute,
+        ctx.accounts.green_label_project.terminal_action_type,
+        ctx.accounts.green_label_project.terminal_proposal_id,
+        ctx.accounts.green_label_project.terminal_payload_hash,
+        ctx.accounts.green_label_refundable_escrow.payer,
+        ctx.accounts.payer_refund_usdc_account.owner,
+        ctx.accounts.green_label_refundable_escrow.usdc_mint,
+        ctx.accounts.payer_refund_usdc_account.mint,
+        ctx.accounts.refundable_vault.mint,
+        ctx.accounts.refundable_vault.owner,
+        ctx.accounts.green_label_refundable_escrow.key(),
+        ctx.accounts.usdc_mint.key(),
+        ctx.accounts.usdc_mint.decimals,
+        ctx.accounts.refundable_vault.amount,
+    )?;
+
+    let project_key = ctx.accounts.green_label_project.key();
+    let escrow_bump = ctx.accounts.green_label_refundable_escrow.bump;
+    let signer_seeds: &[&[&[u8]]] = &[&[
+        GREEN_LABEL_REFUNDABLE_ESCROW_SEED,
+        project_key.as_ref(),
+        &[escrow_bump],
+    ]];
+
+    let cpi_accounts = TransferChecked {
+        from: ctx.accounts.refundable_vault.to_account_info(),
+        mint: ctx.accounts.usdc_mint.to_account_info(),
+        to: ctx.accounts.payer_refund_usdc_account.to_account_info(),
+        authority: ctx.accounts.green_label_refundable_escrow.to_account_info(),
+    };
+    let cpi_ctx =
+        CpiContext::new_with_signer(ctx.accounts.token_program.key(), cpi_accounts, signer_seeds);
+    transfer_checked(cpi_ctx, refund_amount, GREEN_LABEL_USDC_DECIMALS)?;
+
+    record_green_label_escrow_refunded(
+        &mut ctx.accounts.green_label_refundable_escrow,
+        refund_amount,
+    )
+}
+
+pub fn forfeit_green_label_escrow_to_treasury_v1_handler<'info>(
+    ctx: Context<'info, ForfeitGreenLabelEscrowToTreasuryV1<'info>>,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let project_key = ctx.accounts.green_label_project.key();
+    let dispute_key = ctx.accounts.green_label_dispute.key();
+
+    let treasury_config = Account::<TreasuryConfigV2>::try_from(&*ctx.accounts.treasury_config)?;
+    let mut treasury_usdc_state =
+        Account::<TreasuryUsdcStateV2>::try_from(&*ctx.accounts.treasury_usdc_state)?;
+    let mut revenue_routing_stats =
+        Account::<RevenueRoutingStatsV1>::try_from(&*ctx.accounts.revenue_routing_stats)?;
+    let relief_usdc_vault = Account::<TokenAccount>::try_from(&*ctx.accounts.relief_usdc_vault)?;
+    let buyback_usdc_vault = Account::<TokenAccount>::try_from(&*ctx.accounts.buyback_usdc_vault)?;
+    let builders_usdc_vault =
+        Account::<TokenAccount>::try_from(&*ctx.accounts.builders_usdc_vault)?;
+    let staking_usdc_vault = Account::<TokenAccount>::try_from(&*ctx.accounts.staking_usdc_vault)?;
+
+    validate_green_label_treasury_router_accounts(
+        ctx.accounts.green_label_config.usdc_mint,
+        ctx.accounts.treasury_config.key(),
+        treasury_config.usdc_mint,
+        ctx.accounts.treasury_usdc_state.key(),
+        ctx.accounts.revenue_routing_stats.key(),
+        revenue_routing_stats.usdc_mint,
+        ctx.accounts.vault_authority.key(),
+        ctx.accounts.relief_usdc_vault.key(),
+        relief_usdc_vault.mint,
+        relief_usdc_vault.owner,
+        ctx.accounts.buyback_usdc_vault.key(),
+        buyback_usdc_vault.mint,
+        buyback_usdc_vault.owner,
+        ctx.accounts.builders_usdc_vault.key(),
+        builders_usdc_vault.mint,
+        builders_usdc_vault.owner,
+        ctx.accounts.staking_usdc_vault.key(),
+        staking_usdc_vault.mint,
+        staking_usdc_vault.owner,
+    )?;
+    let forfeit_amount = validate_green_label_escrow_forfeit_to_treasury(
+        ctx.accounts.green_label_config.is_paused,
+        ctx.accounts.green_label_project.status,
+        ctx.accounts.green_label_project.active_dispute,
+        dispute_key,
+        ctx.accounts.green_label_project.terminal_proposal_id,
+        ctx.accounts.green_label_project.terminal_proposal_decision,
+        ctx.accounts
+            .green_label_project
+            .terminal_execution_queue_item,
+        ctx.accounts.green_label_project.terminal_payload_hash,
+        ctx.accounts.green_label_project.terminal_action_type,
+        ctx.accounts.green_label_dispute.project,
+        project_key,
+        ctx.accounts.green_label_dispute.status,
+        ctx.accounts.green_label_dispute.proposal_id,
+        ctx.accounts.green_label_dispute.proposal_decision,
+        ctx.accounts.green_label_dispute.execution_queue_item,
+        ctx.accounts.green_label_dispute.payload_hash,
+        ctx.accounts.green_label_dispute.action_type,
+        ctx.accounts.proposal_decision.key(),
+        ctx.accounts.proposal_decision.proposal_id,
+        ctx.accounts.proposal_decision.decision,
+        ctx.accounts.execution_queue_item.key(),
+        ctx.accounts.execution_queue_item.proposal_id,
+        ctx.accounts.execution_queue_item.status,
+        ctx.accounts.execution_queue_item.action_type,
+        ctx.accounts.execution_queue_item.payload_hash,
+        ctx.accounts.execution_queue_item.target_program,
+        crate::ID,
+        ctx.accounts.execution_queue_item.target_account,
+        dispute_key,
+        now,
+        ctx.accounts.execution_queue_item.execute_after,
+        ctx.accounts.green_label_refundable_escrow.status,
+        ctx.accounts.green_label_refundable_escrow.refundable_amount,
+        ctx.accounts.green_label_refundable_escrow.refunded_amount,
+        ctx.accounts.green_label_refundable_escrow.forfeited_amount,
+        ctx.accounts.green_label_refundable_escrow.usdc_mint,
+        ctx.accounts.refundable_vault.mint,
+        ctx.accounts.refundable_vault.owner,
+        ctx.accounts.green_label_refundable_escrow.key(),
+        ctx.accounts.usdc_mint.key(),
+        ctx.accounts.usdc_mint.decimals,
+        ctx.accounts.refundable_vault.amount,
+    )?;
+
+    let escrow_bump = ctx.accounts.green_label_refundable_escrow.bump;
+    let signer_seeds: &[&[&[u8]]] = &[&[
+        GREEN_LABEL_REFUNDABLE_ESCROW_SEED,
+        project_key.as_ref(),
+        &[escrow_bump],
+    ]];
+
+    route_usdc_revenue_from_token_account(
+        ctx.accounts.token_program.key(),
+        ctx.accounts.refundable_vault.to_account_info(),
+        ctx.accounts.green_label_refundable_escrow.to_account_info(),
+        Some(signer_seeds),
+        ctx.accounts.usdc_mint.to_account_info(),
+        ctx.accounts.relief_usdc_vault.to_account_info(),
+        ctx.accounts.buyback_usdc_vault.to_account_info(),
+        ctx.accounts.builders_usdc_vault.to_account_info(),
+        ctx.accounts.staking_usdc_vault.to_account_info(),
+        &mut treasury_usdc_state,
+        &mut revenue_routing_stats,
+        ctx.accounts.usdc_mint.key(),
+        RevenueType::GreenLabelForfeitedBond,
+        forfeit_amount,
+        GREEN_LABEL_USDC_DECIMALS,
+    )?;
+
+    treasury_usdc_state.exit(&crate::ID)?;
+    revenue_routing_stats.exit(&crate::ID)?;
+
+    record_green_label_escrow_forfeited(
+        &mut ctx.accounts.green_label_refundable_escrow,
+        forfeit_amount,
     )
 }
 
@@ -2056,6 +2680,550 @@ pub fn calculate_green_label_slash_amount(total_bond_amount: u64) -> Result<u64>
         CustomError::InvalidGreenLabelBondAmount
     );
     Ok(total_bond_amount)
+}
+
+pub fn validate_green_label_refundable_escrow_initialization(
+    config_is_paused: bool,
+    project_owner: Pubkey,
+    payer: Pubkey,
+    expected_usdc_mint: Pubkey,
+    provided_usdc_mint: Pubkey,
+    now: i64,
+    refund_available_after: i64,
+) -> Result<()> {
+    require!(!config_is_paused, CustomError::InvalidGreenLabelStatus);
+    require_keys_eq!(
+        project_owner,
+        payer,
+        CustomError::InvalidGreenLabelProjectOwner
+    );
+    require_keys_eq!(
+        provided_usdc_mint,
+        expected_usdc_mint,
+        CustomError::InvalidGreenLabelMint
+    );
+    require!(
+        refund_available_after >= now,
+        CustomError::InvalidGreenLabelEscrowRefund
+    );
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn validate_green_label_refundable_bond_deposit(
+    escrow_status: GreenLabelEscrowStatusV1,
+    expected_payer: Pubkey,
+    payer: Pubkey,
+    expected_usdc_mint: Pubkey,
+    payer_usdc_account_mint: Pubkey,
+    refundable_vault_mint: Pubkey,
+    refundable_vault_owner: Pubkey,
+    escrow_key: Pubkey,
+    provided_usdc_mint: Pubkey,
+    usdc_decimals: u8,
+    amount: u64,
+) -> Result<()> {
+    require!(amount > 0, CustomError::InvalidGreenLabelEscrowAmount);
+    require!(
+        escrow_status == GreenLabelEscrowStatusV1::Locked,
+        CustomError::InvalidGreenLabelEscrowStatus
+    );
+    require_keys_eq!(
+        expected_payer,
+        payer,
+        CustomError::InvalidGreenLabelProjectOwner
+    );
+    require_keys_eq!(
+        payer_usdc_account_mint,
+        expected_usdc_mint,
+        CustomError::InvalidGreenLabelMint
+    );
+    require_keys_eq!(
+        refundable_vault_mint,
+        expected_usdc_mint,
+        CustomError::InvalidGreenLabelMint
+    );
+    require_keys_eq!(
+        refundable_vault_owner,
+        escrow_key,
+        CustomError::InvalidGreenLabelTokenAccount
+    );
+    require_keys_eq!(
+        provided_usdc_mint,
+        expected_usdc_mint,
+        CustomError::InvalidGreenLabelMint
+    );
+    require!(
+        usdc_decimals == GREEN_LABEL_USDC_DECIMALS,
+        CustomError::InvalidGreenLabelMint
+    );
+
+    Ok(())
+}
+
+pub fn calculate_green_label_escrow_remaining_amount(
+    refundable_amount: u64,
+    refunded_amount: u64,
+    forfeited_amount: u64,
+) -> Result<u64> {
+    let used_amount = refunded_amount
+        .checked_add(forfeited_amount)
+        .ok_or(CustomError::GreenLabelMathOverflow)?;
+
+    refundable_amount
+        .checked_sub(used_amount)
+        .ok_or(CustomError::InvalidGreenLabelEscrowAmount.into())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn validate_green_label_escrow_refund(
+    escrow_status: GreenLabelEscrowStatusV1,
+    refundable_amount: u64,
+    refunded_amount: u64,
+    forfeited_amount: u64,
+    refund_available_after: i64,
+    now: i64,
+    project_active_dispute: Pubkey,
+    project_terminal_action_type: ActionType,
+    project_terminal_proposal_id: u64,
+    project_terminal_payload_hash: [u8; 32],
+    escrow_payer: Pubkey,
+    payer_refund_account_owner: Pubkey,
+    expected_usdc_mint: Pubkey,
+    payer_refund_account_mint: Pubkey,
+    refundable_vault_mint: Pubkey,
+    refundable_vault_owner: Pubkey,
+    escrow_key: Pubkey,
+    provided_usdc_mint: Pubkey,
+    usdc_decimals: u8,
+    vault_balance: u64,
+) -> Result<u64> {
+    require!(
+        matches!(
+            escrow_status,
+            GreenLabelEscrowStatusV1::Locked | GreenLabelEscrowStatusV1::Refundable
+        ),
+        CustomError::InvalidGreenLabelEscrowStatus
+    );
+
+    let time_refund_allowed =
+        project_active_dispute == Pubkey::default() && now >= refund_available_after;
+    let decision_refund_allowed = project_terminal_action_type == ActionType::GreenLabelRefund
+        && project_terminal_proposal_id > 0
+        && project_terminal_payload_hash != [0; 32];
+
+    require!(
+        time_refund_allowed || decision_refund_allowed,
+        CustomError::InvalidGreenLabelEscrowRefund
+    );
+    require_keys_eq!(
+        payer_refund_account_owner,
+        escrow_payer,
+        CustomError::InvalidGreenLabelEscrowRefund
+    );
+    require_keys_eq!(
+        payer_refund_account_mint,
+        expected_usdc_mint,
+        CustomError::InvalidGreenLabelMint
+    );
+    require_keys_eq!(
+        refundable_vault_mint,
+        expected_usdc_mint,
+        CustomError::InvalidGreenLabelMint
+    );
+    require_keys_eq!(
+        refundable_vault_owner,
+        escrow_key,
+        CustomError::InvalidGreenLabelTokenAccount
+    );
+    require_keys_eq!(
+        provided_usdc_mint,
+        expected_usdc_mint,
+        CustomError::InvalidGreenLabelMint
+    );
+    require!(
+        usdc_decimals == GREEN_LABEL_USDC_DECIMALS,
+        CustomError::InvalidGreenLabelMint
+    );
+
+    let refund_amount = calculate_green_label_escrow_remaining_amount(
+        refundable_amount,
+        refunded_amount,
+        forfeited_amount,
+    )?;
+    require!(
+        refund_amount > 0,
+        CustomError::InvalidGreenLabelEscrowAmount
+    );
+    require!(
+        vault_balance >= refund_amount,
+        CustomError::GreenLabelInsufficientBondVaultBalance
+    );
+
+    Ok(refund_amount)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn validate_green_label_treasury_router_accounts(
+    expected_usdc_mint: Pubkey,
+    treasury_config_key: Pubkey,
+    treasury_config_usdc_mint: Pubkey,
+    treasury_usdc_state_key: Pubkey,
+    revenue_routing_stats_key: Pubkey,
+    revenue_routing_stats_usdc_mint: Pubkey,
+    vault_authority_key: Pubkey,
+    relief_usdc_vault_key: Pubkey,
+    relief_usdc_vault_mint: Pubkey,
+    relief_usdc_vault_owner: Pubkey,
+    buyback_usdc_vault_key: Pubkey,
+    buyback_usdc_vault_mint: Pubkey,
+    buyback_usdc_vault_owner: Pubkey,
+    builders_usdc_vault_key: Pubkey,
+    builders_usdc_vault_mint: Pubkey,
+    builders_usdc_vault_owner: Pubkey,
+    staking_usdc_vault_key: Pubkey,
+    staking_usdc_vault_mint: Pubkey,
+    staking_usdc_vault_owner: Pubkey,
+) -> Result<()> {
+    let (expected_treasury_config, _) =
+        Pubkey::find_program_address(&[TREASURY_CONFIG_V2_SEED], &crate::ID);
+    let (expected_treasury_usdc_state, _) =
+        Pubkey::find_program_address(&[TREASURY_USDC_STATE_V2_SEED], &crate::ID);
+    let (expected_revenue_routing_stats, _) = Pubkey::find_program_address(
+        &[REVENUE_ROUTING_STATS_V1_SEED, treasury_config_key.as_ref()],
+        &crate::ID,
+    );
+    let (expected_vault_authority, _) =
+        Pubkey::find_program_address(&[VAULT_AUTHORITY_V2_SEED], &crate::ID);
+    let (expected_relief_usdc_vault, _) =
+        Pubkey::find_program_address(&[RELIEF_USDC_VAULT_SEED], &crate::ID);
+    let (expected_buyback_usdc_vault, _) =
+        Pubkey::find_program_address(&[BUYBACK_USDC_VAULT_SEED], &crate::ID);
+    let (expected_builders_usdc_vault, _) =
+        Pubkey::find_program_address(&[BUILDERS_USDC_VAULT_SEED], &crate::ID);
+    let (expected_staking_usdc_vault, _) =
+        Pubkey::find_program_address(&[STAKING_USDC_VAULT_SEED], &crate::ID);
+
+    require_keys_eq!(
+        treasury_config_key,
+        expected_treasury_config,
+        CustomError::InvalidVault
+    );
+    require_keys_eq!(
+        treasury_config_usdc_mint,
+        expected_usdc_mint,
+        CustomError::InvalidGreenLabelMint
+    );
+    require_keys_eq!(
+        treasury_usdc_state_key,
+        expected_treasury_usdc_state,
+        CustomError::InvalidVault
+    );
+    require_keys_eq!(
+        revenue_routing_stats_key,
+        expected_revenue_routing_stats,
+        CustomError::InvalidVault
+    );
+    require_keys_eq!(
+        revenue_routing_stats_usdc_mint,
+        expected_usdc_mint,
+        CustomError::InvalidMint
+    );
+    require_keys_eq!(
+        vault_authority_key,
+        expected_vault_authority,
+        CustomError::InvalidVault
+    );
+
+    require_keys_eq!(
+        relief_usdc_vault_key,
+        expected_relief_usdc_vault,
+        CustomError::InvalidVault
+    );
+    require_keys_eq!(
+        relief_usdc_vault_mint,
+        expected_usdc_mint,
+        CustomError::InvalidMint
+    );
+    require_keys_eq!(
+        relief_usdc_vault_owner,
+        vault_authority_key,
+        CustomError::InvalidVault
+    );
+    require_keys_eq!(
+        buyback_usdc_vault_key,
+        expected_buyback_usdc_vault,
+        CustomError::InvalidVault
+    );
+    require_keys_eq!(
+        buyback_usdc_vault_mint,
+        expected_usdc_mint,
+        CustomError::InvalidMint
+    );
+    require_keys_eq!(
+        buyback_usdc_vault_owner,
+        vault_authority_key,
+        CustomError::InvalidVault
+    );
+    require_keys_eq!(
+        builders_usdc_vault_key,
+        expected_builders_usdc_vault,
+        CustomError::InvalidVault
+    );
+    require_keys_eq!(
+        builders_usdc_vault_mint,
+        expected_usdc_mint,
+        CustomError::InvalidMint
+    );
+    require_keys_eq!(
+        builders_usdc_vault_owner,
+        vault_authority_key,
+        CustomError::InvalidVault
+    );
+    require_keys_eq!(
+        staking_usdc_vault_key,
+        expected_staking_usdc_vault,
+        CustomError::InvalidVault
+    );
+    require_keys_eq!(
+        staking_usdc_vault_mint,
+        expected_usdc_mint,
+        CustomError::InvalidMint
+    );
+    require_keys_eq!(
+        staking_usdc_vault_owner,
+        vault_authority_key,
+        CustomError::InvalidVault
+    );
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn validate_green_label_escrow_forfeit_to_treasury(
+    config_is_paused: bool,
+    project_status: GreenLabelStatus,
+    project_active_dispute: Pubkey,
+    dispute_key: Pubkey,
+    project_terminal_proposal_id: u64,
+    project_terminal_proposal_decision: Pubkey,
+    project_terminal_execution_queue_item: Pubkey,
+    project_terminal_payload_hash: [u8; 32],
+    project_terminal_action_type: ActionType,
+    dispute_project: Pubkey,
+    project_key: Pubkey,
+    dispute_status: DisputeStatus,
+    dispute_proposal_id: u64,
+    dispute_proposal_decision: Pubkey,
+    dispute_execution_queue_item: Pubkey,
+    dispute_payload_hash: [u8; 32],
+    dispute_action_type: ActionType,
+    proposal_decision_key: Pubkey,
+    proposal_decision_proposal_id: u64,
+    proposal_decision: ProposalDecision,
+    execution_queue_item_key: Pubkey,
+    queue_proposal_id: u64,
+    queue_status: ExecutionStatus,
+    queue_action_type: ActionType,
+    queue_payload_hash: [u8; 32],
+    queue_target_program: Pubkey,
+    expected_program_id: Pubkey,
+    queue_target_account: Pubkey,
+    expected_target_account: Pubkey,
+    now: i64,
+    queue_execute_after: i64,
+    escrow_status: GreenLabelEscrowStatusV1,
+    refundable_amount: u64,
+    refunded_amount: u64,
+    forfeited_amount: u64,
+    expected_usdc_mint: Pubkey,
+    refundable_vault_mint: Pubkey,
+    refundable_vault_owner: Pubkey,
+    escrow_key: Pubkey,
+    provided_usdc_mint: Pubkey,
+    usdc_decimals: u8,
+    vault_balance: u64,
+) -> Result<u64> {
+    require!(!config_is_paused, CustomError::InvalidGreenLabelStatus);
+    require!(
+        matches!(
+            escrow_status,
+            GreenLabelEscrowStatusV1::Locked | GreenLabelEscrowStatusV1::Refundable
+        ),
+        CustomError::InvalidGreenLabelEscrowStatus
+    );
+    require!(
+        project_status == GreenLabelStatus::SlashQueued,
+        CustomError::InvalidGreenLabelStatus
+    );
+    require_keys_eq!(
+        project_active_dispute,
+        dispute_key,
+        CustomError::InvalidGreenLabelActiveDispute
+    );
+    require_keys_eq!(
+        dispute_project,
+        project_key,
+        CustomError::InvalidGreenLabelTargetAccount
+    );
+    require!(
+        dispute_status == DisputeStatus::DecisionQueued,
+        CustomError::InvalidGreenLabelDisputeStatus
+    );
+    validate_terminal_action_for_slash(project_terminal_action_type, true)?;
+    validate_payload_hash(project_terminal_payload_hash)?;
+    require!(
+        dispute_proposal_id == project_terminal_proposal_id,
+        CustomError::InvalidGreenLabelSecurityDecision
+    );
+    require_keys_eq!(
+        dispute_proposal_decision,
+        project_terminal_proposal_decision,
+        CustomError::InvalidGreenLabelSecurityDecision
+    );
+    require_keys_eq!(
+        dispute_execution_queue_item,
+        project_terminal_execution_queue_item,
+        CustomError::InvalidGreenLabelExecutionQueue
+    );
+    require!(
+        dispute_payload_hash == project_terminal_payload_hash,
+        CustomError::InvalidGreenLabelExecutionQueue
+    );
+    require!(
+        dispute_action_type == ActionType::GreenLabelSlash,
+        CustomError::InvalidGreenLabelActionType
+    );
+    require_keys_eq!(
+        proposal_decision_key,
+        project_terminal_proposal_decision,
+        CustomError::InvalidGreenLabelSecurityDecision
+    );
+    require_keys_eq!(
+        execution_queue_item_key,
+        project_terminal_execution_queue_item,
+        CustomError::InvalidGreenLabelExecutionQueue
+    );
+    require!(
+        proposal_decision_proposal_id == project_terminal_proposal_id,
+        CustomError::InvalidGreenLabelSecurityDecision
+    );
+    require!(
+        queue_proposal_id == project_terminal_proposal_id,
+        CustomError::InvalidGreenLabelExecutionQueue
+    );
+    require!(
+        proposal_decision == ProposalDecision::Approved,
+        CustomError::InvalidGreenLabelSecurityDecision
+    );
+    require!(
+        queue_status == ExecutionStatus::Queued,
+        CustomError::InvalidGreenLabelExecutionQueue
+    );
+    require!(
+        queue_action_type == ActionType::GreenLabelSlash,
+        CustomError::InvalidGreenLabelExecutionQueue
+    );
+    require!(
+        queue_payload_hash == project_terminal_payload_hash,
+        CustomError::InvalidGreenLabelExecutionQueue
+    );
+    require_keys_eq!(
+        queue_target_program,
+        expected_program_id,
+        CustomError::InvalidGreenLabelTargetProgram
+    );
+    require_keys_eq!(
+        queue_target_account,
+        expected_target_account,
+        CustomError::InvalidGreenLabelTargetAccount
+    );
+    require!(
+        now >= queue_execute_after,
+        CustomError::GreenLabelTimelockNotSatisfied
+    );
+    require_keys_eq!(
+        refundable_vault_mint,
+        expected_usdc_mint,
+        CustomError::InvalidGreenLabelMint
+    );
+    require_keys_eq!(
+        refundable_vault_owner,
+        escrow_key,
+        CustomError::InvalidGreenLabelTokenAccount
+    );
+    require_keys_eq!(
+        provided_usdc_mint,
+        expected_usdc_mint,
+        CustomError::InvalidGreenLabelMint
+    );
+    require!(
+        usdc_decimals == GREEN_LABEL_USDC_DECIMALS,
+        CustomError::InvalidGreenLabelMint
+    );
+
+    let forfeit_amount = calculate_green_label_escrow_remaining_amount(
+        refundable_amount,
+        refunded_amount,
+        forfeited_amount,
+    )?;
+    require!(
+        forfeit_amount > 0,
+        CustomError::InvalidGreenLabelEscrowAmount
+    );
+    require!(
+        vault_balance >= forfeit_amount,
+        CustomError::GreenLabelInsufficientBondVaultBalance
+    );
+
+    Ok(forfeit_amount)
+}
+
+pub fn record_green_label_refundable_bond_deposit(
+    escrow: &mut GreenLabelRefundableEscrowV1,
+    amount: u64,
+    now: i64,
+) -> Result<()> {
+    escrow.deposited_amount = escrow
+        .deposited_amount
+        .checked_add(amount)
+        .ok_or(CustomError::GreenLabelMathOverflow)?;
+    escrow.refundable_amount = escrow
+        .refundable_amount
+        .checked_add(amount)
+        .ok_or(CustomError::GreenLabelMathOverflow)?;
+    if escrow.deposit_ts == 0 {
+        escrow.deposit_ts = now;
+    }
+
+    Ok(())
+}
+
+pub fn record_green_label_escrow_refunded(
+    escrow: &mut GreenLabelRefundableEscrowV1,
+    refund_amount: u64,
+) -> Result<()> {
+    escrow.refunded_amount = escrow
+        .refunded_amount
+        .checked_add(refund_amount)
+        .ok_or(CustomError::GreenLabelMathOverflow)?;
+    escrow.status = GreenLabelEscrowStatusV1::Refunded;
+
+    Ok(())
+}
+
+pub fn record_green_label_escrow_forfeited(
+    escrow: &mut GreenLabelRefundableEscrowV1,
+    forfeit_amount: u64,
+) -> Result<()> {
+    escrow.forfeited_amount = escrow
+        .forfeited_amount
+        .checked_add(forfeit_amount)
+        .ok_or(CustomError::GreenLabelMathOverflow)?;
+    escrow.status = GreenLabelEscrowStatusV1::Forfeited;
+
+    Ok(())
 }
 
 pub fn calculate_bond_tier(
@@ -4863,6 +6031,8 @@ mod tests {
             GREEN_LABEL_DISPUTE_SEED,
             GREEN_BOND_VAULT_SEED,
             GREEN_BOND_VAULT_AUTHORITY_SEED,
+            GREEN_LABEL_REFUNDABLE_ESCROW_SEED,
+            GREEN_LABEL_REFUNDABLE_VAULT_SEED,
         ];
 
         for seed in seeds {
@@ -4874,6 +6044,251 @@ mod tests {
                 assert_ne!(seed, other);
             }
         }
+    }
+
+    #[test]
+    fn escrow_remaining_amount_for_full_refundable_balance() {
+        let remaining = calculate_green_label_escrow_remaining_amount(100, 0, 0).unwrap();
+
+        assert_eq!(remaining, 100);
+    }
+
+    #[test]
+    fn escrow_remaining_amount_after_partial_refund() {
+        let remaining = calculate_green_label_escrow_remaining_amount(100, 20, 0).unwrap();
+
+        assert_eq!(remaining, 80);
+    }
+
+    #[test]
+    fn escrow_remaining_amount_after_full_forfeit_is_zero() {
+        let remaining = calculate_green_label_escrow_remaining_amount(100, 0, 100).unwrap();
+
+        assert_eq!(remaining, 0);
+    }
+
+    #[test]
+    fn escrow_refund_rejects_refunded_status() {
+        let err = validate_green_label_escrow_refund(
+            GreenLabelEscrowStatusV1::Refunded,
+            100,
+            0,
+            0,
+            10,
+            11,
+            Pubkey::default(),
+            ActionType::Noop,
+            0,
+            [0; 32],
+            Pubkey::new_from_array([1; 32]),
+            Pubkey::new_from_array([1; 32]),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::new_from_array([3; 32]),
+            Pubkey::new_from_array([3; 32]),
+            Pubkey::new_from_array([2; 32]),
+            GREEN_LABEL_USDC_DECIMALS,
+            100,
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelEscrowStatus");
+    }
+
+    #[test]
+    fn escrow_refund_allows_time_path_without_active_dispute() {
+        let amount = validate_green_label_escrow_refund(
+            GreenLabelEscrowStatusV1::Locked,
+            100,
+            0,
+            0,
+            10,
+            10,
+            Pubkey::default(),
+            ActionType::Noop,
+            0,
+            [0; 32],
+            Pubkey::new_from_array([1; 32]),
+            Pubkey::new_from_array([1; 32]),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::new_from_array([3; 32]),
+            Pubkey::new_from_array([3; 32]),
+            Pubkey::new_from_array([2; 32]),
+            GREEN_LABEL_USDC_DECIMALS,
+            100,
+        )
+        .unwrap();
+
+        assert_eq!(amount, 100);
+    }
+
+    #[test]
+    fn escrow_refund_allows_linked_refund_decision_path() {
+        let amount = validate_green_label_escrow_refund(
+            GreenLabelEscrowStatusV1::Locked,
+            100,
+            0,
+            0,
+            100,
+            10,
+            Pubkey::new_from_array([9; 32]),
+            ActionType::GreenLabelRefund,
+            1,
+            [8; 32],
+            Pubkey::new_from_array([1; 32]),
+            Pubkey::new_from_array([1; 32]),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::new_from_array([3; 32]),
+            Pubkey::new_from_array([3; 32]),
+            Pubkey::new_from_array([2; 32]),
+            GREEN_LABEL_USDC_DECIMALS,
+            100,
+        )
+        .unwrap();
+
+        assert_eq!(amount, 100);
+    }
+
+    #[test]
+    fn escrow_refund_rejects_active_dispute_without_refund_decision() {
+        let err = validate_green_label_escrow_refund(
+            GreenLabelEscrowStatusV1::Locked,
+            100,
+            0,
+            0,
+            10,
+            11,
+            Pubkey::new_from_array([9; 32]),
+            ActionType::Noop,
+            0,
+            [0; 32],
+            Pubkey::new_from_array([1; 32]),
+            Pubkey::new_from_array([1; 32]),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::new_from_array([3; 32]),
+            Pubkey::new_from_array([3; 32]),
+            Pubkey::new_from_array([2; 32]),
+            GREEN_LABEL_USDC_DECIMALS,
+            100,
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelEscrowRefund");
+    }
+
+    #[test]
+    fn escrow_forfeit_rejects_time_only_without_slash_decision() {
+        let err = validate_green_label_escrow_forfeit_to_treasury(
+            false,
+            GreenLabelStatus::PendingObservation,
+            Pubkey::default(),
+            Pubkey::new_from_array([9; 32]),
+            0,
+            Pubkey::default(),
+            Pubkey::default(),
+            [0; 32],
+            ActionType::Noop,
+            Pubkey::new_from_array([4; 32]),
+            Pubkey::new_from_array([4; 32]),
+            DisputeStatus::ReadyForDecision,
+            0,
+            Pubkey::default(),
+            Pubkey::default(),
+            [0; 32],
+            ActionType::Noop,
+            Pubkey::default(),
+            0,
+            ProposalDecision::Pending,
+            Pubkey::default(),
+            0,
+            ExecutionStatus::Queued,
+            ActionType::Noop,
+            [0; 32],
+            crate::ID,
+            crate::ID,
+            Pubkey::new_from_array([9; 32]),
+            Pubkey::new_from_array([9; 32]),
+            100,
+            0,
+            GreenLabelEscrowStatusV1::Locked,
+            100,
+            0,
+            0,
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::new_from_array([3; 32]),
+            Pubkey::new_from_array([3; 32]),
+            Pubkey::new_from_array([2; 32]),
+            GREEN_LABEL_USDC_DECIMALS,
+            100,
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "InvalidGreenLabelStatus");
+    }
+
+    #[test]
+    fn escrow_forfeit_accepts_linked_slash_decision_path() {
+        let project_key = Pubkey::new_from_array([4; 32]);
+        let dispute_key = Pubkey::new_from_array([9; 32]);
+        let proposal_decision_key = Pubkey::new_from_array([5; 32]);
+        let queue_key = Pubkey::new_from_array([6; 32]);
+        let payload_hash = [7; 32];
+
+        let amount = validate_green_label_escrow_forfeit_to_treasury(
+            false,
+            GreenLabelStatus::SlashQueued,
+            dispute_key,
+            dispute_key,
+            1,
+            proposal_decision_key,
+            queue_key,
+            payload_hash,
+            ActionType::GreenLabelSlash,
+            project_key,
+            project_key,
+            DisputeStatus::DecisionQueued,
+            1,
+            proposal_decision_key,
+            queue_key,
+            payload_hash,
+            ActionType::GreenLabelSlash,
+            proposal_decision_key,
+            1,
+            ProposalDecision::Approved,
+            queue_key,
+            1,
+            ExecutionStatus::Queued,
+            ActionType::GreenLabelSlash,
+            payload_hash,
+            crate::ID,
+            crate::ID,
+            dispute_key,
+            dispute_key,
+            100,
+            50,
+            GreenLabelEscrowStatusV1::Locked,
+            100,
+            0,
+            0,
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::new_from_array([3; 32]),
+            Pubkey::new_from_array([3; 32]),
+            Pubkey::new_from_array([2; 32]),
+            GREEN_LABEL_USDC_DECIMALS,
+            100,
+        )
+        .unwrap();
+
+        assert_eq!(amount, 100);
     }
 
     fn green_label_config() -> GreenLabelConfigV1 {
