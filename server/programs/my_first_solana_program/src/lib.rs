@@ -148,6 +148,18 @@ pub mod my_first_solana_program {
         )
     }
 
+    pub fn initialize_governance_proposal_with_action_v1(
+        ctx: Context<InitializeGovernanceProposalWithActionV1>,
+        proposal_id: u64,
+        request: GovernanceActionRequestV1,
+    ) -> Result<()> {
+        instructions::governance_v1::initialize_governance_proposal_with_action_v1_handler(
+            ctx,
+            proposal_id,
+            request,
+        )
+    }
+
     pub fn initialize_governance_position_v1(
         ctx: Context<InitializeGovernancePositionV1>,
     ) -> Result<()> {

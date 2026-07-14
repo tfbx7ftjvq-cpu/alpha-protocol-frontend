@@ -2,9 +2,13 @@ use anchor_lang::prelude::*;
 
 use crate::error::CustomError;
 use crate::instructions::contributor_v1::hash_contributor_payload;
-use crate::state::{ActionType, GovernanceActionTypeV1, GovernancePayloadV1, ProtocolModuleIdV1};
+use crate::state::{
+    ActionType, GovernanceActionRequestV1, GovernanceActionTypeV1, GovernancePayloadV1,
+    GovernanceProposalTypeV1, ProtocolModuleIdV1,
+};
 
 pub const GOVERNANCE_PAYLOAD_V1_SCHEMA_VERSION: u8 = 1;
+pub const GOVERNANCE_PROPOSAL_ACTION_V1_SCHEMA_VERSION: u16 = 1;
 pub const GOVERNANCE_PAYLOAD_V1_DOMAIN_SEPARATOR: &[u8] = b"alpha_governance_payload_v1";
 pub const GOVERNANCE_PAYLOAD_V1_DOMAIN_SEPARATOR_BYTES: [u8; 27] = *b"alpha_governance_payload_v1";
 
@@ -12,6 +16,61 @@ pub const GOVERNANCE_PAYLOAD_V1_DOMAIN_SEPARATOR_BYTES: [u8; 27] = *b"alpha_gove
 pub struct GovernancePayloadHashEnvelopeV1 {
     pub domain_separator: [u8; 27],
     pub payload: GovernancePayloadV1,
+}
+
+pub fn governance_action_stable_code_v1(action_type: GovernanceActionTypeV1) -> u8 {
+    match action_type {
+        GovernanceActionTypeV1::TreasuryUpdateRevenueSplit => 0,
+        GovernanceActionTypeV1::TreasuryApproveSpending => 1,
+        GovernanceActionTypeV1::TreasuryApproveBuilderPayout => 2,
+        GovernanceActionTypeV1::GreenLabelApproveCertification => 3,
+        GovernanceActionTypeV1::GreenLabelRejectCertification => 4,
+        GovernanceActionTypeV1::GreenLabelRevokeCertification => 5,
+        GovernanceActionTypeV1::GreenLabelRefundBond => 6,
+        GovernanceActionTypeV1::GreenLabelSlashBond => 7,
+        GovernanceActionTypeV1::VictimReliefApproveCompensation => 8,
+        GovernanceActionTypeV1::VictimReliefRejectClaim => 9,
+        GovernanceActionTypeV1::VictimReliefUpdatePolicy => 10,
+        GovernanceActionTypeV1::ScamRegistryPublishReport => 11,
+        GovernanceActionTypeV1::ScamRegistryRemoveReport => 12,
+        GovernanceActionTypeV1::ScamRegistryAppealDecision => 13,
+        GovernanceActionTypeV1::ContributorAdd => 14,
+        GovernanceActionTypeV1::ContributorRemove => 15,
+        GovernanceActionTypeV1::ContributorUpdateRole => 16,
+        GovernanceActionTypeV1::ContributorApproveMilestone => 17,
+        GovernanceActionTypeV1::ContributorApprovePayout => 18,
+        GovernanceActionTypeV1::ProtocolUpdateParameter => 19,
+        GovernanceActionTypeV1::ProtocolUpgradeProgram => 20,
+        GovernanceActionTypeV1::ProtocolEmergencyAction => 21,
+    }
+}
+
+pub fn governance_action_from_stable_code_v1(code: u8) -> Result<GovernanceActionTypeV1> {
+    match code {
+        0 => Ok(GovernanceActionTypeV1::TreasuryUpdateRevenueSplit),
+        1 => Ok(GovernanceActionTypeV1::TreasuryApproveSpending),
+        2 => Ok(GovernanceActionTypeV1::TreasuryApproveBuilderPayout),
+        3 => Ok(GovernanceActionTypeV1::GreenLabelApproveCertification),
+        4 => Ok(GovernanceActionTypeV1::GreenLabelRejectCertification),
+        5 => Ok(GovernanceActionTypeV1::GreenLabelRevokeCertification),
+        6 => Ok(GovernanceActionTypeV1::GreenLabelRefundBond),
+        7 => Ok(GovernanceActionTypeV1::GreenLabelSlashBond),
+        8 => Ok(GovernanceActionTypeV1::VictimReliefApproveCompensation),
+        9 => Ok(GovernanceActionTypeV1::VictimReliefRejectClaim),
+        10 => Ok(GovernanceActionTypeV1::VictimReliefUpdatePolicy),
+        11 => Ok(GovernanceActionTypeV1::ScamRegistryPublishReport),
+        12 => Ok(GovernanceActionTypeV1::ScamRegistryRemoveReport),
+        13 => Ok(GovernanceActionTypeV1::ScamRegistryAppealDecision),
+        14 => Ok(GovernanceActionTypeV1::ContributorAdd),
+        15 => Ok(GovernanceActionTypeV1::ContributorRemove),
+        16 => Ok(GovernanceActionTypeV1::ContributorUpdateRole),
+        17 => Ok(GovernanceActionTypeV1::ContributorApproveMilestone),
+        18 => Ok(GovernanceActionTypeV1::ContributorApprovePayout),
+        19 => Ok(GovernanceActionTypeV1::ProtocolUpdateParameter),
+        20 => Ok(GovernanceActionTypeV1::ProtocolUpgradeProgram),
+        21 => Ok(GovernanceActionTypeV1::ProtocolEmergencyAction),
+        _ => err!(CustomError::InvalidGovernanceActionCode),
+    }
 }
 
 pub fn map_governance_action_to_security_action(
@@ -67,6 +126,41 @@ pub fn map_governance_action_to_security_action(
     }
 }
 
+pub fn map_governance_action_to_governance_proposal_type_v1(
+    action_type: GovernanceActionTypeV1,
+) -> GovernanceProposalTypeV1 {
+    match action_type {
+        GovernanceActionTypeV1::TreasuryUpdateRevenueSplit
+        | GovernanceActionTypeV1::TreasuryApproveSpending
+        | GovernanceActionTypeV1::TreasuryApproveBuilderPayout => {
+            GovernanceProposalTypeV1::Treasury
+        }
+        GovernanceActionTypeV1::GreenLabelApproveCertification
+        | GovernanceActionTypeV1::GreenLabelRejectCertification
+        | GovernanceActionTypeV1::GreenLabelRevokeCertification
+        | GovernanceActionTypeV1::GreenLabelRefundBond
+        | GovernanceActionTypeV1::GreenLabelSlashBond => GovernanceProposalTypeV1::GreenLabel,
+        GovernanceActionTypeV1::VictimReliefApproveCompensation
+        | GovernanceActionTypeV1::VictimReliefRejectClaim
+        | GovernanceActionTypeV1::VictimReliefUpdatePolicy => {
+            GovernanceProposalTypeV1::VictimRelief
+        }
+        GovernanceActionTypeV1::ScamRegistryPublishReport
+        | GovernanceActionTypeV1::ScamRegistryRemoveReport
+        | GovernanceActionTypeV1::ScamRegistryAppealDecision => {
+            GovernanceProposalTypeV1::ScamRegistry
+        }
+        GovernanceActionTypeV1::ContributorAdd
+        | GovernanceActionTypeV1::ContributorRemove
+        | GovernanceActionTypeV1::ContributorUpdateRole
+        | GovernanceActionTypeV1::ContributorApproveMilestone
+        | GovernanceActionTypeV1::ContributorApprovePayout => GovernanceProposalTypeV1::Contributor,
+        GovernanceActionTypeV1::ProtocolUpdateParameter => GovernanceProposalTypeV1::Parameter,
+        GovernanceActionTypeV1::ProtocolUpgradeProgram => GovernanceProposalTypeV1::Upgrade,
+        GovernanceActionTypeV1::ProtocolEmergencyAction => GovernanceProposalTypeV1::Emergency,
+    }
+}
+
 pub fn map_governance_action_to_module(action_type: GovernanceActionTypeV1) -> ProtocolModuleIdV1 {
     match action_type {
         GovernanceActionTypeV1::TreasuryUpdateRevenueSplit
@@ -92,6 +186,44 @@ pub fn map_governance_action_to_module(action_type: GovernanceActionTypeV1) -> P
         | GovernanceActionTypeV1::ProtocolUpgradeProgram
         | GovernanceActionTypeV1::ProtocolEmergencyAction => ProtocolModuleIdV1::Protocol,
     }
+}
+
+pub fn governance_payload_from_action_request_v1(
+    request: &GovernanceActionRequestV1,
+    created_at: i64,
+) -> Result<GovernancePayloadV1> {
+    require!(
+        request.schema_version == GOVERNANCE_PROPOSAL_ACTION_V1_SCHEMA_VERSION,
+        CustomError::InvalidGovernancePayloadSchema
+    );
+    require!(
+        request.module_id == map_governance_action_to_module(request.action_type),
+        CustomError::GovernanceActionModuleMismatch
+    );
+    require_keys_eq!(
+        request.target_program,
+        crate::ID,
+        CustomError::GovernanceActionTargetMismatch
+    );
+    require!(
+        request.target_account != Pubkey::default(),
+        CustomError::GovernanceActionTargetMismatch
+    );
+    require!(
+        request.parameters_hash != [0u8; 32],
+        CustomError::InvalidGovernanceProposal
+    );
+
+    Ok(GovernancePayloadV1 {
+        schema_version: GOVERNANCE_PAYLOAD_V1_SCHEMA_VERSION,
+        action_type: request.action_type,
+        module_id: request.module_id,
+        target_program: request.target_program,
+        target_account: request.target_account,
+        parameters_hash: request.parameters_hash,
+        evidence_hash: request.evidence_hash,
+        created_at,
+    })
 }
 
 pub fn validate_governance_action_target(
@@ -150,6 +282,7 @@ pub fn hash_governance_payload_v1(payload: &GovernancePayloadV1) -> Result<[u8; 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
 
     const PROGRAM: Pubkey = Pubkey::new_from_array([1; 32]);
     const ACCOUNT: Pubkey = Pubkey::new_from_array([2; 32]);
@@ -195,12 +328,94 @@ mod tests {
     }
 
     #[test]
+    fn governance_action_stable_codes_are_unique_and_append_only_snapshot() {
+        let mut codes = BTreeSet::new();
+        for action_type in ALL_ACTIONS {
+            assert!(codes.insert(governance_action_stable_code_v1(action_type)));
+        }
+        assert_eq!(codes.len(), ALL_ACTIONS.len());
+        assert_eq!(
+            ALL_ACTIONS.map(governance_action_stable_code_v1),
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+        );
+    }
+
+    #[test]
+    fn governance_action_stable_code_roundtrips() {
+        for action_type in ALL_ACTIONS {
+            let code = governance_action_stable_code_v1(action_type);
+            assert_eq!(
+                governance_action_from_stable_code_v1(code).unwrap(),
+                action_type
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_governance_action_stable_code_is_rejected() {
+        let err = governance_action_from_stable_code_v1(200).unwrap_err();
+        assert_eq!(err, CustomError::InvalidGovernanceActionCode.into());
+    }
+
+    #[test]
     fn all_governance_actions_have_module_mapping() {
         for action_type in ALL_ACTIONS {
             let module_id = map_governance_action_to_module(action_type);
             validate_governance_action_target(action_type, module_id, PROGRAM, ACCOUNT, [9; 32])
                 .unwrap();
         }
+    }
+
+    #[test]
+    fn governance_action_maps_to_governance_proposal_category() {
+        assert_eq!(
+            map_governance_action_to_governance_proposal_type_v1(
+                GovernanceActionTypeV1::TreasuryApproveSpending
+            ),
+            GovernanceProposalTypeV1::Treasury
+        );
+        assert_eq!(
+            map_governance_action_to_governance_proposal_type_v1(
+                GovernanceActionTypeV1::ContributorApprovePayout
+            ),
+            GovernanceProposalTypeV1::Contributor
+        );
+        assert_eq!(
+            map_governance_action_to_governance_proposal_type_v1(
+                GovernanceActionTypeV1::GreenLabelSlashBond
+            ),
+            GovernanceProposalTypeV1::GreenLabel
+        );
+        assert_eq!(
+            map_governance_action_to_governance_proposal_type_v1(
+                GovernanceActionTypeV1::VictimReliefApproveCompensation
+            ),
+            GovernanceProposalTypeV1::VictimRelief
+        );
+        assert_eq!(
+            map_governance_action_to_governance_proposal_type_v1(
+                GovernanceActionTypeV1::ScamRegistryPublishReport
+            ),
+            GovernanceProposalTypeV1::ScamRegistry
+        );
+        assert_eq!(
+            map_governance_action_to_governance_proposal_type_v1(
+                GovernanceActionTypeV1::ProtocolUpdateParameter
+            ),
+            GovernanceProposalTypeV1::Parameter
+        );
+        assert_eq!(
+            map_governance_action_to_governance_proposal_type_v1(
+                GovernanceActionTypeV1::ProtocolUpgradeProgram
+            ),
+            GovernanceProposalTypeV1::Upgrade
+        );
+        assert_eq!(
+            map_governance_action_to_governance_proposal_type_v1(
+                GovernanceActionTypeV1::ProtocolEmergencyAction
+            ),
+            GovernanceProposalTypeV1::Emergency
+        );
     }
 
     #[test]

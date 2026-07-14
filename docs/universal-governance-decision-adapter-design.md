@@ -46,19 +46,15 @@ It does not execute Treasury, Green Label, relief, scam registry, contributor pa
 
 ## 3. Adapter Lifecycle
 
-1. A governance proposal is created with:
-   - `proposal_id`
-   - `action_type`
-   - `target_program`
-   - `target_account`
-   - `payload_hash`
-2. A snapshot is created.
-3. voters cast votes.
-4. the vote is finalized.
-5. if quorum and approval threshold pass, the proposal becomes `Passed`.
-6. anyone may call `create_governance_decision_adapter_v1`.
-7. the program verifies the proposal and snapshot.
-8. the program creates:
+1. A governance proposal is created with `initialize_governance_proposal_with_action_v1`.
+2. The same transaction creates immutable `GovernanceProposalActionV1`.
+3. A snapshot is created only if the proposal action sidecar exists and matches the proposal.
+4. voters cast votes.
+5. the vote is finalized.
+6. if quorum and approval threshold pass, the proposal becomes `Passed`.
+7. anyone may call `create_governance_decision_adapter_v1`.
+8. the program verifies the proposal, sidecar, and snapshot.
+9. the program creates:
    - `UniversalGovernanceDecisionAdapterV1`
    - `ProposalDecisionV1`
 
@@ -77,14 +73,17 @@ One passed governance proposal can create only one adapter account.
 
 The adapter does not allow the caller to supply execution intent again.
 
-The following fields are read from `GovernanceProposalV1`:
+The following fields are read from `GovernanceProposalActionV1`:
 
-- `action_type`
+- `GovernanceActionTypeV1`
+- `ProtocolModuleIdV1`
 - `target_program`
 - `target_account`
-- `payload_hash`
+- `canonical_payload_hash`
 
-They are copied into `UniversalGovernanceDecisionAdapterV1`.
+The adapter maps `GovernanceActionTypeV1` to Security `ActionType` and Security `ProposalType` through exhaustive helper functions.
+
+`GovernanceProposalV1.action_type` remains only a compatibility mirror. It must match the sidecar stable action code, but it is not the adapter's trusted source.
 
 This preserves:
 
@@ -102,9 +101,16 @@ The next phase should add a queue adapter that creates `ExecutionQueueItemV1` fr
 - snapshot is finalized
 - proposal snapshot matches the provided snapshot
 - snapshot proposal matches the governance proposal
+- `GovernanceProposalActionV1` exists
+- sidecar proposal id and proposer match `GovernanceProposalV1`
+- sidecar stable action code matches the proposal mirror field
+- sidecar module id matches the action mapping
+- proposal type matches the action category
+- sidecar target mirrors match proposal target fields
+- canonical payload hash recomputes from sidecar fields
+- target program is the current Alpha Protocol Program ID
 - proposal weights match finalized snapshot weights
-- quorum still satisfies `GovernanceVotingConfigV1`
-- approval threshold still satisfies `GovernanceVotingConfigV1`
+- quorum and approval threshold still satisfy the shared proposal-type threshold helper
 - payload hash is non-zero
 - target program and target account are non-zero
 - Security Layer proposal id sequence is preserved
@@ -174,4 +180,6 @@ The adapter should continue to preserve the invariant:
 DAO-voted payload hash == Security execution payload hash
 ```
 
-This phase does not change adapter execution behavior. It only defines the shared action language and canonical payload hash model that the adapter should consume in a later phase.
+Phase 2E-FINAL Stage 2 implements the typed binding: adapter creation now consumes `GovernanceProposalActionV1` and rejects legacy proposals without a sidecar.
+
+Module Registry, Treasury transfers, Relief / Scam Registry business accounts, and Mainnet authority migration remain out of scope.

@@ -9,14 +9,21 @@ use crate::constants::{
     GOVERNANCE_LOCK_CONFIG_V1_SEED, GOVERNANCE_MAX_LOCK_DURATION_SECONDS,
     GOVERNANCE_MAX_TIME_MULTIPLIER_BPS, GOVERNANCE_MIN_LOCK_DURATION_SECONDS,
     GOVERNANCE_POSITION_V1_SEED, GOVERNANCE_POSITION_VOTE_LOCK_V1_SEED,
-    GOVERNANCE_POWER_STATE_V1_SEED, GOVERNANCE_PROPOSAL_V1_SEED, GOVERNANCE_SNAPSHOT_V1_SEED,
-    GOVERNANCE_VAULT_V1_SEED, GOVERNANCE_VOTING_CONFIG_V1_SEED, LOCK_180_DAYS_SECONDS,
-    LOCK_30_DAYS_SECONDS, LOCK_365_DAYS_SECONDS, LOCK_90_DAYS_SECONDS, VOTE_RECORD_V1_SEED,
+    GOVERNANCE_POWER_STATE_V1_SEED, GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+    GOVERNANCE_PROPOSAL_V1_SEED, GOVERNANCE_SNAPSHOT_V1_SEED, GOVERNANCE_VAULT_V1_SEED,
+    GOVERNANCE_VOTING_CONFIG_V1_SEED, LOCK_180_DAYS_SECONDS, LOCK_30_DAYS_SECONDS,
+    LOCK_365_DAYS_SECONDS, LOCK_90_DAYS_SECONDS, VOTE_RECORD_V1_SEED,
 };
 use crate::error::CustomError;
+use crate::instructions::governance_action_v1::{
+    governance_action_stable_code_v1, governance_payload_from_action_request_v1,
+    hash_governance_payload_v1, map_governance_action_to_governance_proposal_type_v1,
+    map_governance_action_to_module,
+};
 use crate::state::{
-    GovernanceLockConfigV1, GovernancePositionStatusV1, GovernancePositionV1,
-    GovernancePositionVoteLockV1, GovernancePowerStateV1, GovernanceProposalStatusV1,
+    GovernanceActionRequestV1, GovernanceLockConfigV1, GovernancePayloadV1,
+    GovernancePositionStatusV1, GovernancePositionV1, GovernancePositionVoteLockV1,
+    GovernancePowerStateV1, GovernanceProposalActionV1, GovernanceProposalStatusV1,
     GovernanceProposalTypeV1, GovernanceProposalV1, GovernanceSnapshotV1, GovernanceVotingConfigV1,
     VoteChoiceV1, VoteRecordV1,
 };
@@ -89,6 +96,36 @@ pub struct InitializeGovernanceProposalV1<'info> {
         bump
     )]
     pub governance_proposal: Account<'info, GovernanceProposalV1>,
+
+    #[account(mut)]
+    pub proposer: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(proposal_id: u64)]
+pub struct InitializeGovernanceProposalWithActionV1<'info> {
+    #[account(
+        init,
+        payer = proposer,
+        space = 8 + GovernanceProposalV1::INIT_SPACE,
+        seeds = [GOVERNANCE_PROPOSAL_V1_SEED, &proposal_id.to_le_bytes()],
+        bump
+    )]
+    pub governance_proposal: Account<'info, GovernanceProposalV1>,
+
+    #[account(
+        init,
+        payer = proposer,
+        space = 8 + GovernanceProposalActionV1::INIT_SPACE,
+        seeds = [
+            GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump
+    )]
+    pub governance_proposal_action: Account<'info, GovernanceProposalActionV1>,
 
     #[account(mut)]
     pub proposer: Signer<'info>,
@@ -311,6 +348,15 @@ pub struct CreateGovernanceSnapshotV1<'info> {
     pub governance_proposal: Account<'info, GovernanceProposalV1>,
 
     #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_proposal_action.bump
+    )]
+    pub governance_proposal_action: Account<'info, GovernanceProposalActionV1>,
+
+    #[account(
         init,
         payer = proposer,
         space = 8 + GovernanceSnapshotV1::INIT_SPACE,
@@ -496,6 +542,26 @@ pub fn initialize_governance_proposal_v1_handler(
     )
 }
 
+pub fn initialize_governance_proposal_with_action_v1_handler(
+    ctx: Context<InitializeGovernanceProposalWithActionV1>,
+    proposal_id: u64,
+    request: GovernanceActionRequestV1,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let proposal_key = ctx.accounts.governance_proposal.key();
+    record_governance_proposal_with_action_init(
+        &mut ctx.accounts.governance_proposal,
+        &mut ctx.accounts.governance_proposal_action,
+        proposal_key,
+        proposal_id,
+        ctx.accounts.proposer.key(),
+        &request,
+        now,
+        ctx.bumps.governance_proposal,
+        ctx.bumps.governance_proposal_action,
+    )
+}
+
 pub fn initialize_governance_position_v1_handler(
     ctx: Context<InitializeGovernancePositionV1>,
 ) -> Result<()> {
@@ -611,6 +677,7 @@ pub fn create_governance_snapshot_v1_handler(
     let snapshot_key = ctx.accounts.governance_snapshot.key();
     record_governance_snapshot_create(
         &mut ctx.accounts.governance_proposal,
+        &ctx.accounts.governance_proposal_action,
         &mut ctx.accounts.governance_snapshot,
         &ctx.accounts.governance_voting_config,
         &ctx.accounts.governance_power_state,
@@ -875,6 +942,152 @@ pub fn record_governance_proposal_init(
     governance_proposal.abstain_weight = 0;
     governance_proposal.finalized_at = 0;
     governance_proposal.bump = bump;
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn record_governance_proposal_with_action_init(
+    governance_proposal: &mut GovernanceProposalV1,
+    governance_proposal_action: &mut GovernanceProposalActionV1,
+    governance_proposal_key: Pubkey,
+    proposal_id: u64,
+    proposer: Pubkey,
+    request: &GovernanceActionRequestV1,
+    created_at: i64,
+    proposal_bump: u8,
+    action_bump: u8,
+) -> Result<()> {
+    require!(
+        governance_proposal_action.governance_proposal == Pubkey::default(),
+        CustomError::GovernanceProposalActionMismatch
+    );
+
+    let payload = governance_payload_from_action_request_v1(request, created_at)?;
+    let canonical_payload_hash = hash_governance_payload_v1(&payload)?;
+    let proposal_type = map_governance_action_to_governance_proposal_type_v1(request.action_type);
+    let action_code = governance_action_stable_code_v1(request.action_type);
+
+    record_governance_proposal_init(
+        governance_proposal,
+        proposal_id,
+        proposer,
+        proposal_type,
+        action_code,
+        request.target_program,
+        request.target_account,
+        canonical_payload_hash,
+        0,
+        0,
+        created_at,
+        proposal_bump,
+    )?;
+
+    governance_proposal_action.governance_proposal = governance_proposal_key;
+    governance_proposal_action.proposal_id = proposal_id;
+    governance_proposal_action.proposer = proposer;
+    governance_proposal_action.action_type = request.action_type;
+    governance_proposal_action.module_id = request.module_id;
+    governance_proposal_action.target_program = request.target_program;
+    governance_proposal_action.target_account = request.target_account;
+    governance_proposal_action.parameters_hash = request.parameters_hash;
+    governance_proposal_action.evidence_hash = request.evidence_hash;
+    governance_proposal_action.canonical_payload_hash = canonical_payload_hash;
+    governance_proposal_action.schema_version = request.schema_version;
+    governance_proposal_action.created_at = created_at;
+    governance_proposal_action.bump = action_bump;
+
+    Ok(())
+}
+
+pub fn validate_governance_proposal_action_v1(
+    governance_proposal: &GovernanceProposalV1,
+    governance_proposal_action: &GovernanceProposalActionV1,
+    governance_proposal_key: Pubkey,
+) -> Result<()> {
+    require!(
+        governance_proposal_action.governance_proposal != Pubkey::default(),
+        CustomError::GovernanceProposalActionMissing
+    );
+    require_keys_eq!(
+        governance_proposal_action.governance_proposal,
+        governance_proposal_key,
+        CustomError::GovernanceProposalActionMismatch
+    );
+    require!(
+        governance_proposal_action.proposal_id == governance_proposal.proposal_id,
+        CustomError::GovernanceProposalActionMismatch
+    );
+    require_keys_eq!(
+        governance_proposal_action.proposer,
+        governance_proposal.proposer,
+        CustomError::GovernanceProposalActionMismatch
+    );
+    require!(
+        governance_proposal_action.schema_version == 1,
+        CustomError::InvalidGovernancePayloadSchema
+    );
+
+    let expected_module = map_governance_action_to_module(governance_proposal_action.action_type);
+    require!(
+        governance_proposal_action.module_id == expected_module,
+        CustomError::GovernanceActionModuleMismatch
+    );
+    require!(
+        governance_proposal.action_type
+            == governance_action_stable_code_v1(governance_proposal_action.action_type),
+        CustomError::InvalidGovernanceActionCode
+    );
+    require!(
+        governance_proposal.proposal_type
+            == map_governance_action_to_governance_proposal_type_v1(
+                governance_proposal_action.action_type
+            ),
+        CustomError::GovernanceProposalActionMismatch
+    );
+    require_keys_eq!(
+        governance_proposal.target_program,
+        governance_proposal_action.target_program,
+        CustomError::GovernanceActionTargetMismatch
+    );
+    require_keys_eq!(
+        governance_proposal.target_account,
+        governance_proposal_action.target_account,
+        CustomError::GovernanceActionTargetMismatch
+    );
+    require!(
+        governance_proposal.payload_hash == governance_proposal_action.canonical_payload_hash,
+        CustomError::GovernanceProposalActionMismatch
+    );
+    require_keys_eq!(
+        governance_proposal_action.target_program,
+        crate::ID,
+        CustomError::GovernanceActionTargetMismatch
+    );
+    require!(
+        governance_proposal_action.target_account != Pubkey::default(),
+        CustomError::GovernanceActionTargetMismatch
+    );
+    require!(
+        governance_proposal_action.parameters_hash != [0u8; 32],
+        CustomError::InvalidGovernanceProposal
+    );
+
+    let payload = GovernancePayloadV1 {
+        schema_version: 1,
+        action_type: governance_proposal_action.action_type,
+        module_id: governance_proposal_action.module_id,
+        target_program: governance_proposal_action.target_program,
+        target_account: governance_proposal_action.target_account,
+        parameters_hash: governance_proposal_action.parameters_hash,
+        evidence_hash: governance_proposal_action.evidence_hash,
+        created_at: governance_proposal_action.created_at,
+    };
+    let canonical_payload_hash = hash_governance_payload_v1(&payload)?;
+    require!(
+        canonical_payload_hash == governance_proposal_action.canonical_payload_hash,
+        CustomError::GovernanceProposalActionMismatch
+    );
 
     Ok(())
 }
@@ -1218,6 +1431,7 @@ pub fn record_governance_snapshot_init(
 
 pub fn record_governance_snapshot_create(
     governance_proposal: &mut GovernanceProposalV1,
+    governance_proposal_action: &GovernanceProposalActionV1,
     governance_snapshot: &mut GovernanceSnapshotV1,
     governance_voting_config: &GovernanceVotingConfigV1,
     governance_power_state: &GovernancePowerStateV1,
@@ -1234,6 +1448,11 @@ pub fn record_governance_snapshot_create(
         governance_proposal.snapshot == Pubkey::default(),
         CustomError::InvalidGovernanceSnapshot
     );
+    validate_governance_proposal_action_v1(
+        governance_proposal,
+        governance_proposal_action,
+        proposal_key,
+    )?;
     require!(
         governance_power_state.total_voting_power > 0,
         CustomError::InvalidGovernanceSnapshot
@@ -1471,6 +1690,12 @@ pub fn governance_threshold_policy_for_proposal_type(
             quorum_bps: 1_500,
             approval_threshold_bps: 7_500,
         },
+        GovernanceProposalTypeV1::GreenLabel
+        | GovernanceProposalTypeV1::VictimRelief
+        | GovernanceProposalTypeV1::ScamRegistry => GovernanceThresholdPolicyV1 {
+            quorum_bps: 1_000,
+            approval_threshold_bps: 6_667,
+        },
     }
 }
 
@@ -1571,6 +1796,7 @@ pub fn record_vote_record_init(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::{GovernanceActionTypeV1, ProtocolModuleIdV1};
 
     const PROPOSAL_ID: u64 = 7;
     const PROPOSER: Pubkey = Pubkey::new_from_array([1; 32]);
@@ -1631,6 +1857,57 @@ mod tests {
             finalized_at: 0,
             bump: 0,
         }
+    }
+
+    fn default_action_request(action_type: GovernanceActionTypeV1) -> GovernanceActionRequestV1 {
+        GovernanceActionRequestV1 {
+            schema_version: 1,
+            action_type,
+            module_id: map_governance_action_to_module(action_type),
+            target_program: crate::ID,
+            target_account: TARGET_ACCOUNT,
+            parameters_hash: PAYLOAD_HASH,
+            evidence_hash: [0; 32],
+        }
+    }
+
+    fn default_proposal_action() -> GovernanceProposalActionV1 {
+        GovernanceProposalActionV1 {
+            governance_proposal: Pubkey::default(),
+            proposal_id: 0,
+            proposer: Pubkey::default(),
+            action_type: GovernanceActionTypeV1::ContributorAdd,
+            module_id: ProtocolModuleIdV1::Contributor,
+            target_program: Pubkey::default(),
+            target_account: Pubkey::default(),
+            parameters_hash: [0; 32],
+            evidence_hash: [0; 32],
+            canonical_payload_hash: [0; 32],
+            schema_version: 0,
+            created_at: 0,
+            bump: 0,
+        }
+    }
+
+    fn strict_proposal_and_action(
+        action_type: GovernanceActionTypeV1,
+    ) -> (GovernanceProposalV1, GovernanceProposalActionV1) {
+        let mut proposal = default_proposal();
+        let mut action = default_proposal_action();
+        let request = default_action_request(action_type);
+        record_governance_proposal_with_action_init(
+            &mut proposal,
+            &mut action,
+            PROPOSAL_KEY,
+            PROPOSAL_ID,
+            PROPOSER,
+            &request,
+            80,
+            1,
+            2,
+        )
+        .unwrap();
+        (proposal, action)
     }
 
     fn default_position() -> GovernancePositionV1 {
@@ -1728,26 +2005,13 @@ mod tests {
     fn voting_proposal_and_snapshot(
         total_voting_power: u64,
     ) -> (GovernanceProposalV1, GovernanceSnapshotV1) {
-        let mut proposal = default_proposal();
-        record_governance_proposal_init(
-            &mut proposal,
-            PROPOSAL_ID,
-            PROPOSER,
-            GovernanceProposalTypeV1::Contributor,
-            3,
-            TARGET_PROGRAM,
-            TARGET_ACCOUNT,
-            PAYLOAD_HASH,
-            0,
-            0,
-            80,
-            1,
-        )
-        .unwrap();
+        let (mut proposal, action) =
+            strict_proposal_and_action(GovernanceActionTypeV1::ContributorAdd);
         let mut snapshot = blank_snapshot();
         let power_state = power_state_with_total(total_voting_power);
         record_governance_snapshot_create(
             &mut proposal,
+            &action,
             &mut snapshot,
             &default_voting_config(),
             &power_state,
@@ -1897,7 +2161,141 @@ mod tests {
     }
 
     #[test]
-    fn create_governance_snapshot_sets_proposal_voting() {
+    fn initialize_governance_proposal_with_action_sets_sidecar_and_mirrors() {
+        let (proposal, action) =
+            strict_proposal_and_action(GovernanceActionTypeV1::TreasuryApproveSpending);
+
+        assert_eq!(proposal.proposal_type, GovernanceProposalTypeV1::Treasury);
+        assert_eq!(
+            proposal.action_type,
+            governance_action_stable_code_v1(GovernanceActionTypeV1::TreasuryApproveSpending)
+        );
+        assert_eq!(proposal.target_program, crate::ID);
+        assert_eq!(proposal.target_account, TARGET_ACCOUNT);
+        assert_eq!(proposal.payload_hash, action.canonical_payload_hash);
+        assert_eq!(action.governance_proposal, PROPOSAL_KEY);
+        assert_eq!(action.proposal_id, PROPOSAL_ID);
+        assert_eq!(action.proposer, PROPOSER);
+        assert_eq!(action.module_id, ProtocolModuleIdV1::Treasury);
+        validate_governance_proposal_action_v1(&proposal, &action, PROPOSAL_KEY).unwrap();
+    }
+
+    #[test]
+    fn initialize_governance_proposal_with_action_rejects_wrong_module() {
+        let mut proposal = default_proposal();
+        let mut action = default_proposal_action();
+        let mut request = default_action_request(GovernanceActionTypeV1::ContributorAdd);
+        request.module_id = ProtocolModuleIdV1::Treasury;
+
+        let err = record_governance_proposal_with_action_init(
+            &mut proposal,
+            &mut action,
+            PROPOSAL_KEY,
+            PROPOSAL_ID,
+            PROPOSER,
+            &request,
+            80,
+            1,
+            2,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::GovernanceActionModuleMismatch.into());
+    }
+
+    #[test]
+    fn initialize_governance_proposal_with_action_rejects_wrong_target_program() {
+        let mut proposal = default_proposal();
+        let mut action = default_proposal_action();
+        let mut request = default_action_request(GovernanceActionTypeV1::ContributorAdd);
+        request.target_program = TARGET_PROGRAM;
+
+        let err = record_governance_proposal_with_action_init(
+            &mut proposal,
+            &mut action,
+            PROPOSAL_KEY,
+            PROPOSAL_ID,
+            PROPOSER,
+            &request,
+            80,
+            1,
+            2,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::GovernanceActionTargetMismatch.into());
+    }
+
+    #[test]
+    fn initialize_governance_proposal_with_action_rejects_zero_target_account() {
+        let mut proposal = default_proposal();
+        let mut action = default_proposal_action();
+        let mut request = default_action_request(GovernanceActionTypeV1::ContributorAdd);
+        request.target_account = Pubkey::default();
+
+        let err = record_governance_proposal_with_action_init(
+            &mut proposal,
+            &mut action,
+            PROPOSAL_KEY,
+            PROPOSAL_ID,
+            PROPOSER,
+            &request,
+            80,
+            1,
+            2,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::GovernanceActionTargetMismatch.into());
+    }
+
+    #[test]
+    fn initialize_governance_proposal_with_action_rejects_zero_parameters_hash() {
+        let mut proposal = default_proposal();
+        let mut action = default_proposal_action();
+        let mut request = default_action_request(GovernanceActionTypeV1::ContributorAdd);
+        request.parameters_hash = [0; 32];
+
+        let err = record_governance_proposal_with_action_init(
+            &mut proposal,
+            &mut action,
+            PROPOSAL_KEY,
+            PROPOSAL_ID,
+            PROPOSER,
+            &request,
+            80,
+            1,
+            2,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::InvalidGovernanceProposal.into());
+    }
+
+    #[test]
+    fn initialize_governance_proposal_with_action_rejects_duplicate_sidecar() {
+        let (mut proposal, mut action) =
+            strict_proposal_and_action(GovernanceActionTypeV1::ContributorAdd);
+        let request = default_action_request(GovernanceActionTypeV1::ContributorAdd);
+
+        let err = record_governance_proposal_with_action_init(
+            &mut proposal,
+            &mut action,
+            PROPOSAL_KEY,
+            PROPOSAL_ID,
+            PROPOSER,
+            &request,
+            80,
+            1,
+            2,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::GovernanceProposalActionMismatch.into());
+    }
+
+    #[test]
+    fn legacy_proposal_without_action_sidecar_cannot_create_snapshot() {
         let mut proposal = default_proposal();
         record_governance_proposal_init(
             &mut proposal,
@@ -1914,11 +2312,105 @@ mod tests {
             1,
         )
         .unwrap();
+        let action = default_proposal_action();
+        let mut snapshot = blank_snapshot();
+        let power_state = power_state_with_total(100);
+
+        let err = record_governance_snapshot_create(
+            &mut proposal,
+            &action,
+            &mut snapshot,
+            &default_voting_config(),
+            &power_state,
+            PROPOSAL_KEY,
+            SNAPSHOT_KEY,
+            100,
+            3,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::GovernanceProposalActionMissing.into());
+    }
+
+    #[test]
+    fn governance_action_mismatch_blocks_snapshot() {
+        let (mut proposal, action) =
+            strict_proposal_and_action(GovernanceActionTypeV1::ContributorAdd);
+        proposal.action_type =
+            governance_action_stable_code_v1(GovernanceActionTypeV1::ContributorRemove);
+        let mut snapshot = blank_snapshot();
+        let power_state = power_state_with_total(100);
+
+        let err = record_governance_snapshot_create(
+            &mut proposal,
+            &action,
+            &mut snapshot,
+            &default_voting_config(),
+            &power_state,
+            PROPOSAL_KEY,
+            SNAPSHOT_KEY,
+            100,
+            3,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::InvalidGovernanceActionCode.into());
+
+        let (mut proposal, mut action) =
+            strict_proposal_and_action(GovernanceActionTypeV1::ContributorAdd);
+        proposal.proposal_type = GovernanceProposalTypeV1::Treasury;
+        action.module_id = ProtocolModuleIdV1::Contributor;
+        let mut snapshot = blank_snapshot();
+        let err = record_governance_snapshot_create(
+            &mut proposal,
+            &action,
+            &mut snapshot,
+            &default_voting_config(),
+            &power_state,
+            PROPOSAL_KEY,
+            SNAPSHOT_KEY,
+            100,
+            3,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::GovernanceProposalActionMismatch.into());
+    }
+
+    #[test]
+    fn governance_payload_hash_mismatch_blocks_snapshot() {
+        let (mut proposal, mut action) =
+            strict_proposal_and_action(GovernanceActionTypeV1::ContributorAdd);
+        action.canonical_payload_hash = [6; 32];
+        let mut snapshot = blank_snapshot();
+        let power_state = power_state_with_total(100);
+
+        let err = record_governance_snapshot_create(
+            &mut proposal,
+            &action,
+            &mut snapshot,
+            &default_voting_config(),
+            &power_state,
+            PROPOSAL_KEY,
+            SNAPSHOT_KEY,
+            100,
+            3,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::GovernanceProposalActionMismatch.into());
+    }
+
+    #[test]
+    fn create_governance_snapshot_sets_proposal_voting() {
+        let (mut proposal, action) =
+            strict_proposal_and_action(GovernanceActionTypeV1::ContributorAdd);
         let mut snapshot = blank_snapshot();
         let power_state = power_state_with_total(100);
 
         record_governance_snapshot_create(
             &mut proposal,
+            &action,
             &mut snapshot,
             &default_voting_config(),
             &power_state,
@@ -1943,28 +2435,15 @@ mod tests {
 
     #[test]
     fn create_governance_snapshot_copies_power_state_total_only() {
-        let mut proposal = default_proposal();
-        record_governance_proposal_init(
-            &mut proposal,
-            PROPOSAL_ID,
-            PROPOSER,
-            GovernanceProposalTypeV1::Contributor,
-            3,
-            TARGET_PROGRAM,
-            TARGET_ACCOUNT,
-            PAYLOAD_HASH,
-            0,
-            0,
-            80,
-            1,
-        )
-        .unwrap();
+        let (mut proposal, action) =
+            strict_proposal_and_action(GovernanceActionTypeV1::ContributorAdd);
         let mut snapshot = blank_snapshot();
         snapshot.total_voting_power = 999_999;
         let power_state = power_state_with_total(321);
 
         record_governance_snapshot_create(
             &mut proposal,
+            &action,
             &mut snapshot,
             &default_voting_config(),
             &power_state,
@@ -1980,27 +2459,14 @@ mod tests {
 
     #[test]
     fn create_governance_snapshot_rejects_zero_total_voting_power() {
-        let mut proposal = default_proposal();
-        record_governance_proposal_init(
-            &mut proposal,
-            PROPOSAL_ID,
-            PROPOSER,
-            GovernanceProposalTypeV1::Contributor,
-            3,
-            TARGET_PROGRAM,
-            TARGET_ACCOUNT,
-            PAYLOAD_HASH,
-            0,
-            0,
-            80,
-            1,
-        )
-        .unwrap();
+        let (mut proposal, action) =
+            strict_proposal_and_action(GovernanceActionTypeV1::ContributorAdd);
         let mut snapshot = blank_snapshot();
         let power_state = power_state_with_total(0);
 
         let err = record_governance_snapshot_create(
             &mut proposal,
+            &action,
             &mut snapshot,
             &default_voting_config(),
             &power_state,
@@ -2710,6 +3176,19 @@ mod tests {
                 approval_threshold_bps: 7_500,
             }
         );
+        for proposal_type in [
+            GovernanceProposalTypeV1::GreenLabel,
+            GovernanceProposalTypeV1::VictimRelief,
+            GovernanceProposalTypeV1::ScamRegistry,
+        ] {
+            assert_eq!(
+                governance_threshold_policy_for_proposal_type(proposal_type),
+                GovernanceThresholdPolicyV1 {
+                    quorum_bps: 1_000,
+                    approval_threshold_bps: 6_667,
+                }
+            );
+        }
     }
 
     #[test]

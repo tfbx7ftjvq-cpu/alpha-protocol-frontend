@@ -38,6 +38,8 @@ The enum also keeps future states such as `Queued` and `Executed` for later Secu
 - finalized timestamp
 - status
 
+Phase 2E-FINAL Stage 2 adds `GovernanceProposalActionV1` as an immutable sidecar for new proposals. `GovernanceProposalV1.action_type` is retained as a compatibility mirror, while the sidecar is the trusted typed source for new governance execution paths.
+
 ## Governance Voting Config
 
 `GovernanceVotingConfigV1` still stores the voting period and legacy default policy fields, but finalize now uses fixed proposal-type threshold policy. Callers cannot choose quorum or approval thresholds for a proposal at finalize time.
@@ -58,6 +60,10 @@ governance_voting_config_v1
 
 `create_governance_snapshot_v1` creates a `GovernanceSnapshotV1` account and moves a proposal from `Draft` to `Voting`.
 
+The snapshot instruction now requires `GovernanceProposalActionV1`. Before voting starts, the program verifies that the sidecar matches the proposal id, proposer, stable action code, proposal category, target fields, module mapping, schema version, and canonical payload hash.
+
+Legacy proposals created without `GovernanceProposalActionV1` cannot enter the new voting path.
+
 The snapshot records:
 
 - proposal account
@@ -75,6 +81,8 @@ governance_snapshot_v1 + proposal.key()
 The snapshot total is copied from `GovernancePowerStateV1.total_voting_power` when voting starts. It is not supplied by the caller. Voting records require the voter position to have been last updated at or before the snapshot timestamp, so new locks after snapshot creation cannot increase voting power for the current proposal.
 
 Governance V1 voting power is linear locked ALPHA multiplied by the committed lock-duration multiplier. It does not use square-root voting, because square-root voting rewards wallet splitting in a permissionless system without identity binding.
+
+The typed action binding makes the voted payload immutable before the snapshot. After voting starts, callers cannot replace the action, target account, target program, or payload hash that the Universal Governance Decision Adapter will later consume.
 
 ## Voting Flow
 

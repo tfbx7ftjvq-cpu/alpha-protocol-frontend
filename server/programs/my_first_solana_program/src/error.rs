@@ -289,4 +289,22 @@ pub enum CustomError {
 
     #[msg("Invalid treasury governance payload hash")]
     InvalidTreasuryGovernancePayloadHash,
+
+    #[msg("Governance proposal action sidecar is missing")]
+    GovernanceProposalActionMissing,
+
+    #[msg("Governance proposal action sidecar does not match proposal")]
+    GovernanceProposalActionMismatch,
+
+    #[msg("Invalid governance action stable code")]
+    InvalidGovernanceActionCode,
+
+    #[msg("Invalid governance payload schema")]
+    InvalidGovernancePayloadSchema,
+
+    #[msg("Governance action module does not match action type")]
+    GovernanceActionModuleMismatch,
+
+    #[msg("Governance action target does not match policy")]
+    GovernanceActionTargetMismatch,
 }

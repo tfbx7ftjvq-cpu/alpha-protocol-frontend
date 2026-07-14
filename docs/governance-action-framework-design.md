@@ -129,9 +129,21 @@ GovernanceActionTypeV1
 -> ExecutionQueueItemV1
 ```
 
-This phase does not change adapter execution logic. It only adds the shared action framework that future adapter phases should consume.
+Stage 2 now changes the adapter input model: the adapter consumes `GovernanceProposalActionV1`, not caller-controlled action data and not unverified proposal mirror fields.
 
-## 8. Non-Goals
+## 8. Typed Proposal Action Binding
+
+Phase 2E-FINAL Stage 2 adds `GovernanceProposalActionV1` as the immutable trusted source for new governance proposals.
+
+`GovernanceProposalV1.action_type` is now a compatibility mirror field. The strict path uses explicit stable action codes from `governance_action_stable_code_v1()` and rejects unknown codes through `governance_action_from_stable_code_v1()`.
+
+New governance proposals should be created with `initialize_governance_proposal_with_action_v1`, which derives the proposal category, action code, target mirrors, and canonical payload hash from a typed `GovernanceActionRequestV1`.
+
+`create_governance_snapshot_v1` and `create_governance_decision_adapter_v1` both require the sidecar. Legacy proposals without `GovernanceProposalActionV1` cannot enter the new voting or DAO-controlled execution path.
+
+The target program is currently fixed to the Alpha Protocol Program ID. Protocol Module Registry support is intentionally deferred.
+
+## 9. Non-Goals
 
 This phase does not implement:
 

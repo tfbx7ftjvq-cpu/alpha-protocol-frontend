@@ -383,6 +383,9 @@ pub enum GovernanceProposalTypeV1 {
     Parameter,
     Upgrade,
     Emergency,
+    GreenLabel,
+    VictimRelief,
+    ScamRegistry,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -459,6 +462,17 @@ pub struct GovernancePayloadV1 {
     pub created_at: i64,
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GovernanceActionRequestV1 {
+    pub schema_version: u16,
+    pub action_type: GovernanceActionTypeV1,
+    pub module_id: ProtocolModuleIdV1,
+    pub target_program: Pubkey,
+    pub target_account: Pubkey,
+    pub parameters_hash: [u8; 32],
+    pub evidence_hash: [u8; 32],
+}
+
 #[account]
 pub struct GovernanceProposalV1 {
     pub proposal_id: u64,
@@ -482,6 +496,27 @@ pub struct GovernanceProposalV1 {
 
 impl GovernanceProposalV1 {
     pub const INIT_SPACE: usize = 8 + 32 + 1 + 1 + 32 + 32 + 32 + 1 + (8 * 3) + 32 + (8 * 4) + 1;
+}
+
+#[account]
+pub struct GovernanceProposalActionV1 {
+    pub governance_proposal: Pubkey,
+    pub proposal_id: u64,
+    pub proposer: Pubkey,
+    pub action_type: GovernanceActionTypeV1,
+    pub module_id: ProtocolModuleIdV1,
+    pub target_program: Pubkey,
+    pub target_account: Pubkey,
+    pub parameters_hash: [u8; 32],
+    pub evidence_hash: [u8; 32],
+    pub canonical_payload_hash: [u8; 32],
+    pub schema_version: u16,
+    pub created_at: i64,
+    pub bump: u8,
+}
+
+impl GovernanceProposalActionV1 {
+    pub const INIT_SPACE: usize = (32 * 4) + 8 + 1 + 1 + (32 * 3) + 2 + 8 + 1;
 }
 
 #[account]
@@ -876,6 +911,13 @@ mod tests {
     fn governance_proposal_space_covers_fields() {
         let minimum = 8 + 32 + 1 + 1 + 32 + 32 + 32 + 1 + (8 * 3) + 32 + (8 * 4) + 1;
         assert!(GovernanceProposalV1::INIT_SPACE >= minimum);
+    }
+
+    #[test]
+    fn governance_proposal_action_space_is_exact() {
+        let minimum = (32 * 4) + 8 + 1 + 1 + (32 * 3) + 2 + 8 + 1;
+        assert_eq!(GovernanceProposalActionV1::INIT_SPACE, minimum);
+        assert_eq!(GovernanceProposalActionV1::INIT_SPACE, 245);
     }
 
     #[test]

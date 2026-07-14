@@ -1,18 +1,20 @@
 use anchor_lang::prelude::*;
 
 use crate::constants::{
-    GOVERNANCE_CONFIG_V1_SEED, GOVERNANCE_PROPOSAL_V1_SEED, GOVERNANCE_SNAPSHOT_V1_SEED,
-    GOVERNANCE_VOTING_CONFIG_V1_SEED, PROPOSAL_DECISION_V1_SEED,
+    GOVERNANCE_CONFIG_V1_SEED, GOVERNANCE_PROPOSAL_ACTION_V1_SEED, GOVERNANCE_PROPOSAL_V1_SEED,
+    GOVERNANCE_SNAPSHOT_V1_SEED, GOVERNANCE_VOTING_CONFIG_V1_SEED, PROPOSAL_DECISION_V1_SEED,
     UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED,
 };
 use crate::error::CustomError;
+use crate::instructions::governance_action_v1::map_governance_action_to_security_action;
 use crate::instructions::governance_v1::{
-    validate_governance_thresholds, validate_governance_voting_config,
+    validate_governance_proposal_action_v1, validate_governance_thresholds,
+    validate_governance_voting_config,
 };
 use crate::state::{
-    ActionType, GovernanceConfigV1, GovernanceProposalStatusV1, GovernanceProposalV1,
-    GovernanceSnapshotV1, GovernanceVotingConfigV1, ProposalDecision, ProposalDecisionV1,
-    ProposalType, UniversalGovernanceDecisionAdapterV1,
+    ActionType, GovernanceConfigV1, GovernanceProposalActionV1, GovernanceProposalStatusV1,
+    GovernanceProposalV1, GovernanceSnapshotV1, GovernanceVotingConfigV1, ProposalDecision,
+    ProposalDecisionV1, ProposalType, UniversalGovernanceDecisionAdapterV1,
 };
 
 #[derive(Accounts)]
@@ -35,6 +37,15 @@ pub struct CreateGovernanceDecisionAdapterV1<'info> {
         bump = governance_proposal.bump
     )]
     pub governance_proposal: Account<'info, GovernanceProposalV1>,
+
+    #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_proposal_action.bump
+    )]
+    pub governance_proposal_action: Account<'info, GovernanceProposalActionV1>,
 
     #[account(
         seeds = [GOVERNANCE_SNAPSHOT_V1_SEED, governance_proposal.key().as_ref()],
@@ -82,6 +93,7 @@ pub fn create_governance_decision_adapter_v1_handler(
         &mut ctx.accounts.security_governance_config,
         &ctx.accounts.governance_voting_config,
         &ctx.accounts.governance_proposal,
+        &ctx.accounts.governance_proposal_action,
         &ctx.accounts.governance_snapshot,
         &mut ctx.accounts.governance_decision_adapter,
         &mut ctx.accounts.proposal_decision,
@@ -99,6 +111,7 @@ pub fn create_governance_decision_adapter_state(
     security_governance_config: &mut GovernanceConfigV1,
     governance_voting_config: &GovernanceVotingConfigV1,
     governance_proposal: &GovernanceProposalV1,
+    governance_proposal_action: &GovernanceProposalActionV1,
     governance_snapshot: &GovernanceSnapshotV1,
     governance_decision_adapter: &mut UniversalGovernanceDecisionAdapterV1,
     proposal_decision: &mut ProposalDecisionV1,
@@ -123,20 +136,22 @@ pub fn create_governance_decision_adapter_state(
         security_governance_config,
         governance_voting_config,
         governance_proposal,
+        governance_proposal_action,
         governance_snapshot,
         governance_proposal_key,
         governance_snapshot_key,
     )?;
 
-    let action_type = security_action_type_from_u8(governance_proposal.action_type)?;
+    let action_type =
+        map_governance_action_to_security_action(governance_proposal_action.action_type)?;
     let proposal_type = security_proposal_type_for_action(action_type)?;
 
     governance_decision_adapter.governance_proposal = governance_proposal_key;
     governance_decision_adapter.proposal_decision = proposal_decision_key;
     governance_decision_adapter.action_type = action_type;
-    governance_decision_adapter.target_program = governance_proposal.target_program;
-    governance_decision_adapter.target_account = governance_proposal.target_account;
-    governance_decision_adapter.payload_hash = governance_proposal.payload_hash;
+    governance_decision_adapter.target_program = governance_proposal_action.target_program;
+    governance_decision_adapter.target_account = governance_proposal_action.target_account;
+    governance_decision_adapter.payload_hash = governance_proposal_action.canonical_payload_hash;
     governance_decision_adapter.created_at = created_at;
     governance_decision_adapter.executed = true;
     governance_decision_adapter.bump = adapter_bump;
@@ -161,6 +176,7 @@ pub fn validate_governance_decision_adapter_inputs(
     security_governance_config: &GovernanceConfigV1,
     governance_voting_config: &GovernanceVotingConfigV1,
     governance_proposal: &GovernanceProposalV1,
+    governance_proposal_action: &GovernanceProposalActionV1,
     governance_snapshot: &GovernanceSnapshotV1,
     governance_proposal_key: Pubkey,
     governance_snapshot_key: Pubkey,
@@ -186,6 +202,11 @@ pub fn validate_governance_decision_adapter_inputs(
         governance_snapshot.proposal == governance_proposal_key,
         CustomError::InvalidGovernanceSnapshot
     );
+    validate_governance_proposal_action_v1(
+        governance_proposal,
+        governance_proposal_action,
+        governance_proposal_key,
+    )?;
     require!(
         governance_proposal.finalized_at > 0,
         CustomError::ProposalAlreadyFinalized
@@ -306,8 +327,14 @@ mod tests {
         GOVERNANCE_DEFAULT_APPROVAL_THRESHOLD_BPS, GOVERNANCE_DEFAULT_QUORUM_BPS,
         GOVERNANCE_DEFAULT_VOTING_PERIOD_SECONDS,
     };
+    use crate::instructions::governance_action_v1::{
+        governance_action_stable_code_v1, hash_governance_payload_v1,
+        map_governance_action_to_module,
+    };
     use crate::instructions::governance_v1::validate_governance_thresholds;
-    use crate::state::GovernanceProposalTypeV1;
+    use crate::state::{
+        GovernanceActionTypeV1, GovernancePayloadV1, GovernanceProposalTypeV1, ProtocolModuleIdV1,
+    };
 
     const AUTHORITY: Pubkey = Pubkey::new_from_array([1; 32]);
     const GUARDIAN: Pubkey = Pubkey::new_from_array([2; 32]);
@@ -315,9 +342,9 @@ mod tests {
     const PROPOSAL_KEY: Pubkey = Pubkey::new_from_array([4; 32]);
     const SNAPSHOT_KEY: Pubkey = Pubkey::new_from_array([5; 32]);
     const DECISION_KEY: Pubkey = Pubkey::new_from_array([6; 32]);
-    const TARGET_PROGRAM: Pubkey = Pubkey::new_from_array([7; 32]);
     const TARGET_ACCOUNT: Pubkey = Pubkey::new_from_array([8; 32]);
-    const PAYLOAD_HASH: [u8; 32] = [9; 32];
+    const PARAMETERS_HASH: [u8; 32] = [9; 32];
+    const EVIDENCE_HASH: [u8; 32] = [10; 32];
 
     fn security_config(proposal_count: u64) -> GovernanceConfigV1 {
         GovernanceConfigV1 {
@@ -341,15 +368,31 @@ mod tests {
         }
     }
 
+    fn canonical_payload_hash(action_type: GovernanceActionTypeV1, created_at: i64) -> [u8; 32] {
+        hash_governance_payload_v1(&GovernancePayloadV1 {
+            schema_version: 1,
+            action_type,
+            module_id: map_governance_action_to_module(action_type),
+            target_program: crate::ID,
+            target_account: TARGET_ACCOUNT,
+            parameters_hash: PARAMETERS_HASH,
+            evidence_hash: EVIDENCE_HASH,
+            created_at,
+        })
+        .unwrap()
+    }
+
     fn passed_proposal() -> GovernanceProposalV1 {
+        let action_type = GovernanceActionTypeV1::ContributorAdd;
+        let payload_hash = canonical_payload_hash(action_type, 90);
         GovernanceProposalV1 {
             proposal_id: 1,
             proposer: PROPOSER,
             proposal_type: GovernanceProposalTypeV1::Contributor,
-            action_type: 7,
-            target_program: TARGET_PROGRAM,
+            action_type: governance_action_stable_code_v1(action_type),
+            target_program: crate::ID,
             target_account: TARGET_ACCOUNT,
-            payload_hash: PAYLOAD_HASH,
+            payload_hash,
             status: GovernanceProposalStatusV1::Passed,
             voting_start_ts: 100,
             voting_end_ts: 200,
@@ -360,6 +403,25 @@ mod tests {
             abstain_weight: 0,
             finalized_at: 220,
             bump: 3,
+        }
+    }
+
+    fn proposal_action() -> GovernanceProposalActionV1 {
+        let action_type = GovernanceActionTypeV1::ContributorAdd;
+        GovernanceProposalActionV1 {
+            governance_proposal: PROPOSAL_KEY,
+            proposal_id: 1,
+            proposer: PROPOSER,
+            action_type,
+            module_id: ProtocolModuleIdV1::Contributor,
+            target_program: crate::ID,
+            target_account: TARGET_ACCOUNT,
+            parameters_hash: PARAMETERS_HASH,
+            evidence_hash: EVIDENCE_HASH,
+            canonical_payload_hash: canonical_payload_hash(action_type, 90),
+            schema_version: 1,
+            created_at: 90,
+            bump: 8,
         }
     }
 
@@ -408,6 +470,7 @@ mod tests {
     fn create_adapter(
         security_config: &mut GovernanceConfigV1,
         proposal: &GovernanceProposalV1,
+        proposal_action: &GovernanceProposalActionV1,
         snapshot: &GovernanceSnapshotV1,
         adapter: &mut UniversalGovernanceDecisionAdapterV1,
         decision: &mut ProposalDecisionV1,
@@ -416,6 +479,7 @@ mod tests {
             security_config,
             &voting_config(),
             proposal,
+            proposal_action,
             snapshot,
             adapter,
             decision,
@@ -432,6 +496,7 @@ mod tests {
     fn passed_proposal_generates_adapter() {
         let mut security_config = security_config(0);
         let proposal = passed_proposal();
+        let action = proposal_action();
         let snapshot = finalized_snapshot();
         let mut adapter = empty_adapter();
         let mut decision = empty_decision();
@@ -439,6 +504,7 @@ mod tests {
         create_adapter(
             &mut security_config,
             &proposal,
+            &action,
             &snapshot,
             &mut adapter,
             &mut decision,
@@ -455,6 +521,7 @@ mod tests {
     fn passed_proposal_generates_proposal_decision() {
         let mut security_config = security_config(0);
         let proposal = passed_proposal();
+        let action = proposal_action();
         let snapshot = finalized_snapshot();
         let mut adapter = empty_adapter();
         let mut decision = empty_decision();
@@ -462,6 +529,7 @@ mod tests {
         create_adapter(
             &mut security_config,
             &proposal,
+            &action,
             &snapshot,
             &mut adapter,
             &mut decision,
@@ -483,6 +551,7 @@ mod tests {
         let mut security_config = security_config(0);
         let mut proposal = passed_proposal();
         proposal.status = GovernanceProposalStatusV1::Rejected;
+        let action = proposal_action();
         let snapshot = finalized_snapshot();
         let mut adapter = empty_adapter();
         let mut decision = empty_decision();
@@ -490,6 +559,7 @@ mod tests {
         let err = create_adapter(
             &mut security_config,
             &proposal,
+            &action,
             &snapshot,
             &mut adapter,
             &mut decision,
@@ -503,6 +573,7 @@ mod tests {
     fn unfinalized_snapshot_fails() {
         let mut security_config = security_config(0);
         let proposal = passed_proposal();
+        let action = proposal_action();
         let mut snapshot = finalized_snapshot();
         snapshot.finalized = false;
         let mut adapter = empty_adapter();
@@ -511,6 +582,7 @@ mod tests {
         let err = create_adapter(
             &mut security_config,
             &proposal,
+            &action,
             &snapshot,
             &mut adapter,
             &mut decision,
@@ -526,6 +598,7 @@ mod tests {
         let mut proposal = passed_proposal();
         proposal.yes_weight = 59;
         proposal.no_weight = 41;
+        let action = proposal_action();
         let mut snapshot = finalized_snapshot();
         snapshot.yes_weight = 59;
         snapshot.no_weight = 41;
@@ -536,6 +609,7 @@ mod tests {
         let err = create_adapter(
             &mut security_config,
             &proposal,
+            &action,
             &snapshot,
             &mut adapter,
             &mut decision,
@@ -549,6 +623,7 @@ mod tests {
     fn duplicate_adapter_fails() {
         let mut security_config = security_config(0);
         let proposal = passed_proposal();
+        let action = proposal_action();
         let snapshot = finalized_snapshot();
         let mut adapter = empty_adapter();
         let mut decision = empty_decision();
@@ -556,6 +631,7 @@ mod tests {
         create_adapter(
             &mut security_config,
             &proposal,
+            &action,
             &snapshot,
             &mut adapter,
             &mut decision,
@@ -566,6 +642,7 @@ mod tests {
         let err = create_adapter(
             &mut security_config,
             &proposal,
+            &action,
             &snapshot,
             &mut adapter,
             &mut second_decision,
@@ -576,9 +653,13 @@ mod tests {
     }
 
     #[test]
-    fn payload_hash_is_preserved_in_adapter() {
+    fn payload_hash_and_target_are_derived_from_sidecar() {
         let mut security_config = security_config(0);
-        let proposal = passed_proposal();
+        let mut proposal = passed_proposal();
+        let action = proposal_action();
+        proposal.target_program = Pubkey::new_from_array([11; 32]);
+        proposal.target_account = Pubkey::new_from_array([12; 32]);
+        proposal.payload_hash = [13; 32];
         let snapshot = finalized_snapshot();
         let mut adapter = empty_adapter();
         let mut decision = empty_decision();
@@ -586,21 +667,128 @@ mod tests {
         create_adapter(
             &mut security_config,
             &proposal,
+            &action,
+            &snapshot,
+            &mut adapter,
+            &mut decision,
+        )
+        .unwrap_err();
+
+        proposal.target_program = action.target_program;
+        proposal.target_account = action.target_account;
+        proposal.payload_hash = action.canonical_payload_hash;
+        create_adapter(
+            &mut security_config,
+            &proposal,
+            &action,
             &snapshot,
             &mut adapter,
             &mut decision,
         )
         .unwrap();
 
-        assert_eq!(adapter.payload_hash, proposal.payload_hash);
-        assert_eq!(adapter.target_program, proposal.target_program);
-        assert_eq!(adapter.target_account, proposal.target_account);
+        assert_eq!(adapter.payload_hash, action.canonical_payload_hash);
+        assert_eq!(adapter.target_program, action.target_program);
+        assert_eq!(adapter.target_account, action.target_account);
+    }
+
+    #[test]
+    fn missing_sidecar_fails() {
+        let mut security_config = security_config(0);
+        let proposal = passed_proposal();
+        let mut action = proposal_action();
+        action.governance_proposal = Pubkey::default();
+        let snapshot = finalized_snapshot();
+        let mut adapter = empty_adapter();
+        let mut decision = empty_decision();
+
+        let err = create_adapter(
+            &mut security_config,
+            &proposal,
+            &action,
+            &snapshot,
+            &mut adapter,
+            &mut decision,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::GovernanceProposalActionMissing.into());
+    }
+
+    #[test]
+    fn sidecar_module_mismatch_fails() {
+        let mut security_config = security_config(0);
+        let proposal = passed_proposal();
+        let mut action = proposal_action();
+        action.module_id = ProtocolModuleIdV1::Treasury;
+        let snapshot = finalized_snapshot();
+        let mut adapter = empty_adapter();
+        let mut decision = empty_decision();
+
+        let err = create_adapter(
+            &mut security_config,
+            &proposal,
+            &action,
+            &snapshot,
+            &mut adapter,
+            &mut decision,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::GovernanceActionModuleMismatch.into());
+    }
+
+    #[test]
+    fn sidecar_target_mismatch_fails() {
+        let mut security_config = security_config(0);
+        let proposal = passed_proposal();
+        let mut action = proposal_action();
+        action.target_account = Pubkey::new_from_array([12; 32]);
+        let snapshot = finalized_snapshot();
+        let mut adapter = empty_adapter();
+        let mut decision = empty_decision();
+
+        let err = create_adapter(
+            &mut security_config,
+            &proposal,
+            &action,
+            &snapshot,
+            &mut adapter,
+            &mut decision,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::GovernanceActionTargetMismatch.into());
+    }
+
+    #[test]
+    fn sidecar_canonical_hash_mismatch_fails() {
+        let mut security_config = security_config(0);
+        let proposal = passed_proposal();
+        let mut action = proposal_action();
+        action.canonical_payload_hash = [11; 32];
+        let snapshot = finalized_snapshot();
+        let mut adapter = empty_adapter();
+        let mut decision = empty_decision();
+
+        let err = create_adapter(
+            &mut security_config,
+            &proposal,
+            &action,
+            &snapshot,
+            &mut adapter,
+            &mut decision,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::GovernanceProposalActionMismatch.into());
     }
 
     #[test]
     fn proposal_association_is_correct() {
         let mut security_config = security_config(0);
         let proposal = passed_proposal();
+        let action = proposal_action();
         let snapshot = finalized_snapshot();
         let mut adapter = empty_adapter();
         let mut decision = empty_decision();
@@ -608,6 +796,7 @@ mod tests {
         create_adapter(
             &mut security_config,
             &proposal,
+            &action,
             &snapshot,
             &mut adapter,
             &mut decision,
