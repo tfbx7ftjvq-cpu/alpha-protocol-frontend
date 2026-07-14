@@ -152,3 +152,26 @@ UniversalGovernanceDecisionAdapterV1
 ```
 
 That queue adapter should consume the sealed `action_type`, `target_program`, `target_account`, and `payload_hash` from `UniversalGovernanceDecisionAdapterV1`.
+
+## 9. Governance Action Framework Compatibility
+
+Phase 2E-4D-3B introduces `GovernanceActionTypeV1`, `ProtocolModuleIdV1`, and `GovernancePayloadV1`.
+
+The intended future path is:
+
+```text
+GovernanceActionTypeV1
+-> action mapping helper
+-> Security ActionType
+-> UniversalGovernanceDecisionAdapterV1
+-> ProposalDecisionV1
+-> ExecutionQueueItemV1
+```
+
+The adapter should continue to preserve the invariant:
+
+```text
+DAO-voted payload hash == Security execution payload hash
+```
+
+This phase does not change adapter execution behavior. It only defines the shared action language and canonical payload hash model that the adapter should consume in a later phase.

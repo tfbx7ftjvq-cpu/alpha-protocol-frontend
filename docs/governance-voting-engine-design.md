@@ -40,7 +40,7 @@ The enum also keeps future states such as `Queued` and `Executed` for later Secu
 
 ## Governance Voting Config
 
-`GovernanceVotingConfigV1` parameterizes voting policy instead of hardcoding it in finalize logic.
+`GovernanceVotingConfigV1` still stores the voting period and legacy default policy fields, but finalize now uses fixed proposal-type threshold policy. Callers cannot choose quorum or approval thresholds for a proposal at finalize time.
 
 Default values:
 
@@ -72,7 +72,9 @@ PDA:
 governance_snapshot_v1 + proposal.key()
 ```
 
-The snapshot total is fixed when voting starts. Voting records require the voter position to have been last updated at or before the snapshot timestamp, so new locks after snapshot creation cannot increase voting power for the current proposal.
+The snapshot total is copied from `GovernancePowerStateV1.total_voting_power` when voting starts. It is not supplied by the caller. Voting records require the voter position to have been last updated at or before the snapshot timestamp, so new locks after snapshot creation cannot increase voting power for the current proposal.
+
+Governance V1 voting power is linear locked ALPHA multiplied by the committed lock-duration multiplier. It does not use square-root voting, because square-root voting rewards wallet splitting in a permissionless system without identity binding.
 
 ## Voting Flow
 
@@ -91,6 +93,7 @@ The instruction checks:
 - governance position is active
 - governance position has nonzero voting power
 - governance position was not updated after the snapshot
+- governance position vote-lock sidecar exists and is updated after voting
 - vote record does not already exist
 - aggregate votes do not exceed snapshot total voting power
 
@@ -103,6 +106,14 @@ vote_record_v1 + proposal.key() + governance_position.key()
 ```
 
 This gives each governance position at most one vote record per proposal. If a vote record already contains a proposal / position pair, `cast_governance_vote_v1` returns `AlreadyVoted`.
+
+Voting also updates:
+
+```text
+governance_position_vote_lock_v1 + governance_position.key()
+```
+
+`voting_lock_until` is set to at least the proposal voting end timestamp. A voter cannot unlock the governance position until both the original lock period and this vote-lock period have passed.
 
 ## Vote Counting
 
@@ -122,7 +133,17 @@ Finalize checks:
 total_votes / total_voting_power >= quorum_bps / 10_000
 ```
 
-The default quorum is 5%. If quorum is not reached, finalization returns `QuorumNotReached` and the proposal remains in `Voting`.
+Proposal-type policy:
+
+| Proposal Type | Quorum | Approval |
+| --- | --- | --- |
+| Contributor | 5% | 60% |
+| Treasury | 10% | 66.67% |
+| Parameter | 20% | 75% |
+| Upgrade | 25% | 80% |
+| Emergency | 15% | 75% |
+
+If quorum is not reached, finalization returns `QuorumNotReached` and the proposal remains in `Voting`.
 
 ## Approval Threshold
 
@@ -132,7 +153,7 @@ Approval ignores abstain votes:
 yes_weight / (yes_weight + no_weight) >= approval_threshold_bps / 10_000
 ```
 
-The default approval threshold is 60%.
+The approval threshold is selected by proposal type and ignores abstain votes.
 
 If approval passes:
 

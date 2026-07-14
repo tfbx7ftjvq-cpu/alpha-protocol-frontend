@@ -52,6 +52,66 @@ pub mod my_first_solana_program {
         instructions::deposit_usdc_revenue::route_usdc_revenue_v1_handler(ctx, revenue_type, amount)
     }
 
+    pub fn initialize_treasury_governance_config_v1(
+        ctx: Context<InitializeTreasuryGovernanceConfigV1>,
+        spending_limit_usdc: u64,
+        split_change_threshold_bps: u64,
+    ) -> Result<()> {
+        instructions::treasury_governance_v1::initialize_treasury_governance_config_v1_handler(
+            ctx,
+            spending_limit_usdc,
+            split_change_threshold_bps,
+        )
+    }
+
+    pub fn initialize_treasury_spending_request_v1(
+        ctx: Context<InitializeTreasurySpendingRequestV1>,
+        request_id: u64,
+        recipient: Pubkey,
+        amount_usdc: u64,
+        purpose_hash: [u8; 32],
+        proposal_id: u64,
+    ) -> Result<()> {
+        instructions::treasury_governance_v1::initialize_treasury_spending_request_v1_handler(
+            ctx,
+            request_id,
+            recipient,
+            amount_usdc,
+            purpose_hash,
+            proposal_id,
+        )
+    }
+
+    pub fn initialize_treasury_builder_payout_governance_v1(
+        ctx: Context<InitializeTreasuryBuilderPayoutGovernanceV1>,
+        proposal_id: u64,
+    ) -> Result<()> {
+        instructions::treasury_governance_v1::initialize_treasury_builder_payout_governance_v1_handler(
+            ctx,
+            proposal_id,
+        )
+    }
+
+    pub fn approve_treasury_spending_request_v1(
+        ctx: Context<ApproveTreasurySpendingRequestV1>,
+        proposal_id: u64,
+    ) -> Result<()> {
+        instructions::treasury_governance_v1::approve_treasury_spending_request_v1_handler(
+            ctx,
+            proposal_id,
+        )
+    }
+
+    pub fn approve_treasury_builder_payout_governance_v1(
+        ctx: Context<ApproveTreasuryBuilderPayoutGovernanceV1>,
+        proposal_id: u64,
+    ) -> Result<()> {
+        instructions::treasury_governance_v1::approve_treasury_builder_payout_governance_v1_handler(
+            ctx,
+            proposal_id,
+        )
+    }
+
     pub fn initialize_governance_config_v1(
         ctx: Context<InitializeGovernanceConfigV1>,
     ) -> Result<()> {
@@ -116,11 +176,8 @@ pub mod my_first_solana_program {
         instructions::governance_v1::initialize_governance_snapshot_v1_handler(ctx)
     }
 
-    pub fn create_governance_snapshot_v1(
-        ctx: Context<CreateGovernanceSnapshotV1>,
-        total_voting_power: u64,
-    ) -> Result<()> {
-        instructions::governance_v1::create_governance_snapshot_v1_handler(ctx, total_voting_power)
+    pub fn create_governance_snapshot_v1(ctx: Context<CreateGovernanceSnapshotV1>) -> Result<()> {
+        instructions::governance_v1::create_governance_snapshot_v1_handler(ctx)
     }
 
     pub fn cast_governance_vote_v1(

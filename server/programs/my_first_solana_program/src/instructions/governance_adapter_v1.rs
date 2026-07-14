@@ -7,8 +7,7 @@ use crate::constants::{
 };
 use crate::error::CustomError;
 use crate::instructions::governance_v1::{
-    checked_governance_total_votes, has_governance_approval, has_governance_quorum,
-    validate_governance_voting_config,
+    validate_governance_thresholds, validate_governance_voting_config,
 };
 use crate::state::{
     ActionType, GovernanceConfigV1, GovernanceProposalStatusV1, GovernanceProposalV1,
@@ -217,21 +216,8 @@ pub fn validate_governance_decision_adapter_inputs(
         CustomError::InvalidGovernanceVote
     );
 
-    let total_votes = checked_governance_total_votes(governance_snapshot)?;
     require!(
-        has_governance_quorum(
-            total_votes,
-            governance_snapshot.total_voting_power,
-            governance_voting_config.quorum_bps,
-        )?,
-        CustomError::QuorumNotReached
-    );
-    require!(
-        has_governance_approval(
-            governance_snapshot.yes_weight,
-            governance_snapshot.no_weight,
-            governance_voting_config.approval_threshold_bps,
-        )?,
+        validate_governance_thresholds(governance_snapshot, governance_proposal.proposal_type)?,
         CustomError::InvalidGovernanceVote
     );
 
@@ -252,6 +238,21 @@ pub fn security_action_type_from_u8(action_type: u8) -> Result<ActionType> {
         9 => Ok(ActionType::ContributorUpdateRole),
         10 => Ok(ActionType::ContributorApproveMilestone),
         11 => Ok(ActionType::ContributorApproveBuilderPayout),
+        12 => Ok(ActionType::TreasuryUpdateRevenueSplit),
+        13 => Ok(ActionType::TreasuryApproveSpending),
+        14 => Ok(ActionType::TreasuryApproveBuilderPayout),
+        15 => Ok(ActionType::GreenLabelApproveCertification),
+        16 => Ok(ActionType::GreenLabelRejectCertification),
+        17 => Ok(ActionType::GreenLabelRevokeCertification),
+        18 => Ok(ActionType::VictimReliefApproveCompensation),
+        19 => Ok(ActionType::VictimReliefRejectClaim),
+        20 => Ok(ActionType::VictimReliefUpdatePolicy),
+        21 => Ok(ActionType::ScamRegistryPublishReport),
+        22 => Ok(ActionType::ScamRegistryRemoveReport),
+        23 => Ok(ActionType::ScamRegistryAppealDecision),
+        24 => Ok(ActionType::ProtocolUpdateParameter),
+        25 => Ok(ActionType::ProtocolUpgradeProgram),
+        26 => Ok(ActionType::ProtocolEmergencyAction),
         _ => err!(CustomError::InvalidActionForProposalType),
     }
 }
@@ -272,6 +273,29 @@ pub fn security_proposal_type_for_action(action_type: ActionType) -> Result<Prop
         ActionType::ContributorApproveBuilderPayout => {
             Ok(ProposalType::ContributorApproveBuilderPayout)
         }
+        ActionType::TreasuryUpdateRevenueSplit => Ok(ProposalType::TreasuryUpdateRevenueSplit),
+        ActionType::TreasuryApproveSpending => Ok(ProposalType::TreasuryApproveSpending),
+        ActionType::TreasuryApproveBuilderPayout => Ok(ProposalType::TreasuryApproveBuilderPayout),
+        ActionType::GreenLabelApproveCertification => {
+            Ok(ProposalType::GreenLabelApproveCertification)
+        }
+        ActionType::GreenLabelRejectCertification => {
+            Ok(ProposalType::GreenLabelRejectCertification)
+        }
+        ActionType::GreenLabelRevokeCertification => {
+            Ok(ProposalType::GreenLabelRevokeCertification)
+        }
+        ActionType::VictimReliefApproveCompensation => {
+            Ok(ProposalType::VictimReliefApproveCompensation)
+        }
+        ActionType::VictimReliefRejectClaim => Ok(ProposalType::VictimReliefRejectClaim),
+        ActionType::VictimReliefUpdatePolicy => Ok(ProposalType::VictimReliefUpdatePolicy),
+        ActionType::ScamRegistryPublishReport => Ok(ProposalType::ScamRegistryPublishReport),
+        ActionType::ScamRegistryRemoveReport => Ok(ProposalType::ScamRegistryRemoveReport),
+        ActionType::ScamRegistryAppealDecision => Ok(ProposalType::ScamRegistryAppealDecision),
+        ActionType::ProtocolUpdateParameter => Ok(ProposalType::ProtocolUpdateParameter),
+        ActionType::ProtocolUpgradeProgram => Ok(ProposalType::ProtocolUpgradeProgram),
+        ActionType::ProtocolEmergencyAction => Ok(ProposalType::ProtocolEmergencyAction),
     }
 }
 
@@ -282,6 +306,7 @@ mod tests {
         GOVERNANCE_DEFAULT_APPROVAL_THRESHOLD_BPS, GOVERNANCE_DEFAULT_QUORUM_BPS,
         GOVERNANCE_DEFAULT_VOTING_PERIOD_SECONDS,
     };
+    use crate::instructions::governance_v1::validate_governance_thresholds;
     use crate::state::GovernanceProposalTypeV1;
 
     const AUTHORITY: Pubkey = Pubkey::new_from_array([1; 32]);
@@ -493,6 +518,31 @@ mod tests {
         .unwrap_err();
 
         assert_eq!(err, CustomError::InvalidGovernanceSnapshot.into());
+    }
+
+    #[test]
+    fn adapter_and_finalize_threshold_helper_reject_same_approval_boundary() {
+        let mut security_config = security_config(0);
+        let mut proposal = passed_proposal();
+        proposal.yes_weight = 59;
+        proposal.no_weight = 41;
+        let mut snapshot = finalized_snapshot();
+        snapshot.yes_weight = 59;
+        snapshot.no_weight = 41;
+        let mut adapter = empty_adapter();
+        let mut decision = empty_decision();
+
+        assert!(!validate_governance_thresholds(&snapshot, proposal.proposal_type).unwrap());
+        let err = create_adapter(
+            &mut security_config,
+            &proposal,
+            &snapshot,
+            &mut adapter,
+            &mut decision,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::InvalidGovernanceVote.into());
     }
 
     #[test]

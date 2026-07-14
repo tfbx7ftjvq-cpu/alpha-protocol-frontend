@@ -73,6 +73,18 @@ Governance position:
 governance_position_v1 + owner.key()
 ```
 
+Governance power state:
+
+```text
+governance_power_state_v1 + governance_config.key()
+```
+
+Governance position vote lock:
+
+```text
+governance_position_vote_lock_v1 + governance_position.key()
+```
+
 The governance vault token account is owned by the governance lock config PDA. Unlock transfers therefore require the governance config PDA signer seeds and cannot be initiated by an arbitrary wallet.
 
 ## Why Governance Lock Is Separate From Staking
@@ -85,10 +97,10 @@ Future phases may decide whether staking positions can be mirrored or migrated i
 
 ## Voting Power Formula
 
-Voting power uses integer-only arithmetic:
+V1 voting power uses integer-only linear lock weighting:
 
 ```text
-sqrt(locked_amount) * holding_multiplier_bps / 10_000
+locked_amount * committed_lock_duration_multiplier_bps / 10_000
 ```
 
 No floating point math is used.
@@ -104,10 +116,12 @@ Time multiplier tiers:
 
 Examples:
 
-- `locked_amount = 10,000`, 30 days -> `sqrt(10,000) * 1.0 = 100`
-- `locked_amount = 10,000`, 365 days -> `sqrt(10,000) * 2.0 = 200`
+- `locked_amount = 10,000`, 30 days -> `10,000 * 1.0 = 10,000`
+- `locked_amount = 10,000`, 365 days -> `10,000 * 2.0 = 20,000`
 
-The square-root term dampens whale dominance. The time multiplier rewards longer lock commitment up to the 2x cap.
+The multiplier is based on the committed lock duration selected at lock / top-up time, not on elapsed holding time and not on the unlock clock. The position stores the final static `voting_power`, and unlock subtracts that stored value from `GovernancePowerStateV1`.
+
+V1 explicitly does not use square-root voting. In a permissionless system without identity binding, square-root voting can reward wallet splitting: `sqrt(100) = 10`, but `100 * sqrt(1) = 100`. Linear locked-token voting keeps wallet splitting mathematically neutral when the total locked amount and committed duration are the same.
 
 ## Lifecycle
 
@@ -115,10 +129,12 @@ The square-root term dampens whale dominance. The time multiplier rewards longer
 2. Initialize a user's governance position.
 3. User locks ALPHA into the governance vault.
 4. Position records locked amount, lock start, lock end, multiplier, and voting power.
-5. After `lock_end_time`, user may unlock ALPHA back to their own token account.
-6. Position is marked `Closed` after full unlock.
+5. `GovernancePowerStateV1` updates global `total_locked_alpha`, `total_voting_power`, and active position count.
+6. If the position votes on a proposal, `GovernancePositionVoteLockV1.voting_lock_until` is extended at least to the proposal's voting end timestamp.
+7. After both `lock_end_time` and `voting_lock_until`, user may unlock ALPHA back to their own token account.
+8. Unlock uses checked subtraction against `GovernancePowerStateV1`, then the position is marked `Closed`.
 
-This phase supports full unlock only. Partial unlocks, relocking after close, vote snapshots, and proposal voting are future phases.
+This lock layer supports full unlock only. Partial unlocks and relocking after close remain future work.
 
 ## Security Restrictions
 
@@ -131,7 +147,29 @@ This phase supports full unlock only. Partial unlocks, relocking after close, vo
 - Unlock is only allowed after `lock_end_time`.
 - Unlock transfers can only be signed by the governance config PDA.
 - Governance position updates are restricted to the owner-derived PDA.
+- Snapshot total voting power is copied from `GovernancePowerStateV1`, not supplied by the caller.
+- A position that votes cannot unlock until the proposal voting window ends.
 - All amount and timestamp arithmetic uses checked operations.
+
+## Residual Sybil Risk
+
+The current model intentionally avoids KYC and identity proofs.
+
+Mitigations already in place:
+
+- one `GovernancePositionV1` PDA per owner wallet
+- minimum lock amount
+- minimum lock duration
+- linear locked-token voting so splitting the same total amount across wallets does not increase total voting power
+- vote-lock sidecar that prevents voting and immediately unlocking before the proposal ends
+
+Residual risk remains: participants can still buy, borrow, or otherwise control large amounts of ALPHA across one or many wallets. V1 does not claim to eliminate Sybil risk; it only removes the mathematical wallet-splitting incentive introduced by square-root voting. Reputation-weighted voting is deferred to V2. Future phases may add reputation snapshots, contributor history, delegation rules, or off-chain risk review, but AI/KYC must not become an automatic voter, signer, transfer authority, or upgrade authority.
+
+## Existing Devnet Compatibility
+
+`GovernancePowerStateV1` must be initialized before opening governance locking for a config. It starts at zero and is updated only by lock / unlock flows.
+
+The current account model does not contain a reliable on-chain position counter that can prove all previously created active positions have been backfilled. Therefore this design does not implement arbitrary admin backfill. Existing Devnet governance configs with positions created before power-state tracking should be reinitialized in Devnet or handled by a future explicit migration plan. Mainnet must initialize `GovernancePowerStateV1` before any governance position locks ALPHA.
 
 ## Future Voting Layer Connection
 

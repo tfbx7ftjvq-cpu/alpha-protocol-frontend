@@ -77,6 +77,76 @@ impl RevenueRoutingStatsV1 {
 }
 
 #[account]
+pub struct TreasuryGovernanceConfigV1 {
+    pub treasury_config: Pubkey,
+    pub security_authority: Pubkey,
+    pub dao_enabled: bool,
+    pub spending_limit_usdc: u64,
+    pub split_change_threshold_bps: u64,
+    pub emergency_mode: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub bump: u8,
+}
+
+impl TreasuryGovernanceConfigV1 {
+    pub const INIT_SPACE: usize = (32 * 2) + 1 + (8 * 4) + 1 + 1;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TreasurySpendingStatusV1 {
+    Pending,
+    Approved,
+    Rejected,
+    Executed,
+    Cancelled,
+}
+
+#[account]
+pub struct TreasurySpendingRequestV1 {
+    pub request_id: u64,
+    pub treasury_config: Pubkey,
+    pub proposer: Pubkey,
+    pub recipient: Pubkey,
+    pub amount_usdc: u64,
+    pub purpose_hash: [u8; 32],
+    pub proposal_id: u64,
+    pub status: TreasurySpendingStatusV1,
+    pub created_at: i64,
+    pub executed_at: i64,
+    pub bump: u8,
+}
+
+impl TreasurySpendingRequestV1 {
+    pub const INIT_SPACE: usize = 8 + (32 * 4) + (8 * 4) + 1 + 1;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TreasuryBuilderPayoutStatusV1 {
+    Pending,
+    Approved,
+    Executed,
+    Rejected,
+}
+
+#[account]
+pub struct TreasuryBuilderPayoutGovernanceV1 {
+    pub payout_request: Pubkey,
+    pub contributor_registry: Pubkey,
+    pub milestone: Pubkey,
+    pub recipient: Pubkey,
+    pub amount: u64,
+    pub proposal_id: u64,
+    pub status: TreasuryBuilderPayoutStatusV1,
+    pub created_at: i64,
+    pub bump: u8,
+}
+
+impl TreasuryBuilderPayoutGovernanceV1 {
+    pub const INIT_SPACE: usize = (32 * 4) + (8 * 3) + 1 + 1;
+}
+
+#[account]
 pub struct StakingPoolV1 {
     pub authority: Pubkey,
     pub alpha_mint: Pubkey,
@@ -133,6 +203,21 @@ pub enum ProposalType {
     ContributorUpdateRole,
     ContributorApproveMilestone,
     ContributorApproveBuilderPayout,
+    TreasuryUpdateRevenueSplit,
+    TreasuryApproveSpending,
+    TreasuryApproveBuilderPayout,
+    GreenLabelApproveCertification,
+    GreenLabelRejectCertification,
+    GreenLabelRevokeCertification,
+    VictimReliefApproveCompensation,
+    VictimReliefRejectClaim,
+    VictimReliefUpdatePolicy,
+    ScamRegistryPublishReport,
+    ScamRegistryRemoveReport,
+    ScamRegistryAppealDecision,
+    ProtocolUpdateParameter,
+    ProtocolUpgradeProgram,
+    ProtocolEmergencyAction,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -164,6 +249,21 @@ pub enum ActionType {
     ContributorUpdateRole,
     ContributorApproveMilestone,
     ContributorApproveBuilderPayout,
+    TreasuryUpdateRevenueSplit,
+    TreasuryApproveSpending,
+    TreasuryApproveBuilderPayout,
+    GreenLabelApproveCertification,
+    GreenLabelRejectCertification,
+    GreenLabelRevokeCertification,
+    VictimReliefApproveCompensation,
+    VictimReliefRejectClaim,
+    VictimReliefUpdatePolicy,
+    ScamRegistryPublishReport,
+    ScamRegistryRemoveReport,
+    ScamRegistryAppealDecision,
+    ProtocolUpdateParameter,
+    ProtocolUpgradeProgram,
+    ProtocolEmergencyAction,
 }
 
 #[account]
@@ -236,6 +336,33 @@ impl GovernanceLockConfigV1 {
 }
 
 #[account]
+pub struct GovernancePowerStateV1 {
+    pub governance_lock_config: Pubkey,
+    pub total_locked_alpha: u64,
+    pub total_voting_power: u64,
+    pub active_position_count: u64,
+    pub updated_at: i64,
+    pub bump: u8,
+}
+
+impl GovernancePowerStateV1 {
+    pub const INIT_SPACE: usize = 32 + (8 * 4) + 1;
+}
+
+#[account]
+pub struct GovernancePositionVoteLockV1 {
+    pub governance_position: Pubkey,
+    pub voting_lock_until: i64,
+    pub last_proposal: Pubkey,
+    pub updated_at: i64,
+    pub bump: u8,
+}
+
+impl GovernancePositionVoteLockV1 {
+    pub const INIT_SPACE: usize = (32 * 2) + (8 * 2) + 1;
+}
+
+#[account]
 pub struct GovernanceVotingConfigV1 {
     pub authority: Pubkey,
     pub quorum_bps: u64,
@@ -274,6 +401,62 @@ pub enum VoteChoiceV1 {
     Yes,
     No,
     Abstain,
+}
+
+/// DAO-layer semantic action language for governance proposals.
+///
+/// Variant order is part of the serialized governance payload format. Do not
+/// reorder existing variants; append new variants only.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GovernanceActionTypeV1 {
+    TreasuryUpdateRevenueSplit,
+    TreasuryApproveSpending,
+    TreasuryApproveBuilderPayout,
+    GreenLabelApproveCertification,
+    GreenLabelRejectCertification,
+    GreenLabelRevokeCertification,
+    GreenLabelRefundBond,
+    GreenLabelSlashBond,
+    VictimReliefApproveCompensation,
+    VictimReliefRejectClaim,
+    VictimReliefUpdatePolicy,
+    ScamRegistryPublishReport,
+    ScamRegistryRemoveReport,
+    ScamRegistryAppealDecision,
+    ContributorAdd,
+    ContributorRemove,
+    ContributorUpdateRole,
+    ContributorApproveMilestone,
+    ContributorApprovePayout,
+    ProtocolUpdateParameter,
+    ProtocolUpgradeProgram,
+    ProtocolEmergencyAction,
+}
+
+/// Stable identifier for the protocol module targeted by a governance action.
+///
+/// Variant order is part of the serialized governance payload format. Do not
+/// reorder existing variants; append new variants only.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProtocolModuleIdV1 {
+    Treasury,
+    GreenLabel,
+    VictimRelief,
+    ScamRegistry,
+    Contributor,
+    Protocol,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GovernancePayloadV1 {
+    pub schema_version: u8,
+    pub action_type: GovernanceActionTypeV1,
+    pub module_id: ProtocolModuleIdV1,
+    pub target_program: Pubkey,
+    pub target_account: Pubkey,
+    pub parameters_hash: [u8; 32],
+    pub evidence_hash: [u8; 32],
+    pub created_at: i64,
 }
 
 #[account]
@@ -708,6 +891,18 @@ mod tests {
     }
 
     #[test]
+    fn governance_power_state_space_covers_fields() {
+        let minimum = 32 + (8 * 4) + 1;
+        assert!(GovernancePowerStateV1::INIT_SPACE >= minimum);
+    }
+
+    #[test]
+    fn governance_position_vote_lock_space_covers_fields() {
+        let minimum = (32 * 2) + (8 * 2) + 1;
+        assert!(GovernancePositionVoteLockV1::INIT_SPACE >= minimum);
+    }
+
+    #[test]
     fn governance_voting_config_space_covers_fields() {
         let minimum = 32 + (8 * 4) + 1;
         assert!(GovernanceVotingConfigV1::INIT_SPACE >= minimum);
@@ -729,6 +924,24 @@ mod tests {
     fn universal_governance_decision_adapter_space_covers_fields() {
         let minimum = (32 * 5) + 1 + 8 + 1 + 1;
         assert!(UniversalGovernanceDecisionAdapterV1::INIT_SPACE >= minimum);
+    }
+
+    #[test]
+    fn treasury_governance_config_space_covers_fields() {
+        let minimum = (32 * 2) + 1 + (8 * 4) + 1 + 1;
+        assert!(TreasuryGovernanceConfigV1::INIT_SPACE >= minimum);
+    }
+
+    #[test]
+    fn treasury_spending_request_space_covers_fields() {
+        let minimum = 8 + (32 * 4) + (8 * 4) + 1 + 1;
+        assert!(TreasurySpendingRequestV1::INIT_SPACE >= minimum);
+    }
+
+    #[test]
+    fn treasury_builder_payout_governance_space_covers_fields() {
+        let minimum = (32 * 4) + (8 * 3) + 1 + 1;
+        assert!(TreasuryBuilderPayoutGovernanceV1::INIT_SPACE >= minimum);
     }
 
     #[test]

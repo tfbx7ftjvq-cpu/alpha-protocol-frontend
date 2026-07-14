@@ -536,6 +536,66 @@ pub fn is_action_valid_for_proposal_type(
                 ProposalType::ContributorApproveBuilderPayout,
                 ActionType::ContributorApproveBuilderPayout
             )
+            | (
+                ProposalType::TreasuryUpdateRevenueSplit,
+                ActionType::TreasuryUpdateRevenueSplit
+            )
+            | (
+                ProposalType::TreasuryApproveSpending,
+                ActionType::TreasuryApproveSpending
+            )
+            | (
+                ProposalType::TreasuryApproveBuilderPayout,
+                ActionType::TreasuryApproveBuilderPayout
+            )
+            | (
+                ProposalType::GreenLabelApproveCertification,
+                ActionType::GreenLabelApproveCertification
+            )
+            | (
+                ProposalType::GreenLabelRejectCertification,
+                ActionType::GreenLabelRejectCertification
+            )
+            | (
+                ProposalType::GreenLabelRevokeCertification,
+                ActionType::GreenLabelRevokeCertification
+            )
+            | (
+                ProposalType::VictimReliefApproveCompensation,
+                ActionType::VictimReliefApproveCompensation
+            )
+            | (
+                ProposalType::VictimReliefRejectClaim,
+                ActionType::VictimReliefRejectClaim
+            )
+            | (
+                ProposalType::VictimReliefUpdatePolicy,
+                ActionType::VictimReliefUpdatePolicy
+            )
+            | (
+                ProposalType::ScamRegistryPublishReport,
+                ActionType::ScamRegistryPublishReport
+            )
+            | (
+                ProposalType::ScamRegistryRemoveReport,
+                ActionType::ScamRegistryRemoveReport
+            )
+            | (
+                ProposalType::ScamRegistryAppealDecision,
+                ActionType::ScamRegistryAppealDecision
+            )
+            | (
+                ProposalType::ProtocolUpdateParameter,
+                ActionType::ProtocolUpdateParameter
+            )
+            | (
+                ProposalType::ProtocolUpgradeProgram,
+                ActionType::ProtocolUpgradeProgram
+            )
+            | (
+                ProposalType::ProtocolEmergencyAction,
+                ActionType::ProtocolEmergencyAction
+            )
     )
 }
 

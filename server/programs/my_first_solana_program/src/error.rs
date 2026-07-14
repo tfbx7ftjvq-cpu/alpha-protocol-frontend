@@ -265,4 +265,28 @@ pub enum CustomError {
 
     #[msg("Invalid governance decision adapter")]
     InvalidGovernanceDecisionAdapter,
+
+    #[msg("Invalid governance power state")]
+    InvalidGovernancePowerState,
+
+    #[msg("Invalid governance vote lock")]
+    InvalidGovernanceVoteLock,
+
+    #[msg("Governance position is locked by an active vote")]
+    GovernanceVoteLockActive,
+
+    #[msg("Invalid treasury governance config")]
+    InvalidTreasuryGovernanceConfig,
+
+    #[msg("Invalid treasury governance request")]
+    InvalidTreasuryGovernanceRequest,
+
+    #[msg("Invalid treasury spending status")]
+    InvalidTreasurySpendingStatus,
+
+    #[msg("Invalid treasury builder payout status")]
+    InvalidTreasuryBuilderPayoutStatus,
+
+    #[msg("Invalid treasury governance payload hash")]
+    InvalidTreasuryGovernancePayloadHash,
 }
