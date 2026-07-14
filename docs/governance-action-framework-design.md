@@ -59,15 +59,19 @@ The goal is to prevent callers from bypassing DAO semantics by directly choosing
 - Contributor
 - Protocol
 
-Future phases can use it with a module registry:
+Phase 2E-FINAL Stage 3 uses it with a module registry:
 
 ```text
 ProtocolModuleRegistryV1
+  security_governance_config
   module_id
+  module_code
   program_id
-  authority
   enabled
+  schema_version
 ```
+
+The V1 registry is an allow-list for modules inside the current Alpha Protocol program. It does not yet support external program registration or registry mutation.
 
 ## 5. Payload Hash Security Model
 
@@ -131,6 +135,18 @@ GovernanceActionTypeV1
 
 Stage 2 now changes the adapter input model: the adapter consumes `GovernanceProposalActionV1`, not caller-controlled action data and not unverified proposal mirror fields.
 
+Stage 3 adds `ProtocolModuleRegistryV1` to the same path:
+
+```text
+GovernanceActionTypeV1
+-> ProtocolModuleIdV1
+-> ProtocolModuleRegistryV1
+-> UniversalGovernanceDecisionAdapterV1
+-> Security ActionType
+```
+
+Strict proposal initialization, snapshot creation, and adapter creation all validate the same registry helper before trusting a module target.
+
 ## 8. Typed Proposal Action Binding
 
 Phase 2E-FINAL Stage 2 adds `GovernanceProposalActionV1` as the immutable trusted source for new governance proposals.
@@ -139,9 +155,9 @@ Phase 2E-FINAL Stage 2 adds `GovernanceProposalActionV1` as the immutable truste
 
 New governance proposals should be created with `initialize_governance_proposal_with_action_v1`, which derives the proposal category, action code, target mirrors, and canonical payload hash from a typed `GovernanceActionRequestV1`.
 
-`create_governance_snapshot_v1` and `create_governance_decision_adapter_v1` both require the sidecar. Legacy proposals without `GovernanceProposalActionV1` cannot enter the new voting or DAO-controlled execution path.
+`create_governance_snapshot_v1` and `create_governance_decision_adapter_v1` both require the sidecar and the module registry. Legacy proposals without `GovernanceProposalActionV1` cannot enter the new voting or DAO-controlled execution path.
 
-The target program is currently fixed to the Alpha Protocol Program ID. Protocol Module Registry support is intentionally deferred.
+The target program is currently fixed to the Alpha Protocol Program ID through `ProtocolModuleRegistryV1`. Module Registry mutation and external program registration are intentionally deferred.
 
 ## 9. Non-Goals
 

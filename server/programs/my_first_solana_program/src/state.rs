@@ -520,6 +520,23 @@ impl GovernanceProposalActionV1 {
 }
 
 #[account]
+pub struct ProtocolModuleRegistryV1 {
+    pub security_governance_config: Pubkey,
+    pub module_id: ProtocolModuleIdV1,
+    pub module_code: u8,
+    pub program_id: Pubkey,
+    pub enabled: bool,
+    pub schema_version: u16,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub bump: u8,
+}
+
+impl ProtocolModuleRegistryV1 {
+    pub const INIT_SPACE: usize = 32 + 1 + 1 + 32 + 1 + 2 + 8 + 8 + 1;
+}
+
+#[account]
 pub struct GovernancePositionV1 {
     pub owner: Pubkey,
     pub alpha_mint: Pubkey,
@@ -918,6 +935,13 @@ mod tests {
         let minimum = (32 * 4) + 8 + 1 + 1 + (32 * 3) + 2 + 8 + 1;
         assert_eq!(GovernanceProposalActionV1::INIT_SPACE, minimum);
         assert_eq!(GovernanceProposalActionV1::INIT_SPACE, 245);
+    }
+
+    #[test]
+    fn protocol_module_registry_space_is_exact() {
+        let minimum = 32 + 1 + 1 + 32 + 1 + 2 + 8 + 8 + 1;
+        assert_eq!(ProtocolModuleRegistryV1::INIT_SPACE, minimum);
+        assert_eq!(ProtocolModuleRegistryV1::INIT_SPACE, 86);
     }
 
     #[test]

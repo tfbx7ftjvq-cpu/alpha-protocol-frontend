@@ -3,7 +3,7 @@ use anchor_spl::token::{transfer_checked, Mint, Token, TokenAccount, TransferChe
 
 use crate::constants::{
     BPS_DENOMINATOR, GOVERNANCE_180_DAY_MULTIPLIER_BPS, GOVERNANCE_30_DAY_MULTIPLIER_BPS,
-    GOVERNANCE_365_DAY_MULTIPLIER_BPS, GOVERNANCE_90_DAY_MULTIPLIER_BPS,
+    GOVERNANCE_365_DAY_MULTIPLIER_BPS, GOVERNANCE_90_DAY_MULTIPLIER_BPS, GOVERNANCE_CONFIG_V1_SEED,
     GOVERNANCE_DEFAULT_APPROVAL_THRESHOLD_BPS, GOVERNANCE_DEFAULT_MIN_LOCK_AMOUNT,
     GOVERNANCE_DEFAULT_QUORUM_BPS, GOVERNANCE_DEFAULT_VOTING_PERIOD_SECONDS,
     GOVERNANCE_LOCK_CONFIG_V1_SEED, GOVERNANCE_MAX_LOCK_DURATION_SECONDS,
@@ -12,7 +12,8 @@ use crate::constants::{
     GOVERNANCE_POWER_STATE_V1_SEED, GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
     GOVERNANCE_PROPOSAL_V1_SEED, GOVERNANCE_SNAPSHOT_V1_SEED, GOVERNANCE_VAULT_V1_SEED,
     GOVERNANCE_VOTING_CONFIG_V1_SEED, LOCK_180_DAYS_SECONDS, LOCK_30_DAYS_SECONDS,
-    LOCK_365_DAYS_SECONDS, LOCK_90_DAYS_SECONDS, VOTE_RECORD_V1_SEED,
+    LOCK_365_DAYS_SECONDS, LOCK_90_DAYS_SECONDS, PROTOCOL_MODULE_REGISTRY_V1_SEED,
+    VOTE_RECORD_V1_SEED,
 };
 use crate::error::CustomError;
 use crate::instructions::governance_action_v1::{
@@ -20,12 +21,16 @@ use crate::instructions::governance_action_v1::{
     hash_governance_payload_v1, map_governance_action_to_governance_proposal_type_v1,
     map_governance_action_to_module,
 };
+use crate::instructions::protocol_module_registry_v1::{
+    expected_security_governance_config_key, protocol_module_stable_code_v1,
+    validate_protocol_module_registry_v1,
+};
 use crate::state::{
-    GovernanceActionRequestV1, GovernanceLockConfigV1, GovernancePayloadV1,
+    GovernanceActionRequestV1, GovernanceConfigV1, GovernanceLockConfigV1, GovernancePayloadV1,
     GovernancePositionStatusV1, GovernancePositionV1, GovernancePositionVoteLockV1,
     GovernancePowerStateV1, GovernanceProposalActionV1, GovernanceProposalStatusV1,
     GovernanceProposalTypeV1, GovernanceProposalV1, GovernanceSnapshotV1, GovernanceVotingConfigV1,
-    VoteChoiceV1, VoteRecordV1,
+    ProtocolModuleRegistryV1, VoteChoiceV1, VoteRecordV1,
 };
 
 #[derive(Accounts)]
@@ -77,7 +82,7 @@ pub struct InitializeGovernanceVotingConfigV1<'info> {
         seeds = [GOVERNANCE_VOTING_CONFIG_V1_SEED],
         bump
     )]
-    pub governance_voting_config: Account<'info, GovernanceVotingConfigV1>,
+    pub governance_voting_config: Box<Account<'info, GovernanceVotingConfigV1>>,
 
     #[account(mut)]
     pub authority: Signer<'info>,
@@ -104,7 +109,7 @@ pub struct InitializeGovernanceProposalV1<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(proposal_id: u64)]
+#[instruction(proposal_id: u64, request: GovernanceActionRequestV1)]
 pub struct InitializeGovernanceProposalWithActionV1<'info> {
     #[account(
         init,
@@ -127,6 +132,15 @@ pub struct InitializeGovernanceProposalWithActionV1<'info> {
     )]
     pub governance_proposal_action: Account<'info, GovernanceProposalActionV1>,
 
+    #[account(
+        seeds = [
+            PROTOCOL_MODULE_REGISTRY_V1_SEED,
+            &[protocol_module_stable_code_v1(request.module_id)]
+        ],
+        bump = protocol_module_registry.bump
+    )]
+    pub protocol_module_registry: Account<'info, ProtocolModuleRegistryV1>,
+
     #[account(mut)]
     pub proposer: Signer<'info>,
 
@@ -139,7 +153,7 @@ pub struct InitializeGovernancePositionV1<'info> {
         seeds = [GOVERNANCE_LOCK_CONFIG_V1_SEED],
         bump = governance_config.bump
     )]
-    pub governance_config: Account<'info, GovernanceLockConfigV1>,
+    pub governance_config: Box<Account<'info, GovernanceLockConfigV1>>,
 
     #[account(
         init,
@@ -204,7 +218,7 @@ pub struct LockAlphaForGovernance<'info> {
         bump = governance_power_state.bump,
         constraint = governance_power_state.governance_lock_config == governance_config.key() @ CustomError::InvalidGovernancePowerState
     )]
-    pub governance_power_state: Account<'info, GovernancePowerStateV1>,
+    pub governance_power_state: Box<Account<'info, GovernancePowerStateV1>>,
 
     #[account(mut)]
     pub owner: Signer<'info>,
@@ -301,7 +315,7 @@ pub struct UnlockAlphaFromGovernance<'info> {
 
 #[derive(Accounts)]
 pub struct InitializeGovernanceSnapshotV1<'info> {
-    pub governance_proposal: Account<'info, GovernanceProposalV1>,
+    pub governance_proposal: Box<Account<'info, GovernanceProposalV1>>,
 
     #[account(
         init,
@@ -354,7 +368,22 @@ pub struct CreateGovernanceSnapshotV1<'info> {
         ],
         bump = governance_proposal_action.bump
     )]
-    pub governance_proposal_action: Account<'info, GovernanceProposalActionV1>,
+    pub governance_proposal_action: Box<Account<'info, GovernanceProposalActionV1>>,
+
+    #[account(
+        seeds = [GOVERNANCE_CONFIG_V1_SEED],
+        bump = security_governance_config.bump
+    )]
+    pub security_governance_config: Box<Account<'info, GovernanceConfigV1>>,
+
+    #[account(
+        seeds = [
+            PROTOCOL_MODULE_REGISTRY_V1_SEED,
+            &[protocol_module_stable_code_v1(governance_proposal_action.module_id)]
+        ],
+        bump = protocol_module_registry.bump
+    )]
+    pub protocol_module_registry: Box<Account<'info, ProtocolModuleRegistryV1>>,
 
     #[account(
         init,
@@ -363,7 +392,7 @@ pub struct CreateGovernanceSnapshotV1<'info> {
         seeds = [GOVERNANCE_SNAPSHOT_V1_SEED, governance_proposal.key().as_ref()],
         bump
     )]
-    pub governance_snapshot: Account<'info, GovernanceSnapshotV1>,
+    pub governance_snapshot: Box<Account<'info, GovernanceSnapshotV1>>,
 
     #[account(mut)]
     pub proposer: Signer<'info>,
@@ -549,10 +578,13 @@ pub fn initialize_governance_proposal_with_action_v1_handler(
 ) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
     let proposal_key = ctx.accounts.governance_proposal.key();
+    let registry_key = ctx.accounts.protocol_module_registry.key();
     record_governance_proposal_with_action_init(
         &mut ctx.accounts.governance_proposal,
         &mut ctx.accounts.governance_proposal_action,
+        &ctx.accounts.protocol_module_registry,
         proposal_key,
+        registry_key,
         proposal_id,
         ctx.accounts.proposer.key(),
         &request,
@@ -678,10 +710,13 @@ pub fn create_governance_snapshot_v1_handler(
     record_governance_snapshot_create(
         &mut ctx.accounts.governance_proposal,
         &ctx.accounts.governance_proposal_action,
+        &ctx.accounts.protocol_module_registry,
         &mut ctx.accounts.governance_snapshot,
         &ctx.accounts.governance_voting_config,
         &ctx.accounts.governance_power_state,
         proposal_key,
+        ctx.accounts.protocol_module_registry.key(),
+        ctx.accounts.security_governance_config.key(),
         snapshot_key,
         now,
         ctx.bumps.governance_snapshot,
@@ -950,7 +985,9 @@ pub fn record_governance_proposal_init(
 pub fn record_governance_proposal_with_action_init(
     governance_proposal: &mut GovernanceProposalV1,
     governance_proposal_action: &mut GovernanceProposalActionV1,
+    protocol_module_registry: &ProtocolModuleRegistryV1,
     governance_proposal_key: Pubkey,
+    protocol_module_registry_key: Pubkey,
     proposal_id: u64,
     proposer: Pubkey,
     request: &GovernanceActionRequestV1,
@@ -963,10 +1000,33 @@ pub fn record_governance_proposal_with_action_init(
         CustomError::GovernanceProposalActionMismatch
     );
 
-    let payload = governance_payload_from_action_request_v1(request, created_at)?;
+    let expected_module = map_governance_action_to_module(request.action_type);
+    require!(
+        request.module_id == expected_module,
+        CustomError::GovernanceActionModuleMismatch
+    );
+    validate_protocol_module_registry_v1(
+        protocol_module_registry,
+        protocol_module_registry_key,
+        expected_security_governance_config_key(),
+        expected_module,
+        crate::ID,
+    )?;
+    require_keys_eq!(
+        request.target_program,
+        protocol_module_registry.program_id,
+        CustomError::ProtocolModuleProgramMismatch
+    );
+
+    let registry_bound_request = GovernanceActionRequestV1 {
+        target_program: protocol_module_registry.program_id,
+        ..*request
+    };
+    let payload = governance_payload_from_action_request_v1(&registry_bound_request, created_at)?;
     let canonical_payload_hash = hash_governance_payload_v1(&payload)?;
-    let proposal_type = map_governance_action_to_governance_proposal_type_v1(request.action_type);
-    let action_code = governance_action_stable_code_v1(request.action_type);
+    let proposal_type =
+        map_governance_action_to_governance_proposal_type_v1(registry_bound_request.action_type);
+    let action_code = governance_action_stable_code_v1(registry_bound_request.action_type);
 
     record_governance_proposal_init(
         governance_proposal,
@@ -974,8 +1034,8 @@ pub fn record_governance_proposal_with_action_init(
         proposer,
         proposal_type,
         action_code,
-        request.target_program,
-        request.target_account,
+        protocol_module_registry.program_id,
+        registry_bound_request.target_account,
         canonical_payload_hash,
         0,
         0,
@@ -986,14 +1046,14 @@ pub fn record_governance_proposal_with_action_init(
     governance_proposal_action.governance_proposal = governance_proposal_key;
     governance_proposal_action.proposal_id = proposal_id;
     governance_proposal_action.proposer = proposer;
-    governance_proposal_action.action_type = request.action_type;
-    governance_proposal_action.module_id = request.module_id;
-    governance_proposal_action.target_program = request.target_program;
-    governance_proposal_action.target_account = request.target_account;
-    governance_proposal_action.parameters_hash = request.parameters_hash;
-    governance_proposal_action.evidence_hash = request.evidence_hash;
+    governance_proposal_action.action_type = registry_bound_request.action_type;
+    governance_proposal_action.module_id = registry_bound_request.module_id;
+    governance_proposal_action.target_program = protocol_module_registry.program_id;
+    governance_proposal_action.target_account = registry_bound_request.target_account;
+    governance_proposal_action.parameters_hash = registry_bound_request.parameters_hash;
+    governance_proposal_action.evidence_hash = registry_bound_request.evidence_hash;
     governance_proposal_action.canonical_payload_hash = canonical_payload_hash;
-    governance_proposal_action.schema_version = request.schema_version;
+    governance_proposal_action.schema_version = registry_bound_request.schema_version;
     governance_proposal_action.created_at = created_at;
     governance_proposal_action.bump = action_bump;
 
@@ -1432,10 +1492,13 @@ pub fn record_governance_snapshot_init(
 pub fn record_governance_snapshot_create(
     governance_proposal: &mut GovernanceProposalV1,
     governance_proposal_action: &GovernanceProposalActionV1,
+    protocol_module_registry: &ProtocolModuleRegistryV1,
     governance_snapshot: &mut GovernanceSnapshotV1,
     governance_voting_config: &GovernanceVotingConfigV1,
     governance_power_state: &GovernancePowerStateV1,
     proposal_key: Pubkey,
+    protocol_module_registry_key: Pubkey,
+    security_governance_config_key: Pubkey,
     snapshot_key: Pubkey,
     created_at: i64,
     bump: u8,
@@ -1452,6 +1515,13 @@ pub fn record_governance_snapshot_create(
         governance_proposal,
         governance_proposal_action,
         proposal_key,
+    )?;
+    validate_protocol_module_registry_v1(
+        protocol_module_registry,
+        protocol_module_registry_key,
+        security_governance_config_key,
+        map_governance_action_to_module(governance_proposal_action.action_type),
+        governance_proposal_action.target_program,
     )?;
     require!(
         governance_power_state.total_voting_power > 0,
@@ -1796,6 +1866,9 @@ pub fn record_vote_record_init(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::instructions::protocol_module_registry_v1::{
+        expected_protocol_module_registry_key_and_bump, PROTOCOL_MODULE_REGISTRY_V1_SCHEMA_VERSION,
+    };
     use crate::state::{GovernanceActionTypeV1, ProtocolModuleIdV1};
 
     const PROPOSAL_ID: u64 = 7;
@@ -1889,16 +1962,37 @@ mod tests {
         }
     }
 
+    fn registry_for_module(module_id: ProtocolModuleIdV1) -> (ProtocolModuleRegistryV1, Pubkey) {
+        let (registry_key, bump) = expected_protocol_module_registry_key_and_bump(module_id);
+        (
+            ProtocolModuleRegistryV1 {
+                security_governance_config: expected_security_governance_config_key(),
+                module_id,
+                module_code: protocol_module_stable_code_v1(module_id),
+                program_id: crate::ID,
+                enabled: true,
+                schema_version: PROTOCOL_MODULE_REGISTRY_V1_SCHEMA_VERSION,
+                created_at: 50,
+                updated_at: 50,
+                bump,
+            },
+            registry_key,
+        )
+    }
+
     fn strict_proposal_and_action(
         action_type: GovernanceActionTypeV1,
     ) -> (GovernanceProposalV1, GovernanceProposalActionV1) {
         let mut proposal = default_proposal();
         let mut action = default_proposal_action();
         let request = default_action_request(action_type);
+        let (registry, registry_key) = registry_for_module(request.module_id);
         record_governance_proposal_with_action_init(
             &mut proposal,
             &mut action,
+            &registry,
             PROPOSAL_KEY,
+            registry_key,
             PROPOSAL_ID,
             PROPOSER,
             &request,
@@ -2007,15 +2101,19 @@ mod tests {
     ) -> (GovernanceProposalV1, GovernanceSnapshotV1) {
         let (mut proposal, action) =
             strict_proposal_and_action(GovernanceActionTypeV1::ContributorAdd);
+        let (registry, registry_key) = registry_for_module(action.module_id);
         let mut snapshot = blank_snapshot();
         let power_state = power_state_with_total(total_voting_power);
         record_governance_snapshot_create(
             &mut proposal,
             &action,
+            &registry,
             &mut snapshot,
             &default_voting_config(),
             &power_state,
             PROPOSAL_KEY,
+            registry_key,
+            expected_security_governance_config_key(),
             SNAPSHOT_KEY,
             100,
             3,
@@ -2186,11 +2284,14 @@ mod tests {
         let mut action = default_proposal_action();
         let mut request = default_action_request(GovernanceActionTypeV1::ContributorAdd);
         request.module_id = ProtocolModuleIdV1::Treasury;
+        let (registry, registry_key) = registry_for_module(request.module_id);
 
         let err = record_governance_proposal_with_action_init(
             &mut proposal,
             &mut action,
+            &registry,
             PROPOSAL_KEY,
+            registry_key,
             PROPOSAL_ID,
             PROPOSER,
             &request,
@@ -2204,16 +2305,18 @@ mod tests {
     }
 
     #[test]
-    fn initialize_governance_proposal_with_action_rejects_wrong_target_program() {
+    fn initialize_governance_proposal_with_action_rejects_wrong_registry() {
         let mut proposal = default_proposal();
         let mut action = default_proposal_action();
-        let mut request = default_action_request(GovernanceActionTypeV1::ContributorAdd);
-        request.target_program = TARGET_PROGRAM;
+        let request = default_action_request(GovernanceActionTypeV1::ContributorAdd);
+        let (registry, registry_key) = registry_for_module(ProtocolModuleIdV1::Treasury);
 
         let err = record_governance_proposal_with_action_init(
             &mut proposal,
             &mut action,
+            &registry,
             PROPOSAL_KEY,
+            registry_key,
             PROPOSAL_ID,
             PROPOSER,
             &request,
@@ -2223,7 +2326,33 @@ mod tests {
         )
         .unwrap_err();
 
-        assert_eq!(err, CustomError::GovernanceActionTargetMismatch.into());
+        assert_eq!(err, CustomError::ProtocolModuleRegistryMismatch.into());
+    }
+
+    #[test]
+    fn initialize_governance_proposal_with_action_rejects_wrong_target_program() {
+        let mut proposal = default_proposal();
+        let mut action = default_proposal_action();
+        let mut request = default_action_request(GovernanceActionTypeV1::ContributorAdd);
+        request.target_program = TARGET_PROGRAM;
+        let (registry, registry_key) = registry_for_module(request.module_id);
+
+        let err = record_governance_proposal_with_action_init(
+            &mut proposal,
+            &mut action,
+            &registry,
+            PROPOSAL_KEY,
+            registry_key,
+            PROPOSAL_ID,
+            PROPOSER,
+            &request,
+            80,
+            1,
+            2,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::ProtocolModuleProgramMismatch.into());
     }
 
     #[test]
@@ -2232,11 +2361,14 @@ mod tests {
         let mut action = default_proposal_action();
         let mut request = default_action_request(GovernanceActionTypeV1::ContributorAdd);
         request.target_account = Pubkey::default();
+        let (registry, registry_key) = registry_for_module(request.module_id);
 
         let err = record_governance_proposal_with_action_init(
             &mut proposal,
             &mut action,
+            &registry,
             PROPOSAL_KEY,
+            registry_key,
             PROPOSAL_ID,
             PROPOSER,
             &request,
@@ -2255,11 +2387,14 @@ mod tests {
         let mut action = default_proposal_action();
         let mut request = default_action_request(GovernanceActionTypeV1::ContributorAdd);
         request.parameters_hash = [0; 32];
+        let (registry, registry_key) = registry_for_module(request.module_id);
 
         let err = record_governance_proposal_with_action_init(
             &mut proposal,
             &mut action,
+            &registry,
             PROPOSAL_KEY,
+            registry_key,
             PROPOSAL_ID,
             PROPOSER,
             &request,
@@ -2277,11 +2412,14 @@ mod tests {
         let (mut proposal, mut action) =
             strict_proposal_and_action(GovernanceActionTypeV1::ContributorAdd);
         let request = default_action_request(GovernanceActionTypeV1::ContributorAdd);
+        let (registry, registry_key) = registry_for_module(request.module_id);
 
         let err = record_governance_proposal_with_action_init(
             &mut proposal,
             &mut action,
+            &registry,
             PROPOSAL_KEY,
+            registry_key,
             PROPOSAL_ID,
             PROPOSER,
             &request,
@@ -2313,16 +2451,20 @@ mod tests {
         )
         .unwrap();
         let action = default_proposal_action();
+        let (registry, registry_key) = registry_for_module(ProtocolModuleIdV1::Contributor);
         let mut snapshot = blank_snapshot();
         let power_state = power_state_with_total(100);
 
         let err = record_governance_snapshot_create(
             &mut proposal,
             &action,
+            &registry,
             &mut snapshot,
             &default_voting_config(),
             &power_state,
             PROPOSAL_KEY,
+            registry_key,
+            expected_security_governance_config_key(),
             SNAPSHOT_KEY,
             100,
             3,
@@ -2333,6 +2475,61 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_rejects_wrong_protocol_module_registry() {
+        let (mut proposal, action) =
+            strict_proposal_and_action(GovernanceActionTypeV1::ContributorAdd);
+        let (registry, registry_key) = registry_for_module(ProtocolModuleIdV1::Treasury);
+        let mut snapshot = blank_snapshot();
+        let power_state = power_state_with_total(100);
+
+        let err = record_governance_snapshot_create(
+            &mut proposal,
+            &action,
+            &registry,
+            &mut snapshot,
+            &default_voting_config(),
+            &power_state,
+            PROPOSAL_KEY,
+            registry_key,
+            expected_security_governance_config_key(),
+            SNAPSHOT_KEY,
+            100,
+            3,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::ProtocolModuleRegistryMismatch.into());
+    }
+
+    #[test]
+    fn snapshot_rejects_disabled_protocol_module_registry() {
+        let (mut proposal, action) =
+            strict_proposal_and_action(GovernanceActionTypeV1::ContributorAdd);
+        let (mut registry, registry_key) = registry_for_module(action.module_id);
+        registry.enabled = false;
+        let mut snapshot = blank_snapshot();
+        let power_state = power_state_with_total(100);
+
+        let err = record_governance_snapshot_create(
+            &mut proposal,
+            &action,
+            &registry,
+            &mut snapshot,
+            &default_voting_config(),
+            &power_state,
+            PROPOSAL_KEY,
+            registry_key,
+            expected_security_governance_config_key(),
+            SNAPSHOT_KEY,
+            100,
+            3,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::ProtocolModuleDisabled.into());
+    }
+
+    #[test]
     fn governance_action_mismatch_blocks_snapshot() {
         let (mut proposal, action) =
             strict_proposal_and_action(GovernanceActionTypeV1::ContributorAdd);
@@ -2340,14 +2537,18 @@ mod tests {
             governance_action_stable_code_v1(GovernanceActionTypeV1::ContributorRemove);
         let mut snapshot = blank_snapshot();
         let power_state = power_state_with_total(100);
+        let (registry, registry_key) = registry_for_module(action.module_id);
 
         let err = record_governance_snapshot_create(
             &mut proposal,
             &action,
+            &registry,
             &mut snapshot,
             &default_voting_config(),
             &power_state,
             PROPOSAL_KEY,
+            registry_key,
+            expected_security_governance_config_key(),
             SNAPSHOT_KEY,
             100,
             3,
@@ -2364,10 +2565,13 @@ mod tests {
         let err = record_governance_snapshot_create(
             &mut proposal,
             &action,
+            &registry,
             &mut snapshot,
             &default_voting_config(),
             &power_state,
             PROPOSAL_KEY,
+            registry_key,
+            expected_security_governance_config_key(),
             SNAPSHOT_KEY,
             100,
             3,
@@ -2382,16 +2586,20 @@ mod tests {
         let (mut proposal, mut action) =
             strict_proposal_and_action(GovernanceActionTypeV1::ContributorAdd);
         action.canonical_payload_hash = [6; 32];
+        let (registry, registry_key) = registry_for_module(action.module_id);
         let mut snapshot = blank_snapshot();
         let power_state = power_state_with_total(100);
 
         let err = record_governance_snapshot_create(
             &mut proposal,
             &action,
+            &registry,
             &mut snapshot,
             &default_voting_config(),
             &power_state,
             PROPOSAL_KEY,
+            registry_key,
+            expected_security_governance_config_key(),
             SNAPSHOT_KEY,
             100,
             3,
@@ -2405,16 +2613,20 @@ mod tests {
     fn create_governance_snapshot_sets_proposal_voting() {
         let (mut proposal, action) =
             strict_proposal_and_action(GovernanceActionTypeV1::ContributorAdd);
+        let (registry, registry_key) = registry_for_module(action.module_id);
         let mut snapshot = blank_snapshot();
         let power_state = power_state_with_total(100);
 
         record_governance_snapshot_create(
             &mut proposal,
             &action,
+            &registry,
             &mut snapshot,
             &default_voting_config(),
             &power_state,
             PROPOSAL_KEY,
+            registry_key,
+            expected_security_governance_config_key(),
             SNAPSHOT_KEY,
             100,
             3,
@@ -2437,6 +2649,7 @@ mod tests {
     fn create_governance_snapshot_copies_power_state_total_only() {
         let (mut proposal, action) =
             strict_proposal_and_action(GovernanceActionTypeV1::ContributorAdd);
+        let (registry, registry_key) = registry_for_module(action.module_id);
         let mut snapshot = blank_snapshot();
         snapshot.total_voting_power = 999_999;
         let power_state = power_state_with_total(321);
@@ -2444,10 +2657,13 @@ mod tests {
         record_governance_snapshot_create(
             &mut proposal,
             &action,
+            &registry,
             &mut snapshot,
             &default_voting_config(),
             &power_state,
             PROPOSAL_KEY,
+            registry_key,
+            expected_security_governance_config_key(),
             SNAPSHOT_KEY,
             100,
             3,
@@ -2461,16 +2677,20 @@ mod tests {
     fn create_governance_snapshot_rejects_zero_total_voting_power() {
         let (mut proposal, action) =
             strict_proposal_and_action(GovernanceActionTypeV1::ContributorAdd);
+        let (registry, registry_key) = registry_for_module(action.module_id);
         let mut snapshot = blank_snapshot();
         let power_state = power_state_with_total(0);
 
         let err = record_governance_snapshot_create(
             &mut proposal,
             &action,
+            &registry,
             &mut snapshot,
             &default_voting_config(),
             &power_state,
             PROPOSAL_KEY,
+            registry_key,
+            expected_security_governance_config_key(),
             SNAPSHOT_KEY,
             100,
             3,

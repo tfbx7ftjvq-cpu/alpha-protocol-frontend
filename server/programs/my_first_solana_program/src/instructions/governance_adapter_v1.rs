@@ -3,18 +3,24 @@ use anchor_lang::prelude::*;
 use crate::constants::{
     GOVERNANCE_CONFIG_V1_SEED, GOVERNANCE_PROPOSAL_ACTION_V1_SEED, GOVERNANCE_PROPOSAL_V1_SEED,
     GOVERNANCE_SNAPSHOT_V1_SEED, GOVERNANCE_VOTING_CONFIG_V1_SEED, PROPOSAL_DECISION_V1_SEED,
-    UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED,
+    PROTOCOL_MODULE_REGISTRY_V1_SEED, UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED,
 };
 use crate::error::CustomError;
-use crate::instructions::governance_action_v1::map_governance_action_to_security_action;
+use crate::instructions::governance_action_v1::{
+    map_governance_action_to_module, map_governance_action_to_security_action,
+};
 use crate::instructions::governance_v1::{
     validate_governance_proposal_action_v1, validate_governance_thresholds,
     validate_governance_voting_config,
 };
+use crate::instructions::protocol_module_registry_v1::{
+    protocol_module_stable_code_v1, validate_protocol_module_registry_v1,
+};
 use crate::state::{
     ActionType, GovernanceConfigV1, GovernanceProposalActionV1, GovernanceProposalStatusV1,
     GovernanceProposalV1, GovernanceSnapshotV1, GovernanceVotingConfigV1, ProposalDecision,
-    ProposalDecisionV1, ProposalType, UniversalGovernanceDecisionAdapterV1,
+    ProposalDecisionV1, ProposalType, ProtocolModuleRegistryV1,
+    UniversalGovernanceDecisionAdapterV1,
 };
 
 #[derive(Accounts)]
@@ -24,19 +30,19 @@ pub struct CreateGovernanceDecisionAdapterV1<'info> {
         seeds = [GOVERNANCE_CONFIG_V1_SEED],
         bump = security_governance_config.bump
     )]
-    pub security_governance_config: Account<'info, GovernanceConfigV1>,
+    pub security_governance_config: Box<Account<'info, GovernanceConfigV1>>,
 
     #[account(
         seeds = [GOVERNANCE_VOTING_CONFIG_V1_SEED],
         bump = governance_voting_config.bump
     )]
-    pub governance_voting_config: Account<'info, GovernanceVotingConfigV1>,
+    pub governance_voting_config: Box<Account<'info, GovernanceVotingConfigV1>>,
 
     #[account(
         seeds = [GOVERNANCE_PROPOSAL_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
         bump = governance_proposal.bump
     )]
-    pub governance_proposal: Account<'info, GovernanceProposalV1>,
+    pub governance_proposal: Box<Account<'info, GovernanceProposalV1>>,
 
     #[account(
         seeds = [
@@ -45,14 +51,23 @@ pub struct CreateGovernanceDecisionAdapterV1<'info> {
         ],
         bump = governance_proposal_action.bump
     )]
-    pub governance_proposal_action: Account<'info, GovernanceProposalActionV1>,
+    pub governance_proposal_action: Box<Account<'info, GovernanceProposalActionV1>>,
+
+    #[account(
+        seeds = [
+            PROTOCOL_MODULE_REGISTRY_V1_SEED,
+            &[protocol_module_stable_code_v1(governance_proposal_action.module_id)]
+        ],
+        bump = protocol_module_registry.bump
+    )]
+    pub protocol_module_registry: Box<Account<'info, ProtocolModuleRegistryV1>>,
 
     #[account(
         seeds = [GOVERNANCE_SNAPSHOT_V1_SEED, governance_proposal.key().as_ref()],
         bump = governance_snapshot.bump,
         constraint = governance_snapshot.proposal == governance_proposal.key() @ CustomError::InvalidGovernanceSnapshot
     )]
-    pub governance_snapshot: Account<'info, GovernanceSnapshotV1>,
+    pub governance_snapshot: Box<Account<'info, GovernanceSnapshotV1>>,
 
     #[account(
         init,
@@ -64,7 +79,7 @@ pub struct CreateGovernanceDecisionAdapterV1<'info> {
         ],
         bump
     )]
-    pub governance_decision_adapter: Account<'info, UniversalGovernanceDecisionAdapterV1>,
+    pub governance_decision_adapter: Box<Account<'info, UniversalGovernanceDecisionAdapterV1>>,
 
     #[account(
         init,
@@ -73,7 +88,7 @@ pub struct CreateGovernanceDecisionAdapterV1<'info> {
         seeds = [PROPOSAL_DECISION_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
         bump
     )]
-    pub proposal_decision: Account<'info, ProposalDecisionV1>,
+    pub proposal_decision: Box<Account<'info, ProposalDecisionV1>>,
 
     #[account(mut)]
     pub payer: Signer<'info>,
@@ -88,16 +103,20 @@ pub fn create_governance_decision_adapter_v1_handler(
     let governance_proposal_key = ctx.accounts.governance_proposal.key();
     let governance_snapshot_key = ctx.accounts.governance_snapshot.key();
     let proposal_decision_key = ctx.accounts.proposal_decision.key();
+    let security_governance_config_key = ctx.accounts.security_governance_config.key();
 
     create_governance_decision_adapter_state(
         &mut ctx.accounts.security_governance_config,
         &ctx.accounts.governance_voting_config,
         &ctx.accounts.governance_proposal,
         &ctx.accounts.governance_proposal_action,
+        &ctx.accounts.protocol_module_registry,
         &ctx.accounts.governance_snapshot,
         &mut ctx.accounts.governance_decision_adapter,
         &mut ctx.accounts.proposal_decision,
         governance_proposal_key,
+        ctx.accounts.protocol_module_registry.key(),
+        security_governance_config_key,
         governance_snapshot_key,
         proposal_decision_key,
         now,
@@ -112,10 +131,13 @@ pub fn create_governance_decision_adapter_state(
     governance_voting_config: &GovernanceVotingConfigV1,
     governance_proposal: &GovernanceProposalV1,
     governance_proposal_action: &GovernanceProposalActionV1,
+    protocol_module_registry: &ProtocolModuleRegistryV1,
     governance_snapshot: &GovernanceSnapshotV1,
     governance_decision_adapter: &mut UniversalGovernanceDecisionAdapterV1,
     proposal_decision: &mut ProposalDecisionV1,
     governance_proposal_key: Pubkey,
+    protocol_module_registry_key: Pubkey,
+    security_governance_config_key: Pubkey,
     governance_snapshot_key: Pubkey,
     proposal_decision_key: Pubkey,
     created_at: i64,
@@ -137,8 +159,11 @@ pub fn create_governance_decision_adapter_state(
         governance_voting_config,
         governance_proposal,
         governance_proposal_action,
+        protocol_module_registry,
         governance_snapshot,
         governance_proposal_key,
+        protocol_module_registry_key,
+        security_governance_config_key,
         governance_snapshot_key,
     )?;
 
@@ -177,8 +202,11 @@ pub fn validate_governance_decision_adapter_inputs(
     governance_voting_config: &GovernanceVotingConfigV1,
     governance_proposal: &GovernanceProposalV1,
     governance_proposal_action: &GovernanceProposalActionV1,
+    protocol_module_registry: &ProtocolModuleRegistryV1,
     governance_snapshot: &GovernanceSnapshotV1,
     governance_proposal_key: Pubkey,
+    protocol_module_registry_key: Pubkey,
+    security_governance_config_key: Pubkey,
     governance_snapshot_key: Pubkey,
 ) -> Result<()> {
     validate_governance_voting_config(
@@ -206,6 +234,13 @@ pub fn validate_governance_decision_adapter_inputs(
         governance_proposal,
         governance_proposal_action,
         governance_proposal_key,
+    )?;
+    validate_protocol_module_registry_v1(
+        protocol_module_registry,
+        protocol_module_registry_key,
+        security_governance_config_key,
+        map_governance_action_to_module(governance_proposal_action.action_type),
+        governance_proposal_action.target_program,
     )?;
     require!(
         governance_proposal.finalized_at > 0,
@@ -332,8 +367,13 @@ mod tests {
         map_governance_action_to_module,
     };
     use crate::instructions::governance_v1::validate_governance_thresholds;
+    use crate::instructions::protocol_module_registry_v1::{
+        expected_protocol_module_registry_key_and_bump, protocol_module_stable_code_v1,
+        PROTOCOL_MODULE_REGISTRY_V1_SCHEMA_VERSION,
+    };
     use crate::state::{
         GovernanceActionTypeV1, GovernancePayloadV1, GovernanceProposalTypeV1, ProtocolModuleIdV1,
+        ProtocolModuleRegistryV1,
     };
 
     const AUTHORITY: Pubkey = Pubkey::new_from_array([1; 32]);
@@ -345,6 +385,7 @@ mod tests {
     const TARGET_ACCOUNT: Pubkey = Pubkey::new_from_array([8; 32]);
     const PARAMETERS_HASH: [u8; 32] = [9; 32];
     const EVIDENCE_HASH: [u8; 32] = [10; 32];
+    const SECURITY_CONFIG: Pubkey = Pubkey::new_from_array([11; 32]);
 
     fn security_config(proposal_count: u64) -> GovernanceConfigV1 {
         GovernanceConfigV1 {
@@ -425,6 +466,24 @@ mod tests {
         }
     }
 
+    fn registry_for_module(module_id: ProtocolModuleIdV1) -> (ProtocolModuleRegistryV1, Pubkey) {
+        let (registry_key, bump) = expected_protocol_module_registry_key_and_bump(module_id);
+        (
+            ProtocolModuleRegistryV1 {
+                security_governance_config: SECURITY_CONFIG,
+                module_id,
+                module_code: protocol_module_stable_code_v1(module_id),
+                program_id: crate::ID,
+                enabled: true,
+                schema_version: PROTOCOL_MODULE_REGISTRY_V1_SCHEMA_VERSION,
+                created_at: 50,
+                updated_at: 50,
+                bump,
+            },
+            registry_key,
+        )
+    }
+
     fn finalized_snapshot() -> GovernanceSnapshotV1 {
         GovernanceSnapshotV1 {
             proposal: PROPOSAL_KEY,
@@ -475,15 +534,41 @@ mod tests {
         adapter: &mut UniversalGovernanceDecisionAdapterV1,
         decision: &mut ProposalDecisionV1,
     ) -> Result<()> {
+        let (registry, registry_key) = registry_for_module(proposal_action.module_id);
+        create_adapter_with_registry(
+            security_config,
+            proposal,
+            proposal_action,
+            &registry,
+            registry_key,
+            snapshot,
+            adapter,
+            decision,
+        )
+    }
+
+    fn create_adapter_with_registry(
+        security_config: &mut GovernanceConfigV1,
+        proposal: &GovernanceProposalV1,
+        proposal_action: &GovernanceProposalActionV1,
+        registry: &ProtocolModuleRegistryV1,
+        registry_key: Pubkey,
+        snapshot: &GovernanceSnapshotV1,
+        adapter: &mut UniversalGovernanceDecisionAdapterV1,
+        decision: &mut ProposalDecisionV1,
+    ) -> Result<()> {
         create_governance_decision_adapter_state(
             security_config,
             &voting_config(),
             proposal,
             proposal_action,
+            registry,
             snapshot,
             adapter,
             decision,
             PROPOSAL_KEY,
+            registry_key,
+            SECURITY_CONFIG,
             SNAPSHOT_KEY,
             DECISION_KEY,
             300,
@@ -650,6 +735,83 @@ mod tests {
         .unwrap_err();
 
         assert_eq!(err, CustomError::InvalidGovernanceDecisionAdapter.into());
+    }
+
+    #[test]
+    fn wrong_protocol_module_registry_fails() {
+        let mut security_config = security_config(0);
+        let proposal = passed_proposal();
+        let action = proposal_action();
+        let (registry, registry_key) = registry_for_module(ProtocolModuleIdV1::Treasury);
+        let snapshot = finalized_snapshot();
+        let mut adapter = empty_adapter();
+        let mut decision = empty_decision();
+
+        let err = create_adapter_with_registry(
+            &mut security_config,
+            &proposal,
+            &action,
+            &registry,
+            registry_key,
+            &snapshot,
+            &mut adapter,
+            &mut decision,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::ProtocolModuleRegistryMismatch.into());
+    }
+
+    #[test]
+    fn disabled_protocol_module_registry_fails() {
+        let mut security_config = security_config(0);
+        let proposal = passed_proposal();
+        let action = proposal_action();
+        let (mut registry, registry_key) = registry_for_module(action.module_id);
+        registry.enabled = false;
+        let snapshot = finalized_snapshot();
+        let mut adapter = empty_adapter();
+        let mut decision = empty_decision();
+
+        let err = create_adapter_with_registry(
+            &mut security_config,
+            &proposal,
+            &action,
+            &registry,
+            registry_key,
+            &snapshot,
+            &mut adapter,
+            &mut decision,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::ProtocolModuleDisabled.into());
+    }
+
+    #[test]
+    fn protocol_module_registry_program_mismatch_fails() {
+        let mut security_config = security_config(0);
+        let proposal = passed_proposal();
+        let action = proposal_action();
+        let (mut registry, registry_key) = registry_for_module(action.module_id);
+        registry.program_id = Pubkey::new_from_array([12; 32]);
+        let snapshot = finalized_snapshot();
+        let mut adapter = empty_adapter();
+        let mut decision = empty_decision();
+
+        let err = create_adapter_with_registry(
+            &mut security_config,
+            &proposal,
+            &action,
+            &registry,
+            registry_key,
+            &snapshot,
+            &mut adapter,
+            &mut decision,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::ProtocolModuleProgramMismatch.into());
     }
 
     #[test]

@@ -27,6 +27,7 @@ pub const GOVERNANCE_VAULT_V1_SEED: &[u8] = b"governance_vault_v1";
 pub const GOVERNANCE_POWER_STATE_V1_SEED: &[u8] = b"governance_power_state_v1";
 pub const GOVERNANCE_PROPOSAL_V1_SEED: &[u8] = b"governance_proposal_v1";
 pub const GOVERNANCE_PROPOSAL_ACTION_V1_SEED: &[u8] = b"governance_proposal_action_v1";
+pub const PROTOCOL_MODULE_REGISTRY_V1_SEED: &[u8] = b"protocol_module_registry_v1";
 pub const GOVERNANCE_POSITION_V1_SEED: &[u8] = b"governance_position_v1";
 pub const GOVERNANCE_POSITION_VOTE_LOCK_V1_SEED: &[u8] = b"governance_position_vote_lock_v1";
 pub const GOVERNANCE_SNAPSHOT_V1_SEED: &[u8] = b"governance_snapshot_v1";

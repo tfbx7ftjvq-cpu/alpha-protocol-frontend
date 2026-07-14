@@ -60,9 +60,9 @@ governance_voting_config_v1
 
 `create_governance_snapshot_v1` creates a `GovernanceSnapshotV1` account and moves a proposal from `Draft` to `Voting`.
 
-The snapshot instruction now requires `GovernanceProposalActionV1`. Before voting starts, the program verifies that the sidecar matches the proposal id, proposer, stable action code, proposal category, target fields, module mapping, schema version, and canonical payload hash.
+The snapshot instruction now requires `GovernanceProposalActionV1`, Security `GovernanceConfigV1`, and `ProtocolModuleRegistryV1`. Before voting starts, the program verifies that the sidecar matches the proposal id, proposer, stable action code, proposal category, target fields, module mapping, registry binding, schema version, and canonical payload hash.
 
-Legacy proposals created without `GovernanceProposalActionV1` cannot enter the new voting path.
+Legacy proposals created without `GovernanceProposalActionV1`, or proposals whose module registry is missing, disabled, or mismatched, cannot enter the new voting path.
 
 The snapshot records:
 
@@ -147,6 +147,9 @@ Proposal-type policy:
 | --- | --- | --- |
 | Contributor | 5% | 60% |
 | Treasury | 10% | 66.67% |
+| GreenLabel | 10% | 66.67% |
+| VictimRelief | 10% | 66.67% |
+| ScamRegistry | 10% | 66.67% |
 | Parameter | 20% | 75% |
 | Upgrade | 25% | 80% |
 | Emergency | 15% | 75% |
@@ -190,6 +193,8 @@ GovernanceProposalV1 Passed
 ```
 
 This preserves the existing Security Layer as the execution layer while Governance V1 becomes the community decision layer.
+
+Phase 2E-FINAL Stage 3 adds `ProtocolModuleRegistryV1` as the module allow-list used by snapshot creation and adapter creation. This ensures the action voted on by the DAO is bound to an enabled Alpha Protocol module before it can move toward Security Layer execution.
 
 ## Not Implemented In This Phase
 

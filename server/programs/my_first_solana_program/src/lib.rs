@@ -124,6 +124,18 @@ pub mod my_first_solana_program {
         instructions::governance_v1::initialize_governance_voting_config_v1_handler(ctx)
     }
 
+    pub fn initialize_protocol_module_registry_v1(
+        ctx: Context<InitializeProtocolModuleRegistryV1>,
+        module_id: ProtocolModuleIdV1,
+        schema_version: u16,
+    ) -> Result<()> {
+        instructions::protocol_module_registry_v1::initialize_protocol_module_registry_v1_handler(
+            ctx,
+            module_id,
+            schema_version,
+        )
+    }
+
     pub fn initialize_governance_proposal_v1(
         ctx: Context<InitializeGovernanceProposalV1>,
         proposal_id: u64,

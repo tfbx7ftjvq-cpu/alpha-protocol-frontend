@@ -49,12 +49,13 @@ It does not execute Treasury, Green Label, relief, scam registry, contributor pa
 1. A governance proposal is created with `initialize_governance_proposal_with_action_v1`.
 2. The same transaction creates immutable `GovernanceProposalActionV1`.
 3. A snapshot is created only if the proposal action sidecar exists and matches the proposal.
-4. voters cast votes.
-5. the vote is finalized.
-6. if quorum and approval threshold pass, the proposal becomes `Passed`.
-7. anyone may call `create_governance_decision_adapter_v1`.
-8. the program verifies the proposal, sidecar, and snapshot.
-9. the program creates:
+4. the module registry is validated before the proposal enters voting.
+5. voters cast votes.
+6. the vote is finalized.
+7. if quorum and approval threshold pass, the proposal becomes `Passed`.
+8. anyone may call `create_governance_decision_adapter_v1`.
+9. the program verifies the proposal, sidecar, module registry, and snapshot.
+10. the program creates:
    - `UniversalGovernanceDecisionAdapterV1`
    - `ProposalDecisionV1`
 
@@ -107,6 +108,9 @@ The next phase should add a queue adapter that creates `ExecutionQueueItemV1` fr
 - sidecar module id matches the action mapping
 - proposal type matches the action category
 - sidecar target mirrors match proposal target fields
+- sidecar module is registered in `ProtocolModuleRegistryV1`
+- registry is enabled, schema version 1, and bound to the current Alpha Protocol Program ID
+- registry is tied to the expected Security `GovernanceConfigV1`
 - canonical payload hash recomputes from sidecar fields
 - target program is the current Alpha Protocol Program ID
 - proposal weights match finalized snapshot weights
@@ -182,4 +186,14 @@ DAO-voted payload hash == Security execution payload hash
 
 Phase 2E-FINAL Stage 2 implements the typed binding: adapter creation now consumes `GovernanceProposalActionV1` and rejects legacy proposals without a sidecar.
 
-Module Registry, Treasury transfers, Relief / Scam Registry business accounts, and Mainnet authority migration remain out of scope.
+Phase 2E-FINAL Stage 3 adds `ProtocolModuleRegistryV1` to adapter validation. Registry update / enable / disable, external program registration, Treasury transfers, Relief / Scam Registry business accounts, and Mainnet authority migration remain out of scope.
+
+The adapter path is now:
+
+```text
+GovernanceProposalV1::Passed
+-> GovernanceProposalActionV1
+-> ProtocolModuleRegistryV1
+-> UniversalGovernanceDecisionAdapterV1
+-> ProposalDecisionV1
+```

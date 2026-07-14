@@ -55,7 +55,9 @@ The caller supplies a typed `GovernanceActionRequestV1`. The program derives:
 
 The caller cannot override the derived proposal type, raw action code, or canonical hash.
 
-`target_program` is temporarily restricted to the current Alpha Protocol Program ID. A Protocol Module Registry is not implemented in this phase.
+`target_program` is restricted to the current Alpha Protocol Program ID. Phase 2E-FINAL Stage 3 adds `ProtocolModuleRegistryV1`, so the strict initializer now validates the requested module against the registry and stores the target program from the registry.
+
+The caller cannot bind a typed proposal to an unregistered module, a disabled module, or an arbitrary external program.
 
 ## Stable Action Codes
 
@@ -72,7 +74,7 @@ Unknown stable codes are rejected.
 
 ## Snapshot Binding
 
-`create_governance_snapshot_v1` now requires `GovernanceProposalActionV1`.
+`create_governance_snapshot_v1` now requires `GovernanceProposalActionV1`, Security `GovernanceConfigV1`, and `ProtocolModuleRegistryV1`.
 
 Before a proposal can enter `Voting`, the program verifies:
 
@@ -81,6 +83,7 @@ Before a proposal can enter `Voting`, the program verifies:
 - proposal type matches the action category
 - target mirrors match
 - action-to-module mapping is correct
+- module registry PDA, stable code, schema, enabled flag, Security governance config, and program id are valid
 - canonical payload hash recomputes from sidecar fields
 - schema version is valid
 
@@ -88,7 +91,7 @@ Legacy proposals without a sidecar cannot enter the new voting path.
 
 ## Adapter Enforcement
 
-`create_governance_decision_adapter_v1` now requires `GovernanceProposalActionV1`.
+`create_governance_decision_adapter_v1` now requires `GovernanceProposalActionV1` and `ProtocolModuleRegistryV1`.
 
 The adapter derives these fields from the sidecar:
 
@@ -100,7 +103,7 @@ The adapter derives these fields from the sidecar:
 - `target_account`
 - `canonical_payload_hash`
 
-The adapter does not accept caller-controlled action, target, or payload data. It also does not trust mutated proposal mirror fields unless they match the sidecar.
+The adapter validates the sidecar module against `ProtocolModuleRegistryV1` before creating `ProposalDecisionV1`. It does not accept caller-controlled action, target, program id, or payload data. It also does not trust mutated proposal mirror fields unless they match the sidecar.
 
 ## Canonical Payload Hash
 
@@ -130,7 +133,8 @@ Devnet governance proposals created before this phase must be reinitialized or m
 
 This phase does not implement:
 
-- Protocol Module Registry
+- Protocol Module Registry update / enable / disable
+- external program registration
 - Treasury USDC execution
 - builder payout transfer
 - Green Label DAO closure

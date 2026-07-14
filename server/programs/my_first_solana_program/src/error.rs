@@ -307,4 +307,22 @@ pub enum CustomError {
 
     #[msg("Governance action target does not match policy")]
     GovernanceActionTargetMismatch,
+
+    #[msg("Invalid protocol module stable code")]
+    InvalidProtocolModuleCode,
+
+    #[msg("Protocol module registry does not match expected module")]
+    ProtocolModuleRegistryMismatch,
+
+    #[msg("Protocol module registry is disabled")]
+    ProtocolModuleDisabled,
+
+    #[msg("Protocol module registry program does not match expected program")]
+    ProtocolModuleProgramMismatch,
+
+    #[msg("Protocol module registry governance config does not match")]
+    ProtocolModuleGovernanceConfigMismatch,
+
+    #[msg("Invalid protocol module registry schema")]
+    InvalidProtocolModuleRegistrySchema,
 }
