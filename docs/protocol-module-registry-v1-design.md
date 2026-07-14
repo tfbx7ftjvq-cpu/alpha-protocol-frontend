@@ -143,3 +143,20 @@ This phase does not implement:
 - deployment or chain transactions
 
 Mainnet remains NO-GO.
+
+## Stage 4 Treasury Execution Usage
+
+Phase 2E-FINAL Stage 4 consumes the Treasury module registry before approving
+or executing Treasury spending.
+
+The strict Treasury wrappers validate:
+
+- registry PDA and stable module code
+- `module_id == Treasury`
+- registry enabled
+- registry bound to the current Alpha Protocol Program ID
+- registry tied to the expected Security `GovernanceConfigV1`
+
+Treasury execution still does not mutate the registry. Registry update,
+enable/disable, external program registration, and DAO Control Mode remain
+out of scope.

@@ -146,6 +146,38 @@ impl TreasuryBuilderPayoutGovernanceV1 {
     pub const INIT_SPACE: usize = (32 * 4) + (8 * 3) + 1 + 1;
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TreasuryExecutionTypeV1 {
+    BuilderPayout,
+    TreasurySpending,
+}
+
+#[account]
+pub struct TreasuryExecutionRecordV1 {
+    pub queue_item: Pubkey,
+    pub proposal_decision: Pubkey,
+    pub governance_proposal: Pubkey,
+    pub governance_proposal_action: Pubkey,
+    pub request_account: Pubkey,
+    pub module_id: ProtocolModuleIdV1,
+    pub execution_type: TreasuryExecutionTypeV1,
+    pub source_vault: Pubkey,
+    pub recipient_owner: Pubkey,
+    pub recipient_token_account: Pubkey,
+    pub amount_usdc: u64,
+    pub usdc_mint: Pubkey,
+    pub parameters_hash: [u8; 32],
+    pub canonical_governance_payload_hash: [u8; 32],
+    pub executor: Pubkey,
+    pub executed_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+}
+
+impl TreasuryExecutionRecordV1 {
+    pub const INIT_SPACE: usize = (32 * 10) + 2 + 8 + (32 * 2) + 8 + 2 + 1;
+}
+
 #[account]
 pub struct StakingPoolV1 {
     pub authority: Pubkey,
@@ -1008,6 +1040,13 @@ mod tests {
     fn treasury_builder_payout_governance_space_covers_fields() {
         let minimum = (32 * 4) + (8 * 3) + 1 + 1;
         assert!(TreasuryBuilderPayoutGovernanceV1::INIT_SPACE >= minimum);
+    }
+
+    #[test]
+    fn treasury_execution_record_space_is_exact() {
+        let minimum = (32 * 10) + 2 + 8 + (32 * 2) + 8 + 2 + 1;
+        assert_eq!(TreasuryExecutionRecordV1::INIT_SPACE, minimum);
+        assert_eq!(TreasuryExecutionRecordV1::INIT_SPACE, 405);
     }
 
     #[test]

@@ -129,6 +129,34 @@ Legacy proposals without `GovernanceProposalActionV1`:
 
 Devnet governance proposals created before this phase must be reinitialized or migrated before they can use the new typed execution path.
 
+## Stage 4 Treasury Parameters Binding
+
+Phase 2E-FINAL Stage 4 uses `GovernanceProposalActionV1.parameters_hash` as the
+trusted binding for Treasury spending and builder payout execution.
+
+For Treasury actions, the parameters hash is no longer an opaque caller claim.
+The program rebuilds the typed parameters from real accounts during both
+approval and execution:
+
+- request account
+- amount
+- recipient owner
+- recipient token account
+- fixed `builders_usdc_vault`
+- USDC mint
+- proposal id
+- purpose hash or milestone / payout links, depending on action
+
+If any real account differs from the DAO-voted sidecar parameters hash, approval
+or execution fails. This keeps:
+
+```text
+DAO-voted parameters == Security queue payload == Treasury transfer parameters
+```
+
+Stage 4 still does not implement generic Treasury transfers, batch payout,
+registry mutation, Green Label execution changes, or frontend writes.
+
 ## Explicit Non-Goals
 
 This phase does not implement:

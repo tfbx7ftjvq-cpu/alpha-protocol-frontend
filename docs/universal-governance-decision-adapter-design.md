@@ -197,3 +197,23 @@ GovernanceProposalV1::Passed
 -> UniversalGovernanceDecisionAdapterV1
 -> ProposalDecisionV1
 ```
+
+## 10. Treasury Execution Layer Consumption
+
+Phase 2E-FINAL Stage 4 adds the first module-specific consumer of adapter output:
+
+```text
+UniversalGovernanceDecisionAdapterV1
+-> ProposalDecisionV1
+-> ExecutionQueueItemV1 Executed
+-> Approved Treasury request
+-> strict Treasury wrapper
+-> TreasuryExecutionRecordV1
+```
+
+The Treasury wrappers do not accept caller-controlled action, target, or payload.
+They read the typed action sidecar, adapter, decision, queue item, and real
+Treasury request accounts, then recompute the Stage 4 parameters hash.
+
+The adapter remains a bridge only. It still does not transfer USDC, mutate
+Treasury requests, or choose a source vault.

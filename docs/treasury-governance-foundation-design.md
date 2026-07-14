@@ -100,8 +100,9 @@ Pending
 
 Rejected is a terminal governance outcome.
 
-This phase does not transfer USDC from the builders vault. It only records the
-relationship between contributor payout requests and DAO/Security approval.
+The foundation phase did not transfer USDC from the builders vault. Phase
+2E-FINAL Stage 4 adds the strict execution wrappers that consume these approved
+request accounts.
 
 ## 5. Future Execution Flow
 
@@ -135,8 +136,6 @@ Future Treasury execution instructions must verify:
 
 Not implemented in this phase:
 
-- USDC transfer
-- builders vault withdrawal
 - Treasury revenue split changes
 - dynamic split config
 - batch payout
@@ -145,3 +144,30 @@ Not implemented in this phase:
 
 Token launch remains NO-GO until Treasury payout governance and Mainnet authority
 migration are completed and reviewed.
+
+## 7. Stage 4 Execution Layer
+
+Phase 2E-FINAL Stage 4 adds:
+
+- `TreasuryExecutionTypeV1`
+- `TreasuryExecutionRecordV1`
+- `execute_treasury_builder_payout_v1`
+- `execute_treasury_spending_v1`
+
+Both wrappers are strict and only source funds from `builders_usdc_vault`.
+There is no generic public Treasury transfer instruction and no caller-selected
+source vault.
+
+Approval now binds the request to exact Stage 4 parameters:
+
+- request account
+- amount
+- recipient owner
+- recipient USDC token account
+- source vault
+- USDC mint
+- proposal id
+
+The wrappers re-check the same parameters hash before performing
+`transfer_checked`. `spending_limit_usdc` is interpreted as a per-request limit
+in V1.

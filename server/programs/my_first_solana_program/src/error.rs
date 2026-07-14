@@ -325,4 +325,43 @@ pub enum CustomError {
 
     #[msg("Invalid protocol module registry schema")]
     InvalidProtocolModuleRegistrySchema,
+
+    #[msg("Treasury execution already completed")]
+    TreasuryExecutionAlreadyCompleted,
+
+    #[msg("Treasury execution action mismatch")]
+    TreasuryExecutionActionMismatch,
+
+    #[msg("Treasury execution target mismatch")]
+    TreasuryExecutionTargetMismatch,
+
+    #[msg("Treasury execution parameters mismatch")]
+    TreasuryExecutionParametersMismatch,
+
+    #[msg("Treasury execution vault mismatch")]
+    TreasuryExecutionVaultMismatch,
+
+    #[msg("Treasury execution recipient mismatch")]
+    TreasuryExecutionRecipientMismatch,
+
+    #[msg("Treasury execution mint mismatch")]
+    TreasuryExecutionMintMismatch,
+
+    #[msg("Treasury execution amount mismatch")]
+    TreasuryExecutionAmountMismatch,
+
+    #[msg("Treasury execution insufficient funds")]
+    TreasuryExecutionInsufficientFunds,
+
+    #[msg("Treasury execution is disabled")]
+    TreasuryExecutionDisabled,
+
+    #[msg("Treasury emergency mode is active")]
+    TreasuryEmergencyModeActive,
+
+    #[msg("Treasury spending limit exceeded")]
+    TreasurySpendingLimitExceeded,
+
+    #[msg("Invalid treasury execution schema")]
+    InvalidTreasuryExecutionSchema,
 }

@@ -11,6 +11,7 @@ pub const TREASURY_GOVERNANCE_CONFIG_V1_SEED: &[u8] = b"treasury_governance_conf
 pub const TREASURY_SPENDING_REQUEST_V1_SEED: &[u8] = b"treasury_spending_request_v1";
 pub const TREASURY_BUILDER_PAYOUT_GOVERNANCE_V1_SEED: &[u8] =
     b"treasury_builder_payout_governance_v1";
+pub const TREASURY_EXECUTION_RECORD_V1_SEED: &[u8] = b"treasury_execution_record_v1";
 pub const RELIEF_USDC_VAULT_SEED: &[u8] = b"relief_usdc_vault";
 pub const BUYBACK_USDC_VAULT_SEED: &[u8] = b"buyback_usdc_vault";
 pub const BUILDERS_USDC_VAULT_SEED: &[u8] = b"builders_usdc_vault";

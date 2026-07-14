@@ -10,6 +10,7 @@ pub mod initialize_usdc_treasury;
 pub mod protocol_module_registry_v1;
 pub mod security_v1;
 pub mod staking_v1;
+pub mod treasury_execution_v1;
 pub mod treasury_governance_v1;
 
 pub use contributor_v1::*;
@@ -24,4 +25,5 @@ pub use initialize_usdc_treasury::*;
 pub use protocol_module_registry_v1::*;
 pub use security_v1::*;
 pub use staking_v1::*;
+pub use treasury_execution_v1::*;
 pub use treasury_governance_v1::*;

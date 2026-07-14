@@ -112,6 +112,16 @@ pub mod my_first_solana_program {
         )
     }
 
+    pub fn execute_treasury_builder_payout_v1(
+        ctx: Context<ExecuteTreasuryBuilderPayoutV1>,
+    ) -> Result<()> {
+        instructions::treasury_execution_v1::execute_treasury_builder_payout_v1_handler(ctx)
+    }
+
+    pub fn execute_treasury_spending_v1(ctx: Context<ExecuteTreasurySpendingV1>) -> Result<()> {
+        instructions::treasury_execution_v1::execute_treasury_spending_v1_handler(ctx)
+    }
+
     pub fn initialize_governance_config_v1(
         ctx: Context<InitializeGovernanceConfigV1>,
     ) -> Result<()> {

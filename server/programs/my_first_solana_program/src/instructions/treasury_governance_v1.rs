@@ -1,19 +1,31 @@
 use anchor_lang::prelude::*;
+use anchor_spl::token::{Mint, TokenAccount};
 
 use crate::constants::{
-    BUILDER_PAYOUT_REQUEST_V1_SEED, CONTRIBUTOR_REGISTRY_V1_SEED, EXECUTION_QUEUE_ITEM_V1_SEED,
-    GOVERNANCE_CONFIG_V1_SEED, PROPOSAL_DECISION_V1_SEED,
+    BUILDERS_USDC_VAULT_SEED, BUILDER_PAYOUT_REQUEST_V1_SEED, CONTRIBUTOR_REGISTRY_V1_SEED,
+    EXECUTION_QUEUE_ITEM_V1_SEED, GOVERNANCE_CONFIG_V1_SEED, GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+    GOVERNANCE_PROPOSAL_V1_SEED, PROPOSAL_DECISION_V1_SEED, PROTOCOL_MODULE_REGISTRY_V1_SEED,
     TREASURY_BUILDER_PAYOUT_GOVERNANCE_V1_SEED, TREASURY_CONFIG_V2_SEED,
     TREASURY_GOVERNANCE_CONFIG_V1_SEED, TREASURY_SPENDING_REQUEST_V1_SEED,
+    UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED, VAULT_AUTHORITY_V2_SEED,
 };
 use crate::error::CustomError;
 use crate::instructions::contributor_v1::hash_contributor_payload;
+use crate::instructions::protocol_module_registry_v1::protocol_module_stable_code_v1;
+use crate::instructions::treasury_execution_v1::{
+    hash_treasury_builder_payout_parameters_v1, hash_treasury_spending_parameters_v1,
+    treasury_builder_payout_parameters_from_accounts, treasury_spending_parameters_from_accounts,
+    validate_treasury_approval_binding_v1, validate_treasury_builder_payout_approval_business_v1,
+    validate_treasury_spending_approval_business_v1,
+};
 use crate::state::{
     ActionType, BuilderPayoutRequestV1, ContributorMilestoneV1, ContributorRegistryV1,
-    ExecutionQueueItemV1, ExecutionStatus, GovernanceConfigV1, PayoutStatusV1, ProposalDecision,
-    ProposalDecisionV1, ProposalType, TreasuryBuilderPayoutGovernanceV1,
-    TreasuryBuilderPayoutStatusV1, TreasuryConfigV2, TreasuryGovernanceConfigV1,
-    TreasurySpendingRequestV1, TreasurySpendingStatusV1,
+    ExecutionQueueItemV1, ExecutionStatus, GovernanceActionTypeV1, GovernanceConfigV1,
+    GovernanceProposalActionV1, GovernanceProposalV1, PayoutStatusV1, ProposalDecision,
+    ProposalDecisionV1, ProposalType, ProtocolModuleIdV1, ProtocolModuleRegistryV1,
+    TreasuryBuilderPayoutGovernanceV1, TreasuryBuilderPayoutStatusV1, TreasuryConfigV2,
+    TreasuryGovernanceConfigV1, TreasurySpendingRequestV1, TreasurySpendingStatusV1,
+    UniversalGovernanceDecisionAdapterV1,
 };
 
 pub const TREASURY_GOVERNANCE_PAYLOAD_V1_DOMAIN: &[u8] = b"alpha_treasury_governance_payload_v1";
@@ -169,7 +181,41 @@ pub struct ApproveTreasurySpendingRequestV1<'info> {
         seeds = [GOVERNANCE_CONFIG_V1_SEED],
         bump = governance_config.bump
     )]
-    pub governance_config: Account<'info, GovernanceConfigV1>,
+    pub governance_config: Box<Account<'info, GovernanceConfigV1>>,
+
+    #[account(seeds = [TREASURY_CONFIG_V2_SEED], bump = treasury_config.bump)]
+    pub treasury_config: Box<Account<'info, TreasuryConfigV2>>,
+
+    #[account(
+        seeds = [
+            PROTOCOL_MODULE_REGISTRY_V1_SEED,
+            &[protocol_module_stable_code_v1(ProtocolModuleIdV1::Treasury)]
+        ],
+        bump = protocol_module_registry.bump
+    )]
+    pub protocol_module_registry: Box<Account<'info, ProtocolModuleRegistryV1>>,
+
+    #[account(
+        seeds = [GOVERNANCE_PROPOSAL_V1_SEED, &proposal_id.to_le_bytes()],
+        bump = governance_proposal.bump,
+        constraint = governance_proposal.proposal_id == proposal_id @ CustomError::InvalidProposalId
+    )]
+    pub governance_proposal: Box<Account<'info, GovernanceProposalV1>>,
+
+    #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_proposal_action.bump
+    )]
+    pub governance_proposal_action: Box<Account<'info, GovernanceProposalActionV1>>,
+
+    #[account(
+        seeds = [UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED, governance_proposal.key().as_ref()],
+        bump = governance_decision_adapter.bump
+    )]
+    pub governance_decision_adapter: Box<Account<'info, UniversalGovernanceDecisionAdapterV1>>,
 
     #[account(
         seeds = [
@@ -178,7 +224,7 @@ pub struct ApproveTreasurySpendingRequestV1<'info> {
         ],
         bump = proposal_decision.bump
     )]
-    pub proposal_decision: Account<'info, ProposalDecisionV1>,
+    pub proposal_decision: Box<Account<'info, ProposalDecisionV1>>,
 
     #[account(
         seeds = [
@@ -187,16 +233,43 @@ pub struct ApproveTreasurySpendingRequestV1<'info> {
         ],
         bump = execution_queue_item.bump
     )]
-    pub execution_queue_item: Account<'info, ExecutionQueueItemV1>,
+    pub execution_queue_item: Box<Account<'info, ExecutionQueueItemV1>>,
 
     #[account(
         seeds = [TREASURY_GOVERNANCE_CONFIG_V1_SEED],
-        bump = treasury_governance_config.bump
+        bump = treasury_governance_config.bump,
+        constraint = treasury_governance_config.treasury_config == treasury_config.key() @ CustomError::InvalidTreasuryGovernanceConfig
     )]
-    pub treasury_governance_config: Account<'info, TreasuryGovernanceConfigV1>,
+    pub treasury_governance_config: Box<Account<'info, TreasuryGovernanceConfigV1>>,
 
-    #[account(mut)]
-    pub treasury_spending_request: Account<'info, TreasurySpendingRequestV1>,
+    #[account(
+        mut,
+        seeds = [
+            TREASURY_SPENDING_REQUEST_V1_SEED,
+            treasury_config.key().as_ref(),
+            &treasury_spending_request.request_id.to_le_bytes()
+        ],
+        bump = treasury_spending_request.bump,
+        constraint = treasury_spending_request.proposal_id == proposal_id @ CustomError::InvalidProposalId
+    )]
+    pub treasury_spending_request: Box<Account<'info, TreasurySpendingRequestV1>>,
+
+    /// CHECK: This PDA is only checked as the owner of the fixed Builders vault.
+    #[account(seeds = [VAULT_AUTHORITY_V2_SEED], bump)]
+    pub vault_authority: UncheckedAccount<'info>,
+
+    #[account(
+        seeds = [BUILDERS_USDC_VAULT_SEED],
+        bump,
+        constraint = builders_usdc_vault.mint == treasury_config.usdc_mint @ CustomError::TreasuryExecutionMintMismatch,
+        constraint = builders_usdc_vault.owner == vault_authority.key() @ CustomError::TreasuryExecutionVaultMismatch
+    )]
+    pub builders_usdc_vault: Box<Account<'info, TokenAccount>>,
+
+    pub recipient_usdc_token_account: Box<Account<'info, TokenAccount>>,
+
+    #[account(constraint = usdc_mint.key() == treasury_config.usdc_mint @ CustomError::TreasuryExecutionMintMismatch)]
+    pub usdc_mint: Box<Account<'info, Mint>>,
 }
 
 #[derive(Accounts)]
@@ -206,7 +279,41 @@ pub struct ApproveTreasuryBuilderPayoutGovernanceV1<'info> {
         seeds = [GOVERNANCE_CONFIG_V1_SEED],
         bump = governance_config.bump
     )]
-    pub governance_config: Account<'info, GovernanceConfigV1>,
+    pub governance_config: Box<Account<'info, GovernanceConfigV1>>,
+
+    #[account(seeds = [TREASURY_CONFIG_V2_SEED], bump = treasury_config.bump)]
+    pub treasury_config: Box<Account<'info, TreasuryConfigV2>>,
+
+    #[account(
+        seeds = [
+            PROTOCOL_MODULE_REGISTRY_V1_SEED,
+            &[protocol_module_stable_code_v1(ProtocolModuleIdV1::Treasury)]
+        ],
+        bump = protocol_module_registry.bump
+    )]
+    pub protocol_module_registry: Box<Account<'info, ProtocolModuleRegistryV1>>,
+
+    #[account(
+        seeds = [GOVERNANCE_PROPOSAL_V1_SEED, &proposal_id.to_le_bytes()],
+        bump = governance_proposal.bump,
+        constraint = governance_proposal.proposal_id == proposal_id @ CustomError::InvalidProposalId
+    )]
+    pub governance_proposal: Box<Account<'info, GovernanceProposalV1>>,
+
+    #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_proposal_action.bump
+    )]
+    pub governance_proposal_action: Box<Account<'info, GovernanceProposalActionV1>>,
+
+    #[account(
+        seeds = [UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED, governance_proposal.key().as_ref()],
+        bump = governance_decision_adapter.bump
+    )]
+    pub governance_decision_adapter: Box<Account<'info, UniversalGovernanceDecisionAdapterV1>>,
 
     #[account(
         seeds = [
@@ -215,7 +322,7 @@ pub struct ApproveTreasuryBuilderPayoutGovernanceV1<'info> {
         ],
         bump = proposal_decision.bump
     )]
-    pub proposal_decision: Account<'info, ProposalDecisionV1>,
+    pub proposal_decision: Box<Account<'info, ProposalDecisionV1>>,
 
     #[account(
         seeds = [
@@ -224,16 +331,56 @@ pub struct ApproveTreasuryBuilderPayoutGovernanceV1<'info> {
         ],
         bump = execution_queue_item.bump
     )]
-    pub execution_queue_item: Account<'info, ExecutionQueueItemV1>,
+    pub execution_queue_item: Box<Account<'info, ExecutionQueueItemV1>>,
 
     #[account(
         seeds = [TREASURY_GOVERNANCE_CONFIG_V1_SEED],
-        bump = treasury_governance_config.bump
+        bump = treasury_governance_config.bump,
+        constraint = treasury_governance_config.treasury_config == treasury_config.key() @ CustomError::InvalidTreasuryGovernanceConfig
     )]
-    pub treasury_governance_config: Account<'info, TreasuryGovernanceConfigV1>,
+    pub treasury_governance_config: Box<Account<'info, TreasuryGovernanceConfigV1>>,
 
-    #[account(mut)]
-    pub treasury_builder_payout_governance: Account<'info, TreasuryBuilderPayoutGovernanceV1>,
+    #[account(
+        mut,
+        seeds = [TREASURY_BUILDER_PAYOUT_GOVERNANCE_V1_SEED, builder_payout_request.key().as_ref()],
+        bump = treasury_builder_payout_governance.bump,
+        constraint = treasury_builder_payout_governance.proposal_id == proposal_id @ CustomError::InvalidProposalId
+    )]
+    pub treasury_builder_payout_governance: Box<Account<'info, TreasuryBuilderPayoutGovernanceV1>>,
+
+    #[account(
+        seeds = [
+            BUILDER_PAYOUT_REQUEST_V1_SEED,
+            treasury_builder_payout_governance.contributor_registry.as_ref(),
+            treasury_builder_payout_governance.milestone.as_ref()
+        ],
+        bump = builder_payout_request.bump,
+        constraint = builder_payout_request.contributor == treasury_builder_payout_governance.contributor_registry @ CustomError::InvalidContributorPayoutRequest,
+        constraint = builder_payout_request.milestone == treasury_builder_payout_governance.milestone @ CustomError::InvalidContributorPayoutRequest
+    )]
+    pub builder_payout_request: Box<Account<'info, BuilderPayoutRequestV1>>,
+
+    #[account(
+        constraint = contributor_milestone.key() == treasury_builder_payout_governance.milestone @ CustomError::InvalidContributorMilestone
+    )]
+    pub contributor_milestone: Box<Account<'info, ContributorMilestoneV1>>,
+
+    /// CHECK: This PDA is only checked as the owner of the fixed Builders vault.
+    #[account(seeds = [VAULT_AUTHORITY_V2_SEED], bump)]
+    pub vault_authority: UncheckedAccount<'info>,
+
+    #[account(
+        seeds = [BUILDERS_USDC_VAULT_SEED],
+        bump,
+        constraint = builders_usdc_vault.mint == treasury_config.usdc_mint @ CustomError::TreasuryExecutionMintMismatch,
+        constraint = builders_usdc_vault.owner == vault_authority.key() @ CustomError::TreasuryExecutionVaultMismatch
+    )]
+    pub builders_usdc_vault: Box<Account<'info, TokenAccount>>,
+
+    pub recipient_usdc_token_account: Box<Account<'info, TokenAccount>>,
+
+    #[account(constraint = usdc_mint.key() == treasury_config.usdc_mint @ CustomError::TreasuryExecutionMintMismatch)]
+    pub usdc_mint: Box<Account<'info, Mint>>,
 }
 
 pub fn initialize_treasury_governance_config_v1_handler(
@@ -303,20 +450,53 @@ pub fn approve_treasury_spending_request_v1_handler(
         ctx.accounts.treasury_governance_config.dao_enabled,
         CustomError::InvalidTreasuryGovernanceConfig
     );
-    let payload_hash = hash_treasury_spending_request_payload(
+
+    let parameters = treasury_spending_parameters_from_accounts(
+        ctx.accounts.treasury_config.key(),
         ctx.accounts.treasury_spending_request.key(),
         &ctx.accounts.treasury_spending_request,
-    )?;
+        ctx.accounts.recipient_usdc_token_account.key(),
+        ctx.accounts.builders_usdc_vault.key(),
+        ctx.accounts.usdc_mint.key(),
+    );
+    let parameters_hash = hash_treasury_spending_parameters_v1(&parameters)?;
 
-    validate_treasury_governance_request(
+    validate_treasury_approval_binding_v1(
         &ctx.accounts.governance_config,
+        ctx.accounts.governance_config.key(),
+        &ctx.accounts.treasury_governance_config,
+        &ctx.accounts.treasury_config,
+        ctx.accounts.treasury_config.key(),
+        &ctx.accounts.protocol_module_registry,
+        ctx.accounts.protocol_module_registry.key(),
+        &ctx.accounts.governance_proposal,
+        ctx.accounts.governance_proposal.key(),
+        &ctx.accounts.governance_proposal_action,
+        ctx.accounts.governance_proposal_action.key(),
+        &ctx.accounts.governance_decision_adapter,
+        ctx.accounts.governance_decision_adapter.key(),
         &ctx.accounts.proposal_decision,
+        ctx.accounts.proposal_decision.key(),
         &ctx.accounts.execution_queue_item,
-        proposal_id,
+        ctx.accounts.execution_queue_item.key(),
+        ctx.accounts.treasury_spending_request.key(),
+        GovernanceActionTypeV1::TreasuryApproveSpending,
         ProposalType::TreasuryApproveSpending,
         ActionType::TreasuryApproveSpending,
-        ctx.accounts.treasury_spending_request.key(),
-        payload_hash,
+        parameters_hash,
+    )?;
+
+    validate_treasury_spending_approval_business_v1(
+        &ctx.accounts.treasury_governance_config,
+        &ctx.accounts.treasury_spending_request,
+        proposal_id,
+        ctx.accounts.treasury_config.key(),
+        ctx.accounts.recipient_usdc_token_account.key(),
+        &ctx.accounts.recipient_usdc_token_account,
+        ctx.accounts.builders_usdc_vault.key(),
+        &ctx.accounts.builders_usdc_vault,
+        ctx.accounts.vault_authority.key(),
+        ctx.accounts.usdc_mint.key(),
     )?;
 
     record_treasury_spending_status(
@@ -334,20 +514,57 @@ pub fn approve_treasury_builder_payout_governance_v1_handler(
         ctx.accounts.treasury_governance_config.dao_enabled,
         CustomError::InvalidTreasuryGovernanceConfig
     );
-    let payload_hash = hash_treasury_builder_payout_governance_payload(
+
+    let parameters = treasury_builder_payout_parameters_from_accounts(
+        ctx.accounts.treasury_config.key(),
         ctx.accounts.treasury_builder_payout_governance.key(),
         &ctx.accounts.treasury_builder_payout_governance,
-    )?;
+        ctx.accounts.builder_payout_request.key(),
+        ctx.accounts.contributor_milestone.key(),
+        ctx.accounts.recipient_usdc_token_account.key(),
+        ctx.accounts.builders_usdc_vault.key(),
+        ctx.accounts.usdc_mint.key(),
+    );
+    let parameters_hash = hash_treasury_builder_payout_parameters_v1(&parameters)?;
 
-    validate_treasury_governance_request(
+    validate_treasury_approval_binding_v1(
         &ctx.accounts.governance_config,
+        ctx.accounts.governance_config.key(),
+        &ctx.accounts.treasury_governance_config,
+        &ctx.accounts.treasury_config,
+        ctx.accounts.treasury_config.key(),
+        &ctx.accounts.protocol_module_registry,
+        ctx.accounts.protocol_module_registry.key(),
+        &ctx.accounts.governance_proposal,
+        ctx.accounts.governance_proposal.key(),
+        &ctx.accounts.governance_proposal_action,
+        ctx.accounts.governance_proposal_action.key(),
+        &ctx.accounts.governance_decision_adapter,
+        ctx.accounts.governance_decision_adapter.key(),
         &ctx.accounts.proposal_decision,
+        ctx.accounts.proposal_decision.key(),
         &ctx.accounts.execution_queue_item,
-        proposal_id,
+        ctx.accounts.execution_queue_item.key(),
+        ctx.accounts.treasury_builder_payout_governance.key(),
+        GovernanceActionTypeV1::TreasuryApproveBuilderPayout,
         ProposalType::TreasuryApproveBuilderPayout,
         ActionType::TreasuryApproveBuilderPayout,
-        ctx.accounts.treasury_builder_payout_governance.key(),
-        payload_hash,
+        parameters_hash,
+    )?;
+
+    validate_treasury_builder_payout_approval_business_v1(
+        &ctx.accounts.treasury_builder_payout_governance,
+        ctx.accounts.builder_payout_request.key(),
+        &ctx.accounts.builder_payout_request,
+        ctx.accounts.contributor_milestone.key(),
+        &ctx.accounts.contributor_milestone,
+        proposal_id,
+        ctx.accounts.recipient_usdc_token_account.key(),
+        &ctx.accounts.recipient_usdc_token_account,
+        ctx.accounts.builders_usdc_vault.key(),
+        &ctx.accounts.builders_usdc_vault,
+        ctx.accounts.vault_authority.key(),
+        ctx.accounts.usdc_mint.key(),
     )?;
 
     record_treasury_builder_payout_status(
