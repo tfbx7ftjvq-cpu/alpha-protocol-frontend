@@ -218,6 +218,30 @@ Treasury request accounts, then recompute the Stage 4 parameters hash.
 The adapter remains a bridge only. It still does not transfer USDC, mutate
 Treasury requests, or choose a source vault.
 
+## 11. Green Label Strict Forfeit Consumption
+
+Phase 2E-FINAL Stage 5B-3 adds the Green Label strict forfeit consumer:
+
+```text
+GovernanceProposalV1::Passed
+-> GovernanceProposalActionV1
+-> ProtocolModuleRegistryV1(GreenLabel)
+-> UniversalGovernanceDecisionAdapterV1
+-> ProposalDecisionV1 Approved
+-> ExecutionQueueItemV1 Executed
+-> execute_green_label_forfeit_governance_v1
+-> Treasury Router as RevenueType::GreenLabelForfeitedBond
+```
+
+The strict forfeit wrapper consumes the adapter output but does not let the
+executor restate the action, target, amount, vault, or payload. It recomputes
+`GreenLabelForfeitParametersV1`, verifies the sidecar parameters hash, checks
+the Green Label module registry, and routes only the recorded escrow liability
+through the Treasury router.
+
+The adapter still does not perform the forfeit itself. It only preserves the
+DAO-voted payload and bridges it into Security Layer decision state.
+
 ## 11. Green Label Certification Consumer
 
 Phase 2E-FINAL Stage 5B-1 adds the next strict module consumer of adapter

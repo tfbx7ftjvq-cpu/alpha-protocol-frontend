@@ -596,4 +596,10 @@ pub mod my_first_solana_program {
     ) -> Result<()> {
         instructions::green_label_v1::forfeit_green_label_escrow_to_treasury_v1_handler(ctx)
     }
+
+    pub fn execute_green_label_forfeit_governance_v1<'info>(
+        ctx: Context<'info, ExecuteGreenLabelForfeitGovernanceV1<'info>>,
+    ) -> Result<()> {
+        instructions::green_label_v1::execute_green_label_forfeit_governance_v1_handler(ctx)
+    }
 }

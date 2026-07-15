@@ -27,8 +27,16 @@ Phase 2E-2C:
 - `deposit_green_label_refundable_bond_v1` instruction.
 - `route_green_label_certification_fee_v1` instruction.
 - `refund_green_label_escrow_v1` instruction.
-- `forfeit_green_label_escrow_to_treasury_v1` instruction.
+- `forfeit_green_label_escrow_to_treasury_v1` instruction, retained as a legacy ABI / Devnet history entry point and now fail-closed.
 - Shared internal Treasury router helper that supports either signer payer or escrow PDA signer.
+
+Phase 2E-FINAL Stage 5B-3:
+
+- `GreenLabelForfeitExecutionRecordV1` immutable record.
+- `GreenLabelForfeitParametersV1` governance parameter hash.
+- Strict DAO-governed Green Label forfeit wrapper.
+- Forfeited escrow routing through the typed Treasury router as `RevenueType::GreenLabelForfeitedBond`.
+- Legacy public slash / forfeit entry points disabled: `execute_green_label_slash` returns `LegacyGreenLabelSlashDisabled`, and `forfeit_green_label_escrow_to_treasury_v1` returns `LegacyGreenLabelForfeitDisabled`.
 
 ## Revenue Types
 
@@ -40,6 +48,8 @@ Phase 2E-2C:
 - `ManualGovernanceApprovedRevenue`
 
 The enum is USDC-only. It does not include SOL revenue and does not include refundable Green Label bond escrow.
+
+The current Mainnet-intended strict forfeit path is `execute_green_label_forfeit_governance_v1`. Historical Devnet transactions and accounts remain readable, but they are not evidence that the legacy slash / non-strict forfeit instructions are currently executable.
 
 ## Stats PDA
 
@@ -98,7 +108,8 @@ Refundable escrow funds are not Treasury revenue while they remain refundable. T
 - Green Label certification fee routing is implemented as `RevenueType::GreenLabelCertificationFee`.
 - Green Label refundable escrow is implemented as a sidecar account and independent refundable vault.
 - Green Label forfeited escrow routing is implemented as `RevenueType::GreenLabelForfeitedBond`.
-- Existing Green Label Devnet E2E bond vault refund / slash remains available and is not removed by this phase.
+- Strict Green Label forfeit now requires governance sidecar, module registry, adapter, approved Security decision, executed queue item, and immutable forfeit execution record.
+- Existing Green Label legacy slash / forfeit public entry points are disabled in Stage 5B-3. Legacy refund compatibility remains separate from strict governance refund.
 - Builders payout governance is not implemented in this phase.
 - DAO voting is not implemented in this phase.
 - Token launch remains NO-GO.
@@ -134,7 +145,11 @@ Forfeit requirements:
 - Forfeited funds must route as `RevenueType::GreenLabelForfeitedBond`.
 - Forfeited funds must enter the Treasury router and split 50 / 20 / 20 / 10.
 - No one may forfeit escrow funds by time alone.
-- Phase 2E-2C reuses the linked Green Label / Security Layer slash decision fields, proposal decision, execution queue item, action type, payload hash, target account, and timelock checks before routing forfeited escrow to Treasury.
+- The strict Stage 5B-3 path requires `GovernanceActionTypeV1::GreenLabelSlashBond`, the Green Label module registry, `UniversalGovernanceDecisionAdapterV1`, an approved `ProposalDecisionV1`, an executed `ExecutionQueueItemV1`, and the exact `GreenLabelForfeitParametersV1` hash.
+- The executor cannot choose the amount. The routed amount is `refundable_amount - refunded_amount - forfeited_amount` from escrow state.
+- `refundable_vault.amount` is checked only for sufficiency. Extra dust does not increase routed revenue and remains in the vault.
+
+Legacy public slash / forfeit entry points are disabled by Stage 5B-3 and return explicit legacy-disabled errors.
 
 ## Mainnet Notes
 

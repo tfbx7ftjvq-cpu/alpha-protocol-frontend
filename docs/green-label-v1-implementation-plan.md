@@ -693,6 +693,13 @@ Failure cases:
 
 ### 7. execute_green_label_slash
 
+Current implementation status:
+
+- The legacy instruction name is retained for ABI / Devnet history.
+- The public handler now immediately returns `LegacyGreenLabelSlashDisabled`.
+- It no longer transfers funds or mutates project, dispute, escrow, Treasury, or routing stats state.
+- Strict Mainnet-intended forfeiture must use `execute_green_label_forfeit_governance_v1`.
+
 Accounts:
 
 - `green_label_config`
@@ -759,7 +766,7 @@ Required rules:
 
 - Green Label cannot directly refund or slash.
 - `execute_green_label_refund` must check the Security Layer queue item.
-- `execute_green_label_slash` must check the Security Layer queue item.
+- Legacy `execute_green_label_slash` is fail-closed. The strict forfeit path `execute_green_label_forfeit_governance_v1` must check the DAO/Security Layer proposal decision and execution queue item.
 - Both execution instructions must check `action_type`.
 - Both execution instructions must check `payload_hash`.
 - Both execution instructions must check queue status and executed state.

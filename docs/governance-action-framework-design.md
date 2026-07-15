@@ -147,6 +147,12 @@ GovernanceActionTypeV1
 
 Strict proposal initialization, snapshot creation, and adapter creation all validate the same registry helper before trusting a module target.
 
+Stage 5B adds Green Label module consumers for strict refund and strict forfeit:
+
+- `GreenLabelRefundBond` routes escrow funds only back to the original payer.
+- `GreenLabelSlashBond` routes recorded forfeited escrow funds through the USDC Treasury router as `RevenueType::GreenLabelForfeitedBond`.
+- legacy public Green Label slash / forfeit entry points are disabled.
+
 ## 8. Typed Proposal Action Binding
 
 Phase 2E-FINAL Stage 2 adds `GovernanceProposalActionV1` as the immutable trusted source for new governance proposals.
@@ -161,11 +167,10 @@ The target program is currently fixed to the Alpha Protocol Program ID through `
 
 ## 9. Non-Goals
 
-This phase does not implement:
+The original action framework phase did not implement:
 
 - Treasury transfer
 - Builder payout
-- Green Label execution changes
 - Victim Relief execution
 - Scam Registry execution
 - frontend

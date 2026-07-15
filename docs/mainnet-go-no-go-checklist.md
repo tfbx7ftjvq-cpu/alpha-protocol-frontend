@@ -198,13 +198,21 @@ Manual review notes:
 
 - Review `docs/alpha-tokenomics-final-decision-draft.md` before token launch approval.
 - The current recommended final decision draft is Fair Launch with no team, VC, project-side, DAO treasury, staking reserve, builders, or airdrop token buckets at launch.
+
 - `1,000,000,000 ALPHA` is confirmed total supply.
 - Core Fair Launch decisions are recorded in `docs/fair-launch-confirmed-decisions.md`.
 - Token launch requires final operational launch sign-off.
 - Unresolved launch platform, initial liquidity setup, pairing asset, mint / freeze authority policy, liquidity custody / LP handling, official communication, anti-scam warnings, and legal / risk review remain blockers.
 - The final decision draft does not approve immediate token launch.
 
-## 17. Fair Launch Decision Gates
+## 17. Green Label Strict Forfeit Governance
+
+- Review `docs/green-label-strict-forfeit-governance-v1.md` before any Mainnet Green Label slash / forfeit readiness decision.
+- Strict forfeit requires typed governance action binding, Green Label module registry, adapter output, approved Security decision, executed queue item, recorded escrow liability, and Treasury Router routing as `GreenLabelForfeitedBond`.
+- Legacy Green Label slash / forfeit public entry points are disabled in the local implementation.
+- This improves the Green Label fund path, but Mainnet production and token launch remain NO-GO until Mainnet parameters, authorities, vaults, sanity checks, and final build/test are complete.
+
+## 18. Fair Launch Decision Gates
 
 - Review `docs/fair-launch-decision-checklist.md` before any token launch approval.
 - Completed gates:
@@ -226,7 +234,7 @@ Manual review notes:
 - Communication must state that `50 / 20 / 20 / 10` is future protocol revenue split, not token allocation.
 - Token launch remains NO-GO until these gates are completed.
 
-## 18. Launch Communication Review
+## 19. Launch Communication Review
 
 - Review `docs/launch-communication-and-community-preheat-plan.md` before any public preview announcement, Litepaper publication, community pinned message, X thread, or token launch communication.
 - Token launch requires completed communication review.
@@ -234,14 +242,14 @@ Manual review notes:
 - Communication must clearly distinguish ALPHA Fair Launch from Treasury protocol revenue split.
 - Community preheating may proceed only with warnings: Mainnet not live, token launch pending, planned Fair Launch, read-only Public MVP, and ALPHA voting layer pending.
 
-## 19. Public MVP Safety Cleanup
+## 20. Public MVP Safety Cleanup
 
 - Public preview requires Devnet write buttons hidden by default.
 - Any developer-only Devnet actions must require an explicit environment flag, such as `VITE_SHOW_DEVNET_ACTIONS=true`.
 - Red-flag wording must be removed or replaced before public preview.
 - Public MVP must remain read-only by default with no buy button, real funds entry, or on-chain write action exposed.
 
-## 20. Unified USDC Revenue Router
+## 21. Unified USDC Revenue Router
 
 - Review `docs/unified-usdc-revenue-routing-design.md` before claiming protocol revenue routing readiness.
 - `route_usdc_revenue_v1` is implemented for typed USDC protocol revenue routing.
@@ -257,6 +265,6 @@ Manual review notes:
 - Builders payout governance is not implemented.
 - Token launch remains NO-GO until real revenue integrations, builders payout governance, Mainnet authorities, and final launch checks are completed.
 
-## 21. Current Conclusion
+## 22. Current Conclusion
 
 NO-GO for Mainnet production until Mainnet parameters, authorities, vaults, staking pool, and mainnet sanity check are completed and reviewed.

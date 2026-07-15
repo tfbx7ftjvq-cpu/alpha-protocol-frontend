@@ -81,6 +81,8 @@ The Devnet E2E runs verified the following Green Label and Security Layer path:
 9. `execute_green_label_refund`
 10. `execute_green_label_slash`
 
+Note: this section records the historical Devnet E2E milestone. Later strict governance phases retain legacy instruction names for ABI / Devnet history, but the current legacy slash handler fails closed with `LegacyGreenLabelSlashDisabled`; strict forfeiture uses `execute_green_label_forfeit_governance_v1`.
+
 ## Mainnet Readiness Blockers
 
 Before Mainnet, the following items must be handled:
@@ -93,4 +95,3 @@ Before Mainnet, the following items must be handled:
 2. Migrate config authority from a single wallet to DAO / multisig / Security Layer timelock control.
 3. Clearly separate Devnet scripts from Mainnet scripts.
 4. Audit update-config authority risk, especially the ability to change windows or minimum bond settings.
-

@@ -38,6 +38,8 @@ Green Label key instructions exist in the IDL:
 - `update_green_label_windows`
 - `update_green_label_min_base_bond`
 
+Note: this report records the Devnet baseline at the time of the sanity run. Later strict governance phases retain legacy Green Label instruction names for ABI / Devnet history, but current legacy slash / non-strict forfeit handlers fail closed and are not evidence of executable Mainnet paths.
+
 ## 3. Green Label Config Check
 
 - Green Label config PDA: `7hNAeoqZxqvp38giY9gZwfR5ai3ttYTrse63QNYrRBWS`

@@ -715,6 +715,7 @@ pub enum GreenLabelCertificationExecutionTypeV1 {
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GreenLabelEscrowExecutionTypeV1 {
     Refund,
+    Forfeit,
 }
 
 #[account]
@@ -908,6 +909,48 @@ pub struct GreenLabelRefundExecutionRecordV1 {
 
 impl GreenLabelRefundExecutionRecordV1 {
     pub const INIT_SPACE: usize = (32 * 14) + 8 + 1 + 1 + (32 * 2) + 1 + 1 + 1 + 1 + 8 + 2 + 1;
+}
+
+#[account]
+pub struct GreenLabelForfeitExecutionRecordV1 {
+    pub execution_queue_item: Pubkey,
+    pub proposal_decision: Pubkey,
+    pub governance_proposal: Pubkey,
+    pub governance_proposal_action: Pubkey,
+    pub module_registry: Pubkey,
+    pub green_label_config: Pubkey,
+    pub green_label_project: Pubkey,
+    pub green_label_dispute: Pubkey,
+    pub refundable_escrow: Pubkey,
+    pub refundable_vault: Pubkey,
+    pub treasury_config: Pubkey,
+    pub treasury_usdc_state: Pubkey,
+    pub revenue_routing_stats: Pubkey,
+    pub relief_usdc_vault: Pubkey,
+    pub buyback_usdc_vault: Pubkey,
+    pub builders_usdc_vault: Pubkey,
+    pub staking_usdc_vault: Pubkey,
+    pub forfeited_amount_usdc: u64,
+    pub usdc_mint: Pubkey,
+    pub revenue_type: RevenueType,
+    pub execution_type: GreenLabelEscrowExecutionTypeV1,
+    pub governance_action_type: GovernanceActionTypeV1,
+    pub parameters_hash: [u8; 32],
+    pub canonical_governance_payload_hash: [u8; 32],
+    pub escrow_status_before: GreenLabelEscrowStatusV1,
+    pub escrow_status_after: GreenLabelEscrowStatusV1,
+    pub project_status_before: GreenLabelStatus,
+    pub project_status_after: GreenLabelStatus,
+    pub dispute_status_before: DisputeStatus,
+    pub dispute_status_after: DisputeStatus,
+    pub executor: Pubkey,
+    pub executed_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+}
+
+impl GreenLabelForfeitExecutionRecordV1 {
+    pub const INIT_SPACE: usize = (32 * 19) + 8 + (32 * 2) + 9 + 8 + 2 + 1;
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]

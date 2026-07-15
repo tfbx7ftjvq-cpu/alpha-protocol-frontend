@@ -686,6 +686,13 @@ Funds movement:
 
 ### execute_green_label_slash
 
+Current status:
+
+- This legacy instruction name is retained for ABI / Devnet history.
+- The public handler now immediately returns `LegacyGreenLabelSlashDisabled`.
+- It no longer transfers funds or mutates project, dispute, escrow, Treasury, or routing stats state.
+- Strict Mainnet-intended forfeiture must use `execute_green_label_forfeit_governance_v1`, which routes `RevenueType::GreenLabelForfeitedBond` through the fixed 50 / 20 / 20 / 10 Treasury router.
+
 Purpose:
 
 - Execute a slash after Security Layer queue and timelock requirements have been satisfied.

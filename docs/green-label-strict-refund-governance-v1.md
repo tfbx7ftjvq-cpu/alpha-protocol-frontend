@@ -17,7 +17,9 @@ GovernanceProposalV1
 -> GreenLabelRefundExecutionRecordV1
 ```
 
-This phase only implements refund. It does not implement Green Label forfeit/slash, Treasury Router split, certification fee receipt, legacy slash closure, Victim Relief, Scam Registry, DAO Control Mode, authority migration, frontend changes, deployment, or chain transactions.
+This phase only implements refund. It does not implement Green Label forfeit/slash, Treasury Router split, certification fee receipt, Victim Relief, Scam Registry, DAO Control Mode, authority migration, frontend changes, deployment, or chain transactions.
+
+Phase 2E-FINAL Stage 5B-3 later adds the strict forfeit governance path and disables the legacy slash / forfeit public entry points. See `docs/green-label-strict-forfeit-governance-v1.md`.
 
 ## Fund Path
 
@@ -192,7 +194,12 @@ The legacy paths remain for compatibility:
 - `execute_green_label_slash`
 - `forfeit_green_label_escrow_to_treasury_v1`
 
-This phase does not claim legacy bypasses are solved. Legacy slash bypass remains unresolved. `DaoControlled` mode is not implemented.
+Phase 2E-FINAL Stage 5B-3 disables the legacy slash / forfeit public entry points:
+
+- `execute_green_label_slash` returns `LegacyGreenLabelSlashDisabled`
+- `forfeit_green_label_escrow_to_treasury_v1` returns `LegacyGreenLabelForfeitDisabled`
+
+`execute_green_label_refund` and `refund_green_label_escrow_v1` remain compatibility paths. `DaoControlled` mode is not implemented.
 
 ## Mainnet Status
 

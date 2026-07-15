@@ -233,7 +233,13 @@ The legacy Green Label paths still exist, including:
 - `refund_green_label_escrow_v1`
 - `forfeit_green_label_escrow_to_treasury_v1`
 
-This phase does not claim that legacy authority bypasses or legacy slash bypasses are solved. `DaoControlled` mode is not implemented.
+Stage 5B-3 closes the legacy slash / non-strict forfeit value-moving paths while retaining the instruction names for ABI and Devnet history:
+
+- `execute_green_label_slash` now fails closed with `LegacyGreenLabelSlashDisabled`
+- `forfeit_green_label_escrow_to_treasury_v1` now fails closed with `LegacyGreenLabelForfeitDisabled`
+- the Mainnet strict forfeit path is `execute_green_label_forfeit_governance_v1`
+
+`DaoControlled` mode is not implemented.
 
 ## Mainnet Status
 

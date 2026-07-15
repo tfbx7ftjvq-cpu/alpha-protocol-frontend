@@ -436,4 +436,46 @@ pub enum CustomError {
 
     #[msg("Invalid Green Label refund schema")]
     InvalidGreenLabelRefundSchema,
+
+    #[msg("Green Label forfeit action mismatch")]
+    GreenLabelForfeitActionMismatch,
+
+    #[msg("Green Label forfeit target mismatch")]
+    GreenLabelForfeitTargetMismatch,
+
+    #[msg("Green Label forfeit parameters mismatch")]
+    GreenLabelForfeitParametersMismatch,
+
+    #[msg("Green Label forfeit execution already completed")]
+    GreenLabelForfeitExecutionAlreadyCompleted,
+
+    #[msg("Green Label forfeit is not eligible")]
+    GreenLabelForfeitNotEligible,
+
+    #[msg("Green Label forfeit dispute mismatch")]
+    GreenLabelForfeitDisputeMismatch,
+
+    #[msg("Green Label forfeit decision mismatch")]
+    GreenLabelForfeitDecisionMismatch,
+
+    #[msg("Green Label forfeit vault mismatch")]
+    GreenLabelForfeitVaultMismatch,
+
+    #[msg("Green Label forfeit mint mismatch")]
+    GreenLabelForfeitMintMismatch,
+
+    #[msg("Green Label forfeit amount mismatch")]
+    GreenLabelForfeitAmountMismatch,
+
+    #[msg("Green Label forfeit has insufficient funds")]
+    GreenLabelForfeitInsufficientFunds,
+
+    #[msg("Invalid Green Label forfeit schema")]
+    InvalidGreenLabelForfeitSchema,
+
+    #[msg("Legacy Green Label slash is disabled")]
+    LegacyGreenLabelSlashDisabled,
+
+    #[msg("Legacy Green Label forfeit is disabled")]
+    LegacyGreenLabelForfeitDisabled,
 }
