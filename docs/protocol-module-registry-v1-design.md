@@ -160,3 +160,20 @@ The strict Treasury wrappers validate:
 Treasury execution still does not mutate the registry. Registry update,
 enable/disable, external program registration, and DAO Control Mode remain
 out of scope.
+
+## Stage 5B-1 Green Label Certification Usage
+
+Phase 2E-FINAL Stage 5B-1 consumes the Green Label module registry before any
+strict certification wrapper can approve, reject, or revoke certification.
+
+The strict Green Label wrappers validate:
+
+- registry PDA and stable module code
+- `module_id == GreenLabel`
+- registry enabled
+- registry bound to the current Alpha Protocol Program ID
+- registry tied to the expected Security `GovernanceConfigV1`
+
+The registry is not mutated. Green Label refund, slash, Treasury routing,
+Victim Relief, Scam Registry, DAO Control Mode, and authority migration remain
+out of scope for this stage.

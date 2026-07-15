@@ -4,28 +4,62 @@ use anchor_spl::token::{transfer_checked, Mint, Token, TokenAccount, TransferChe
 use crate::constants::{
     BASE_BOND_REFUND_BPS, BASE_BOND_TREASURY_BPS, BUILDERS_USDC_VAULT_SEED,
     BUYBACK_USDC_VAULT_SEED, DEFAULT_DISPUTE_WINDOW_SECONDS, DEFAULT_OBSERVATION_PERIOD_SECONDS,
-    DEFAULT_RESPONSE_WINDOW_SECONDS, GREEN_BOND_VAULT_AUTHORITY_SEED, GREEN_BOND_VAULT_SEED,
-    GREEN_LABEL_BRONZE_TIER_THRESHOLD_USDC, GREEN_LABEL_CONFIG_RESERVED_BYTES,
-    GREEN_LABEL_CONFIG_SEED, GREEN_LABEL_CONFIG_SPACE, GREEN_LABEL_DISPUTE_RESERVED_BYTES,
-    GREEN_LABEL_DISPUTE_SEED, GREEN_LABEL_DISPUTE_SPACE, GREEN_LABEL_GOLD_TIER_THRESHOLD_USDC,
-    GREEN_LABEL_PLATINUM_TIER_THRESHOLD_USDC, GREEN_LABEL_PROJECT_RESERVED_BYTES,
-    GREEN_LABEL_PROJECT_SEED, GREEN_LABEL_PROJECT_SPACE, GREEN_LABEL_REFUNDABLE_ESCROW_SEED,
-    GREEN_LABEL_REFUNDABLE_VAULT_SEED, GREEN_LABEL_SILVER_TIER_THRESHOLD_USDC,
-    GREEN_LABEL_USDC_DECIMALS, MAX_BPS, MIN_GREEN_LABEL_BASE_BOND_USDC, RELIEF_USDC_VAULT_SEED,
-    REVENUE_ROUTING_STATS_V1_SEED, STAKING_USDC_VAULT_SEED, TREASURY_CONFIG_V2_SEED,
-    TREASURY_USDC_STATE_V2_SEED, VAULT_AUTHORITY_V2_SEED,
+    DEFAULT_RESPONSE_WINDOW_SECONDS, EXECUTION_QUEUE_ITEM_V1_SEED, GOVERNANCE_CONFIG_V1_SEED,
+    GOVERNANCE_PROPOSAL_ACTION_V1_SEED, GOVERNANCE_PROPOSAL_V1_SEED,
+    GREEN_BOND_VAULT_AUTHORITY_SEED, GREEN_BOND_VAULT_SEED, GREEN_LABEL_BRONZE_TIER_THRESHOLD_USDC,
+    GREEN_LABEL_CERTIFICATION_EXECUTION_RECORD_SEED, GREEN_LABEL_CERTIFICATION_STATE_SEED,
+    GREEN_LABEL_CONFIG_RESERVED_BYTES, GREEN_LABEL_CONFIG_SEED, GREEN_LABEL_CONFIG_SPACE,
+    GREEN_LABEL_DISPUTE_RESERVED_BYTES, GREEN_LABEL_DISPUTE_SEED, GREEN_LABEL_DISPUTE_SPACE,
+    GREEN_LABEL_GOLD_TIER_THRESHOLD_USDC, GREEN_LABEL_PLATINUM_TIER_THRESHOLD_USDC,
+    GREEN_LABEL_PROJECT_RESERVED_BYTES, GREEN_LABEL_PROJECT_SEED, GREEN_LABEL_PROJECT_SPACE,
+    GREEN_LABEL_REFUNDABLE_ESCROW_SEED, GREEN_LABEL_REFUNDABLE_VAULT_SEED,
+    GREEN_LABEL_SILVER_TIER_THRESHOLD_USDC, GREEN_LABEL_USDC_DECIMALS, MAX_BPS,
+    MIN_GREEN_LABEL_BASE_BOND_USDC, PROPOSAL_DECISION_V1_SEED, PROTOCOL_MODULE_REGISTRY_V1_SEED,
+    RELIEF_USDC_VAULT_SEED, REVENUE_ROUTING_STATS_V1_SEED, STAKING_USDC_VAULT_SEED,
+    TREASURY_CONFIG_V2_SEED, TREASURY_USDC_STATE_V2_SEED,
+    UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED, VAULT_AUTHORITY_V2_SEED,
 };
 use crate::error::CustomError;
+use crate::instructions::contributor_v1::hash_contributor_payload;
 use crate::instructions::deposit_usdc_revenue::route_usdc_revenue_from_token_account;
+use crate::instructions::governance_action_v1::map_governance_action_to_security_action;
+use crate::instructions::governance_v1::validate_governance_proposal_action_v1;
+use crate::instructions::protocol_module_registry_v1::{
+    protocol_module_stable_code_v1, validate_protocol_module_registry_v1,
+};
 use crate::state::{
-    ActionType, BondTier, DisputeStatus, ExecutionQueueItemV1, ExecutionStatus, GreenLabelConfigV1,
-    GreenLabelDisputeV1, GreenLabelEscrowStatusV1, GreenLabelProjectV1,
-    GreenLabelRefundableEscrowV1, GreenLabelStatus, ProposalDecision, ProposalDecisionV1,
-    ProposalType, RevenueRoutingStatsV1, RevenueType, RugReasonCode, TreasuryConfigV2,
-    TreasuryUsdcStateV2,
+    ActionType, BondTier, DisputeStatus, ExecutionQueueItemV1, ExecutionStatus,
+    GovernanceActionTypeV1, GovernanceConfigV1, GovernanceProposalActionV1,
+    GovernanceProposalStatusV1, GovernanceProposalV1, GreenLabelCertificationExecutionRecordV1,
+    GreenLabelCertificationExecutionTypeV1, GreenLabelCertificationStateV1,
+    GreenLabelCertificationStatusV1, GreenLabelConfigV1, GreenLabelDisputeV1,
+    GreenLabelEscrowStatusV1, GreenLabelProjectV1, GreenLabelRefundableEscrowV1, GreenLabelStatus,
+    ProposalDecision, ProposalDecisionV1, ProposalType, ProtocolModuleIdV1,
+    ProtocolModuleRegistryV1, RevenueRoutingStatsV1, RevenueType, RugReasonCode, TreasuryConfigV2,
+    TreasuryUsdcStateV2, UniversalGovernanceDecisionAdapterV1,
 };
 
 pub const MAX_GREEN_LABEL_WINDOW_SECONDS: i64 = 30 * 24 * 60 * 60;
+pub const GREEN_LABEL_CERTIFICATION_SCHEMA_VERSION: u16 = 1;
+pub const GREEN_LABEL_CERTIFICATION_DECISION_PARAMETERS_V1_DOMAIN: &[u8] =
+    b"alpha_green_label_certification_decision_v1";
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GreenLabelCertificationDecisionParametersV1 {
+    pub schema_version: u16,
+    pub green_label_config: Pubkey,
+    pub green_label_project: Pubkey,
+    pub certification_state: Pubkey,
+    pub action_type: GovernanceActionTypeV1,
+    pub project_authority: Pubkey,
+    pub bond_tier: BondTier,
+    pub bond_vault: Pubkey,
+    pub usdc_mint: Pubkey,
+    pub observation_end_ts: i64,
+    pub expected_project_status: GreenLabelStatus,
+    pub expected_certification_status: GreenLabelCertificationStatusV1,
+    pub proposal_id: u64,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GreenLabelBondSplit {
@@ -699,6 +733,348 @@ pub struct RouteGreenLabelCertificationFeeV1<'info> {
     pub staking_usdc_vault: Box<Account<'info, TokenAccount>>,
 
     pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct InitializeGreenLabelCertificationStateV1<'info> {
+    #[account(
+        seeds = [GREEN_LABEL_CONFIG_SEED],
+        bump = green_label_config.bump
+    )]
+    pub green_label_config: Box<Account<'info, GreenLabelConfigV1>>,
+
+    #[account(
+        seeds = [
+            GREEN_LABEL_PROJECT_SEED,
+            &green_label_project.project_id.to_le_bytes()
+        ],
+        bump = green_label_project.bump
+    )]
+    pub green_label_project: Box<Account<'info, GreenLabelProjectV1>>,
+
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + GreenLabelCertificationStateV1::INIT_SPACE,
+        seeds = [
+            GREEN_LABEL_CERTIFICATION_STATE_SEED,
+            green_label_project.key().as_ref()
+        ],
+        bump
+    )]
+    pub green_label_certification_state: Box<Account<'info, GreenLabelCertificationStateV1>>,
+
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ExecuteGreenLabelApproveCertificationV1<'info> {
+    #[account(seeds = [GREEN_LABEL_CONFIG_SEED], bump = green_label_config.bump)]
+    pub green_label_config: Box<Account<'info, GreenLabelConfigV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            GREEN_LABEL_PROJECT_SEED,
+            &green_label_project.project_id.to_le_bytes()
+        ],
+        bump = green_label_project.bump
+    )]
+    pub green_label_project: Box<Account<'info, GreenLabelProjectV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            GREEN_LABEL_CERTIFICATION_STATE_SEED,
+            green_label_project.key().as_ref()
+        ],
+        bump = green_label_certification_state.bump
+    )]
+    pub green_label_certification_state: Box<Account<'info, GreenLabelCertificationStateV1>>,
+
+    #[account(seeds = [GOVERNANCE_CONFIG_V1_SEED], bump = security_governance_config.bump)]
+    pub security_governance_config: Box<Account<'info, GovernanceConfigV1>>,
+
+    #[account(
+        seeds = [
+            PROTOCOL_MODULE_REGISTRY_V1_SEED,
+            &[protocol_module_stable_code_v1(ProtocolModuleIdV1::GreenLabel)]
+        ],
+        bump = protocol_module_registry.bump
+    )]
+    pub protocol_module_registry: Box<Account<'info, ProtocolModuleRegistryV1>>,
+
+    #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_V1_SEED,
+            &governance_proposal.proposal_id.to_le_bytes()
+        ],
+        bump = governance_proposal.bump
+    )]
+    pub governance_proposal: Box<Account<'info, GovernanceProposalV1>>,
+
+    #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_proposal_action.bump
+    )]
+    pub governance_proposal_action: Box<Account<'info, GovernanceProposalActionV1>>,
+
+    #[account(
+        seeds = [
+            UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_decision_adapter.bump
+    )]
+    pub governance_decision_adapter: Box<Account<'info, UniversalGovernanceDecisionAdapterV1>>,
+
+    #[account(
+        seeds = [
+            PROPOSAL_DECISION_V1_SEED,
+            &governance_proposal.proposal_id.to_le_bytes()
+        ],
+        bump = proposal_decision.bump
+    )]
+    pub proposal_decision: Box<Account<'info, ProposalDecisionV1>>,
+
+    #[account(
+        seeds = [
+            EXECUTION_QUEUE_ITEM_V1_SEED,
+            &governance_proposal.proposal_id.to_le_bytes()
+        ],
+        bump = execution_queue_item.bump
+    )]
+    pub execution_queue_item: Box<Account<'info, ExecutionQueueItemV1>>,
+
+    #[account(
+        init,
+        payer = executor,
+        space = 8 + GreenLabelCertificationExecutionRecordV1::INIT_SPACE,
+        seeds = [
+            GREEN_LABEL_CERTIFICATION_EXECUTION_RECORD_SEED,
+            execution_queue_item.key().as_ref()
+        ],
+        bump
+    )]
+    pub green_label_certification_execution_record:
+        Box<Account<'info, GreenLabelCertificationExecutionRecordV1>>,
+
+    #[account(mut)]
+    pub green_bond_vault: Box<Account<'info, TokenAccount>>,
+
+    #[account(constraint = usdc_mint.key() == green_label_config.usdc_mint @ CustomError::InvalidGreenLabelMint)]
+    pub usdc_mint: Box<Account<'info, Mint>>,
+
+    #[account(mut)]
+    pub executor: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ExecuteGreenLabelRejectCertificationV1<'info> {
+    #[account(seeds = [GREEN_LABEL_CONFIG_SEED], bump = green_label_config.bump)]
+    pub green_label_config: Box<Account<'info, GreenLabelConfigV1>>,
+
+    #[account(
+        seeds = [
+            GREEN_LABEL_PROJECT_SEED,
+            &green_label_project.project_id.to_le_bytes()
+        ],
+        bump = green_label_project.bump
+    )]
+    pub green_label_project: Box<Account<'info, GreenLabelProjectV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            GREEN_LABEL_CERTIFICATION_STATE_SEED,
+            green_label_project.key().as_ref()
+        ],
+        bump = green_label_certification_state.bump
+    )]
+    pub green_label_certification_state: Box<Account<'info, GreenLabelCertificationStateV1>>,
+
+    #[account(seeds = [GOVERNANCE_CONFIG_V1_SEED], bump = security_governance_config.bump)]
+    pub security_governance_config: Box<Account<'info, GovernanceConfigV1>>,
+
+    #[account(
+        seeds = [
+            PROTOCOL_MODULE_REGISTRY_V1_SEED,
+            &[protocol_module_stable_code_v1(ProtocolModuleIdV1::GreenLabel)]
+        ],
+        bump = protocol_module_registry.bump
+    )]
+    pub protocol_module_registry: Box<Account<'info, ProtocolModuleRegistryV1>>,
+
+    #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_V1_SEED,
+            &governance_proposal.proposal_id.to_le_bytes()
+        ],
+        bump = governance_proposal.bump
+    )]
+    pub governance_proposal: Box<Account<'info, GovernanceProposalV1>>,
+
+    #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_proposal_action.bump
+    )]
+    pub governance_proposal_action: Box<Account<'info, GovernanceProposalActionV1>>,
+
+    #[account(
+        seeds = [
+            UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_decision_adapter.bump
+    )]
+    pub governance_decision_adapter: Box<Account<'info, UniversalGovernanceDecisionAdapterV1>>,
+
+    #[account(
+        seeds = [
+            PROPOSAL_DECISION_V1_SEED,
+            &governance_proposal.proposal_id.to_le_bytes()
+        ],
+        bump = proposal_decision.bump
+    )]
+    pub proposal_decision: Box<Account<'info, ProposalDecisionV1>>,
+
+    #[account(
+        seeds = [
+            EXECUTION_QUEUE_ITEM_V1_SEED,
+            &governance_proposal.proposal_id.to_le_bytes()
+        ],
+        bump = execution_queue_item.bump
+    )]
+    pub execution_queue_item: Box<Account<'info, ExecutionQueueItemV1>>,
+
+    #[account(
+        init,
+        payer = executor,
+        space = 8 + GreenLabelCertificationExecutionRecordV1::INIT_SPACE,
+        seeds = [
+            GREEN_LABEL_CERTIFICATION_EXECUTION_RECORD_SEED,
+            execution_queue_item.key().as_ref()
+        ],
+        bump
+    )]
+    pub green_label_certification_execution_record:
+        Box<Account<'info, GreenLabelCertificationExecutionRecordV1>>,
+
+    #[account(mut)]
+    pub executor: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ExecuteGreenLabelRevokeCertificationV1<'info> {
+    #[account(seeds = [GREEN_LABEL_CONFIG_SEED], bump = green_label_config.bump)]
+    pub green_label_config: Box<Account<'info, GreenLabelConfigV1>>,
+
+    #[account(
+        seeds = [
+            GREEN_LABEL_PROJECT_SEED,
+            &green_label_project.project_id.to_le_bytes()
+        ],
+        bump = green_label_project.bump
+    )]
+    pub green_label_project: Box<Account<'info, GreenLabelProjectV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            GREEN_LABEL_CERTIFICATION_STATE_SEED,
+            green_label_project.key().as_ref()
+        ],
+        bump = green_label_certification_state.bump
+    )]
+    pub green_label_certification_state: Box<Account<'info, GreenLabelCertificationStateV1>>,
+
+    #[account(seeds = [GOVERNANCE_CONFIG_V1_SEED], bump = security_governance_config.bump)]
+    pub security_governance_config: Box<Account<'info, GovernanceConfigV1>>,
+
+    #[account(
+        seeds = [
+            PROTOCOL_MODULE_REGISTRY_V1_SEED,
+            &[protocol_module_stable_code_v1(ProtocolModuleIdV1::GreenLabel)]
+        ],
+        bump = protocol_module_registry.bump
+    )]
+    pub protocol_module_registry: Box<Account<'info, ProtocolModuleRegistryV1>>,
+
+    #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_V1_SEED,
+            &governance_proposal.proposal_id.to_le_bytes()
+        ],
+        bump = governance_proposal.bump
+    )]
+    pub governance_proposal: Box<Account<'info, GovernanceProposalV1>>,
+
+    #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_proposal_action.bump
+    )]
+    pub governance_proposal_action: Box<Account<'info, GovernanceProposalActionV1>>,
+
+    #[account(
+        seeds = [
+            UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_decision_adapter.bump
+    )]
+    pub governance_decision_adapter: Box<Account<'info, UniversalGovernanceDecisionAdapterV1>>,
+
+    #[account(
+        seeds = [
+            PROPOSAL_DECISION_V1_SEED,
+            &governance_proposal.proposal_id.to_le_bytes()
+        ],
+        bump = proposal_decision.bump
+    )]
+    pub proposal_decision: Box<Account<'info, ProposalDecisionV1>>,
+
+    #[account(
+        seeds = [
+            EXECUTION_QUEUE_ITEM_V1_SEED,
+            &governance_proposal.proposal_id.to_le_bytes()
+        ],
+        bump = execution_queue_item.bump
+    )]
+    pub execution_queue_item: Box<Account<'info, ExecutionQueueItemV1>>,
+
+    #[account(
+        init,
+        payer = executor,
+        space = 8 + GreenLabelCertificationExecutionRecordV1::INIT_SPACE,
+        seeds = [
+            GREEN_LABEL_CERTIFICATION_EXECUTION_RECORD_SEED,
+            execution_queue_item.key().as_ref()
+        ],
+        bump
+    )]
+    pub green_label_certification_execution_record:
+        Box<Account<'info, GreenLabelCertificationExecutionRecordV1>>,
+
+    #[account(mut)]
+    pub executor: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -1460,6 +1836,285 @@ pub fn route_green_label_certification_fee_v1_handler(
     )
 }
 
+pub fn initialize_green_label_certification_state_v1_handler(
+    ctx: Context<InitializeGreenLabelCertificationStateV1>,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    record_green_label_certification_state_init(
+        &mut ctx.accounts.green_label_certification_state,
+        ctx.accounts.green_label_project.key(),
+        ctx.accounts.green_label_config.key(),
+        ctx.accounts.green_label_project.status,
+        now,
+        ctx.bumps.green_label_certification_state,
+    )
+}
+
+pub fn execute_green_label_approve_certification_v1_handler(
+    ctx: Context<ExecuteGreenLabelApproveCertificationV1>,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let project_key = ctx.accounts.green_label_project.key();
+    let config_key = ctx.accounts.green_label_config.key();
+    let state_key = ctx.accounts.green_label_certification_state.key();
+    let record_key = ctx
+        .accounts
+        .green_label_certification_execution_record
+        .key();
+    let parameters = build_green_label_certification_decision_parameters_v1(
+        &ctx.accounts.green_label_config,
+        config_key,
+        &ctx.accounts.green_label_project,
+        project_key,
+        state_key,
+        GovernanceActionTypeV1::GreenLabelApproveCertification,
+        ctx.accounts
+            .green_label_certification_state
+            .certification_status,
+        ctx.accounts.governance_proposal.proposal_id,
+    )?;
+
+    validate_green_label_certification_execution_context_v1(
+        &ctx.accounts.security_governance_config,
+        ctx.accounts.security_governance_config.key(),
+        &ctx.accounts.green_label_config,
+        &ctx.accounts.green_label_project,
+        project_key,
+        &ctx.accounts.green_label_certification_state,
+        state_key,
+        &ctx.accounts.protocol_module_registry,
+        ctx.accounts.protocol_module_registry.key(),
+        &ctx.accounts.governance_proposal,
+        ctx.accounts.governance_proposal.key(),
+        &ctx.accounts.governance_proposal_action,
+        ctx.accounts.governance_proposal_action.key(),
+        &ctx.accounts.governance_decision_adapter,
+        ctx.accounts.governance_decision_adapter.key(),
+        &ctx.accounts.proposal_decision,
+        ctx.accounts.proposal_decision.key(),
+        &ctx.accounts.execution_queue_item,
+        ctx.accounts.execution_queue_item.key(),
+        GovernanceActionTypeV1::GreenLabelApproveCertification,
+        ProposalType::GreenLabelApproveCertification,
+        ActionType::GreenLabelApproveCertification,
+        &parameters,
+    )?;
+    validate_green_label_approve_certification_business_v1(
+        &ctx.accounts.green_label_config,
+        &ctx.accounts.green_label_project,
+        &ctx.accounts.green_label_certification_state,
+        ctx.accounts.green_bond_vault.key(),
+        &ctx.accounts.green_bond_vault,
+        ctx.accounts.usdc_mint.key(),
+        ctx.accounts.usdc_mint.decimals,
+        now,
+    )?;
+
+    let project_status_before = ctx.accounts.green_label_project.status;
+    let certification_status_before = ctx
+        .accounts
+        .green_label_certification_state
+        .certification_status;
+    record_green_label_approve_certification_v1(
+        &mut ctx.accounts.green_label_project,
+        &mut ctx.accounts.green_label_certification_state,
+        &mut ctx.accounts.green_label_certification_execution_record,
+        ctx.accounts.execution_queue_item.key(),
+        ctx.accounts.proposal_decision.key(),
+        ctx.accounts.governance_proposal.key(),
+        ctx.accounts.governance_proposal_action.key(),
+        project_key,
+        state_key,
+        ctx.accounts.protocol_module_registry.key(),
+        record_key,
+        parameters,
+        ctx.accounts
+            .governance_proposal_action
+            .canonical_payload_hash,
+        project_status_before,
+        certification_status_before,
+        ctx.accounts.executor.key(),
+        now,
+        ctx.bumps.green_label_certification_execution_record,
+    )
+}
+
+pub fn execute_green_label_reject_certification_v1_handler(
+    ctx: Context<ExecuteGreenLabelRejectCertificationV1>,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let project_key = ctx.accounts.green_label_project.key();
+    let config_key = ctx.accounts.green_label_config.key();
+    let state_key = ctx.accounts.green_label_certification_state.key();
+    let record_key = ctx
+        .accounts
+        .green_label_certification_execution_record
+        .key();
+    let parameters = build_green_label_certification_decision_parameters_v1(
+        &ctx.accounts.green_label_config,
+        config_key,
+        &ctx.accounts.green_label_project,
+        project_key,
+        state_key,
+        GovernanceActionTypeV1::GreenLabelRejectCertification,
+        ctx.accounts
+            .green_label_certification_state
+            .certification_status,
+        ctx.accounts.governance_proposal.proposal_id,
+    )?;
+
+    validate_green_label_certification_execution_context_v1(
+        &ctx.accounts.security_governance_config,
+        ctx.accounts.security_governance_config.key(),
+        &ctx.accounts.green_label_config,
+        &ctx.accounts.green_label_project,
+        project_key,
+        &ctx.accounts.green_label_certification_state,
+        state_key,
+        &ctx.accounts.protocol_module_registry,
+        ctx.accounts.protocol_module_registry.key(),
+        &ctx.accounts.governance_proposal,
+        ctx.accounts.governance_proposal.key(),
+        &ctx.accounts.governance_proposal_action,
+        ctx.accounts.governance_proposal_action.key(),
+        &ctx.accounts.governance_decision_adapter,
+        ctx.accounts.governance_decision_adapter.key(),
+        &ctx.accounts.proposal_decision,
+        ctx.accounts.proposal_decision.key(),
+        &ctx.accounts.execution_queue_item,
+        ctx.accounts.execution_queue_item.key(),
+        GovernanceActionTypeV1::GreenLabelRejectCertification,
+        ProposalType::GreenLabelRejectCertification,
+        ActionType::GreenLabelRejectCertification,
+        &parameters,
+    )?;
+    validate_green_label_reject_certification_business_v1(
+        ctx.accounts.green_label_project.status,
+        ctx.accounts
+            .green_label_certification_state
+            .certification_status,
+    )?;
+
+    let project_status_before = ctx.accounts.green_label_project.status;
+    let certification_status_before = ctx
+        .accounts
+        .green_label_certification_state
+        .certification_status;
+    record_green_label_certification_decision_v1(
+        &mut ctx.accounts.green_label_certification_state,
+        &mut ctx.accounts.green_label_certification_execution_record,
+        ctx.accounts.execution_queue_item.key(),
+        ctx.accounts.proposal_decision.key(),
+        ctx.accounts.governance_proposal.key(),
+        ctx.accounts.governance_proposal_action.key(),
+        project_key,
+        state_key,
+        ctx.accounts.protocol_module_registry.key(),
+        record_key,
+        GreenLabelCertificationExecutionTypeV1::Reject,
+        GreenLabelCertificationStatusV1::Rejected,
+        GovernanceActionTypeV1::GreenLabelRejectCertification,
+        parameters,
+        ctx.accounts
+            .governance_proposal_action
+            .canonical_payload_hash,
+        project_status_before,
+        project_status_before,
+        certification_status_before,
+        ctx.accounts.executor.key(),
+        now,
+        ctx.bumps.green_label_certification_execution_record,
+    )
+}
+
+pub fn execute_green_label_revoke_certification_v1_handler(
+    ctx: Context<ExecuteGreenLabelRevokeCertificationV1>,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let project_key = ctx.accounts.green_label_project.key();
+    let config_key = ctx.accounts.green_label_config.key();
+    let state_key = ctx.accounts.green_label_certification_state.key();
+    let record_key = ctx
+        .accounts
+        .green_label_certification_execution_record
+        .key();
+    let parameters = build_green_label_certification_decision_parameters_v1(
+        &ctx.accounts.green_label_config,
+        config_key,
+        &ctx.accounts.green_label_project,
+        project_key,
+        state_key,
+        GovernanceActionTypeV1::GreenLabelRevokeCertification,
+        ctx.accounts
+            .green_label_certification_state
+            .certification_status,
+        ctx.accounts.governance_proposal.proposal_id,
+    )?;
+
+    validate_green_label_certification_execution_context_v1(
+        &ctx.accounts.security_governance_config,
+        ctx.accounts.security_governance_config.key(),
+        &ctx.accounts.green_label_config,
+        &ctx.accounts.green_label_project,
+        project_key,
+        &ctx.accounts.green_label_certification_state,
+        state_key,
+        &ctx.accounts.protocol_module_registry,
+        ctx.accounts.protocol_module_registry.key(),
+        &ctx.accounts.governance_proposal,
+        ctx.accounts.governance_proposal.key(),
+        &ctx.accounts.governance_proposal_action,
+        ctx.accounts.governance_proposal_action.key(),
+        &ctx.accounts.governance_decision_adapter,
+        ctx.accounts.governance_decision_adapter.key(),
+        &ctx.accounts.proposal_decision,
+        ctx.accounts.proposal_decision.key(),
+        &ctx.accounts.execution_queue_item,
+        ctx.accounts.execution_queue_item.key(),
+        GovernanceActionTypeV1::GreenLabelRevokeCertification,
+        ProposalType::GreenLabelRevokeCertification,
+        ActionType::GreenLabelRevokeCertification,
+        &parameters,
+    )?;
+    validate_green_label_revoke_certification_business_v1(
+        ctx.accounts.green_label_project.status,
+        ctx.accounts
+            .green_label_certification_state
+            .certification_status,
+    )?;
+
+    let project_status_before = ctx.accounts.green_label_project.status;
+    let certification_status_before = ctx
+        .accounts
+        .green_label_certification_state
+        .certification_status;
+    record_green_label_certification_decision_v1(
+        &mut ctx.accounts.green_label_certification_state,
+        &mut ctx.accounts.green_label_certification_execution_record,
+        ctx.accounts.execution_queue_item.key(),
+        ctx.accounts.proposal_decision.key(),
+        ctx.accounts.governance_proposal.key(),
+        ctx.accounts.governance_proposal_action.key(),
+        project_key,
+        state_key,
+        ctx.accounts.protocol_module_registry.key(),
+        record_key,
+        GreenLabelCertificationExecutionTypeV1::Revoke,
+        GreenLabelCertificationStatusV1::Revoked,
+        GovernanceActionTypeV1::GreenLabelRevokeCertification,
+        parameters,
+        ctx.accounts
+            .governance_proposal_action
+            .canonical_payload_hash,
+        project_status_before,
+        project_status_before,
+        certification_status_before,
+        ctx.accounts.executor.key(),
+        now,
+        ctx.bumps.green_label_certification_execution_record,
+    )
+}
+
 pub fn refund_green_label_escrow_v1_handler(ctx: Context<RefundGreenLabelEscrowV1>) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
     let refund_amount = validate_green_label_escrow_refund(
@@ -1662,6 +2317,645 @@ pub fn build_default_green_label_config_values(
         bump,
         reserved: [0; GREEN_LABEL_CONFIG_RESERVED_BYTES],
     })
+}
+
+pub fn green_label_certification_execution_type_stable_code_v1(
+    execution_type: GreenLabelCertificationExecutionTypeV1,
+) -> u8 {
+    match execution_type {
+        GreenLabelCertificationExecutionTypeV1::Approve => 1,
+        GreenLabelCertificationExecutionTypeV1::Reject => 2,
+        GreenLabelCertificationExecutionTypeV1::Revoke => 3,
+    }
+}
+
+pub fn green_label_certification_execution_type_from_stable_code_v1(
+    code: u8,
+) -> Result<GreenLabelCertificationExecutionTypeV1> {
+    match code {
+        1 => Ok(GreenLabelCertificationExecutionTypeV1::Approve),
+        2 => Ok(GreenLabelCertificationExecutionTypeV1::Reject),
+        3 => Ok(GreenLabelCertificationExecutionTypeV1::Revoke),
+        _ => err!(CustomError::InvalidGreenLabelCertificationSchema),
+    }
+}
+
+pub fn hash_green_label_certification_decision_parameters_v1(
+    parameters: &GreenLabelCertificationDecisionParametersV1,
+) -> Result<[u8; 32]> {
+    require!(
+        parameters.schema_version == GREEN_LABEL_CERTIFICATION_SCHEMA_VERSION,
+        CustomError::InvalidGreenLabelCertificationSchema
+    );
+    require!(
+        matches!(
+            parameters.action_type,
+            GovernanceActionTypeV1::GreenLabelApproveCertification
+                | GovernanceActionTypeV1::GreenLabelRejectCertification
+                | GovernanceActionTypeV1::GreenLabelRevokeCertification
+        ),
+        CustomError::GreenLabelCertificationActionMismatch
+    );
+    require_keys_neq!(
+        parameters.green_label_config,
+        Pubkey::default(),
+        CustomError::GreenLabelCertificationTargetMismatch
+    );
+    require_keys_neq!(
+        parameters.green_label_project,
+        Pubkey::default(),
+        CustomError::GreenLabelCertificationTargetMismatch
+    );
+    require_keys_neq!(
+        parameters.certification_state,
+        Pubkey::default(),
+        CustomError::GreenLabelCertificationTargetMismatch
+    );
+    require_keys_neq!(
+        parameters.project_authority,
+        Pubkey::default(),
+        CustomError::InvalidGreenLabelProjectOwner
+    );
+    require_keys_neq!(
+        parameters.usdc_mint,
+        Pubkey::default(),
+        CustomError::InvalidGreenLabelMint
+    );
+    require!(parameters.proposal_id > 0, CustomError::InvalidProposalId);
+
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(GREEN_LABEL_CERTIFICATION_DECISION_PARAMETERS_V1_DOMAIN);
+    parameters
+        .serialize(&mut bytes)
+        .map_err(|_| error!(CustomError::GreenLabelCertificationParametersMismatch))?;
+    hash_contributor_payload(&bytes)
+}
+
+pub fn build_green_label_certification_decision_parameters_v1(
+    config: &GreenLabelConfigV1,
+    config_key: Pubkey,
+    project: &GreenLabelProjectV1,
+    project_key: Pubkey,
+    certification_state_key: Pubkey,
+    action_type: GovernanceActionTypeV1,
+    expected_certification_status: GreenLabelCertificationStatusV1,
+    proposal_id: u64,
+) -> Result<GreenLabelCertificationDecisionParametersV1> {
+    require!(
+        matches!(
+            action_type,
+            GovernanceActionTypeV1::GreenLabelApproveCertification
+                | GovernanceActionTypeV1::GreenLabelRejectCertification
+                | GovernanceActionTypeV1::GreenLabelRevokeCertification
+        ),
+        CustomError::GreenLabelCertificationActionMismatch
+    );
+    Ok(GreenLabelCertificationDecisionParametersV1 {
+        schema_version: GREEN_LABEL_CERTIFICATION_SCHEMA_VERSION,
+        green_label_config: config_key,
+        green_label_project: project_key,
+        certification_state: certification_state_key,
+        action_type,
+        project_authority: project.project_owner,
+        bond_tier: project.bond_tier,
+        bond_vault: project.bond_vault,
+        usdc_mint: config.usdc_mint,
+        observation_end_ts: project.observation_end_ts,
+        expected_project_status: project.status,
+        expected_certification_status,
+        proposal_id,
+    })
+}
+
+pub fn record_green_label_certification_state_init(
+    certification_state: &mut GreenLabelCertificationStateV1,
+    project_key: Pubkey,
+    config_key: Pubkey,
+    project_status: GreenLabelStatus,
+    now: i64,
+    bump: u8,
+) -> Result<()> {
+    require!(
+        certification_state.green_label_project == Pubkey::default(),
+        CustomError::GreenLabelCertificationStateMismatch
+    );
+    require!(
+        matches!(
+            project_status,
+            GreenLabelStatus::PendingBondDeposit | GreenLabelStatus::PendingObservation
+        ),
+        CustomError::InvalidGreenLabelStatus
+    );
+    require!(now > 0, CustomError::InvalidGreenLabelCertificationSchema);
+
+    certification_state.green_label_project = project_key;
+    certification_state.green_label_config = config_key;
+    certification_state.certification_status = GreenLabelCertificationStatusV1::Pending;
+    certification_state.last_governance_proposal = Pubkey::default();
+    certification_state.last_execution_queue = Pubkey::default();
+    certification_state.last_execution_record = Pubkey::default();
+    certification_state.last_action_type = GovernanceActionTypeV1::GreenLabelApproveCertification;
+    certification_state.decision_at = 0;
+    certification_state.created_at = now;
+    certification_state.updated_at = now;
+    certification_state.schema_version = GREEN_LABEL_CERTIFICATION_SCHEMA_VERSION;
+    certification_state.bump = bump;
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn validate_green_label_certification_execution_context_v1(
+    security_governance_config: &GovernanceConfigV1,
+    security_governance_config_key: Pubkey,
+    green_label_config: &GreenLabelConfigV1,
+    green_label_project: &GreenLabelProjectV1,
+    green_label_project_key: Pubkey,
+    certification_state: &GreenLabelCertificationStateV1,
+    certification_state_key: Pubkey,
+    protocol_module_registry: &ProtocolModuleRegistryV1,
+    protocol_module_registry_key: Pubkey,
+    governance_proposal: &GovernanceProposalV1,
+    governance_proposal_key: Pubkey,
+    governance_proposal_action: &GovernanceProposalActionV1,
+    governance_proposal_action_key: Pubkey,
+    governance_decision_adapter: &UniversalGovernanceDecisionAdapterV1,
+    governance_decision_adapter_key: Pubkey,
+    proposal_decision: &ProposalDecisionV1,
+    proposal_decision_key: Pubkey,
+    execution_queue_item: &ExecutionQueueItemV1,
+    execution_queue_item_key: Pubkey,
+    expected_governance_action: GovernanceActionTypeV1,
+    expected_proposal_type: ProposalType,
+    expected_security_action: ActionType,
+    parameters: &GreenLabelCertificationDecisionParametersV1,
+) -> Result<()> {
+    require!(
+        !green_label_config.is_paused,
+        CustomError::InvalidGreenLabelStatus
+    );
+    require!(
+        !security_governance_config.is_paused,
+        CustomError::SecurityLayerPaused
+    );
+    require_keys_eq!(
+        green_label_config.security_governance_config,
+        security_governance_config_key,
+        CustomError::ProtocolModuleGovernanceConfigMismatch
+    );
+    validate_protocol_module_registry_v1(
+        protocol_module_registry,
+        protocol_module_registry_key,
+        security_governance_config_key,
+        ProtocolModuleIdV1::GreenLabel,
+        crate::ID,
+    )?;
+    require!(
+        governance_proposal.status == GovernanceProposalStatusV1::Passed,
+        CustomError::InvalidGovernanceProposal
+    );
+    validate_governance_proposal_action_v1(
+        governance_proposal,
+        governance_proposal_action,
+        governance_proposal_key,
+    )?;
+    require!(
+        governance_proposal_action_key != Pubkey::default(),
+        CustomError::GovernanceProposalActionMissing
+    );
+    require!(
+        governance_proposal_action.action_type == expected_governance_action,
+        CustomError::GreenLabelCertificationActionMismatch
+    );
+    require!(
+        governance_proposal_action.module_id == ProtocolModuleIdV1::GreenLabel,
+        CustomError::GreenLabelCertificationActionMismatch
+    );
+    require_keys_eq!(
+        governance_proposal_action.target_program,
+        crate::ID,
+        CustomError::GreenLabelCertificationTargetMismatch
+    );
+    require_keys_eq!(
+        governance_proposal_action.target_account,
+        green_label_project_key,
+        CustomError::GreenLabelCertificationTargetMismatch
+    );
+    require!(
+        map_governance_action_to_security_action(governance_proposal_action.action_type)?
+            == expected_security_action,
+        CustomError::GreenLabelCertificationActionMismatch
+    );
+    require_keys_eq!(
+        certification_state.green_label_project,
+        green_label_project_key,
+        CustomError::GreenLabelCertificationStateMismatch
+    );
+    require_keys_eq!(
+        certification_state.green_label_config,
+        parameters.green_label_config,
+        CustomError::GreenLabelCertificationStateMismatch
+    );
+    require!(
+        certification_state.schema_version == GREEN_LABEL_CERTIFICATION_SCHEMA_VERSION,
+        CustomError::InvalidGreenLabelCertificationSchema
+    );
+    require_keys_eq!(
+        parameters.green_label_project,
+        green_label_project_key,
+        CustomError::GreenLabelCertificationTargetMismatch
+    );
+    require_keys_eq!(
+        parameters.certification_state,
+        certification_state_key,
+        CustomError::GreenLabelCertificationTargetMismatch
+    );
+    require_keys_eq!(
+        parameters.green_label_config,
+        certification_state.green_label_config,
+        CustomError::GreenLabelCertificationTargetMismatch
+    );
+    require!(
+        parameters.action_type == expected_governance_action,
+        CustomError::GreenLabelCertificationActionMismatch
+    );
+    require_keys_eq!(
+        parameters.project_authority,
+        green_label_project.project_owner,
+        CustomError::InvalidGreenLabelProjectOwner
+    );
+    require!(
+        parameters.bond_tier == green_label_project.bond_tier,
+        CustomError::GreenLabelCertificationParametersMismatch
+    );
+    require_keys_eq!(
+        parameters.bond_vault,
+        green_label_project.bond_vault,
+        CustomError::GreenLabelCertificationParametersMismatch
+    );
+    require_keys_eq!(
+        parameters.usdc_mint,
+        green_label_config.usdc_mint,
+        CustomError::InvalidGreenLabelMint
+    );
+    require!(
+        parameters.observation_end_ts == green_label_project.observation_end_ts,
+        CustomError::GreenLabelCertificationParametersMismatch
+    );
+    require!(
+        parameters.expected_project_status == green_label_project.status,
+        CustomError::GreenLabelCertificationParametersMismatch
+    );
+    require!(
+        parameters.expected_certification_status == certification_state.certification_status,
+        CustomError::GreenLabelCertificationParametersMismatch
+    );
+    require!(
+        parameters.proposal_id == governance_proposal.proposal_id,
+        CustomError::InvalidProposalId
+    );
+
+    let parameters_hash = hash_green_label_certification_decision_parameters_v1(parameters)?;
+    require!(
+        governance_proposal_action.parameters_hash == parameters_hash,
+        CustomError::GreenLabelCertificationParametersMismatch
+    );
+    require_keys_eq!(
+        governance_decision_adapter.governance_proposal,
+        governance_proposal_key,
+        CustomError::InvalidGovernanceDecisionAdapter
+    );
+    require_keys_eq!(
+        governance_decision_adapter.proposal_decision,
+        proposal_decision_key,
+        CustomError::InvalidGovernanceDecisionAdapter
+    );
+    require!(
+        governance_decision_adapter.action_type == expected_security_action,
+        CustomError::GreenLabelCertificationActionMismatch
+    );
+    require_keys_eq!(
+        governance_decision_adapter.target_program,
+        governance_proposal_action.target_program,
+        CustomError::GreenLabelCertificationTargetMismatch
+    );
+    require_keys_eq!(
+        governance_decision_adapter.target_account,
+        green_label_project_key,
+        CustomError::GreenLabelCertificationTargetMismatch
+    );
+    require!(
+        governance_decision_adapter.payload_hash
+            == governance_proposal_action.canonical_payload_hash,
+        CustomError::GreenLabelCertificationParametersMismatch
+    );
+    require!(
+        governance_decision_adapter_key != Pubkey::default(),
+        CustomError::InvalidGovernanceDecisionAdapter
+    );
+    require!(
+        proposal_decision.proposal_id == governance_proposal.proposal_id,
+        CustomError::InvalidProposalId
+    );
+    require!(
+        proposal_decision.proposal_type == expected_proposal_type,
+        CustomError::InvalidActionForProposalType
+    );
+    require!(
+        proposal_decision.decision == ProposalDecision::Approved,
+        CustomError::ProposalNotApproved
+    );
+    require!(
+        execution_queue_item.proposal_id == governance_proposal.proposal_id,
+        CustomError::InvalidProposalId
+    );
+    require!(
+        execution_queue_item.status == ExecutionStatus::Executed,
+        CustomError::InvalidExecutionStatus
+    );
+    require!(
+        execution_queue_item.executed_at > 0,
+        CustomError::InvalidExecutionStatus
+    );
+    require!(
+        execution_queue_item.decision == ProposalDecision::Approved,
+        CustomError::ProposalNotApproved
+    );
+    require!(
+        execution_queue_item.action_type == expected_security_action,
+        CustomError::GreenLabelCertificationActionMismatch
+    );
+    require_keys_eq!(
+        execution_queue_item.target_program,
+        crate::ID,
+        CustomError::GreenLabelCertificationTargetMismatch
+    );
+    require_keys_eq!(
+        execution_queue_item.target_account,
+        green_label_project_key,
+        CustomError::GreenLabelCertificationTargetMismatch
+    );
+    require!(
+        execution_queue_item.payload_hash == governance_proposal_action.canonical_payload_hash,
+        CustomError::GreenLabelCertificationParametersMismatch
+    );
+    require!(
+        execution_queue_item_key != Pubkey::default(),
+        CustomError::InvalidGreenLabelExecutionQueue
+    );
+
+    Ok(())
+}
+
+pub fn validate_green_label_approve_certification_business_v1(
+    config: &GreenLabelConfigV1,
+    project: &GreenLabelProjectV1,
+    certification_state: &GreenLabelCertificationStateV1,
+    provided_bond_vault: Pubkey,
+    green_bond_vault: &TokenAccount,
+    provided_usdc_mint: Pubkey,
+    usdc_decimals: u8,
+    now: i64,
+) -> Result<()> {
+    require!(
+        certification_state.certification_status == GreenLabelCertificationStatusV1::Pending,
+        CustomError::GreenLabelCertificationAlreadyFinalized
+    );
+    require!(
+        project.status == GreenLabelStatus::PendingObservation,
+        CustomError::InvalidGreenLabelStatus
+    );
+    require!(
+        now >= project.observation_end_ts,
+        CustomError::GreenLabelObservationPeriodNotComplete
+    );
+    require!(
+        project.active_dispute == Pubkey::default(),
+        CustomError::GreenLabelUnresolvedDispute
+    );
+    require!(
+        project.bond_vault != Pubkey::default()
+            && project.bond_vault_authority != Pubkey::default()
+            && project.total_bond_amount > 0,
+        CustomError::InvalidGreenLabelBondVaultState
+    );
+    require_keys_eq!(
+        provided_bond_vault,
+        project.bond_vault,
+        CustomError::InvalidGreenLabelBondVaultState
+    );
+    require_keys_eq!(
+        green_bond_vault.mint,
+        config.usdc_mint,
+        CustomError::InvalidGreenLabelMint
+    );
+    require_keys_eq!(
+        green_bond_vault.owner,
+        project.bond_vault_authority,
+        CustomError::InvalidGreenLabelBondVaultState
+    );
+    require_keys_eq!(
+        provided_usdc_mint,
+        config.usdc_mint,
+        CustomError::InvalidGreenLabelMint
+    );
+    require!(
+        usdc_decimals == GREEN_LABEL_USDC_DECIMALS,
+        CustomError::InvalidGreenLabelMint
+    );
+    require!(
+        green_bond_vault.amount >= project.total_bond_amount,
+        CustomError::GreenLabelInsufficientBondVaultBalance
+    );
+
+    Ok(())
+}
+
+pub fn validate_green_label_reject_certification_business_v1(
+    project_status: GreenLabelStatus,
+    certification_status: GreenLabelCertificationStatusV1,
+) -> Result<()> {
+    require!(
+        certification_status == GreenLabelCertificationStatusV1::Pending,
+        CustomError::GreenLabelCertificationAlreadyFinalized
+    );
+    require!(
+        matches!(
+            project_status,
+            GreenLabelStatus::PendingBondDeposit | GreenLabelStatus::PendingObservation
+        ),
+        CustomError::InvalidGreenLabelStatus
+    );
+    Ok(())
+}
+
+pub fn validate_green_label_revoke_certification_business_v1(
+    project_status: GreenLabelStatus,
+    certification_status: GreenLabelCertificationStatusV1,
+) -> Result<()> {
+    require!(
+        certification_status == GreenLabelCertificationStatusV1::Approved,
+        CustomError::GreenLabelCertificationNotApproved
+    );
+    require!(
+        project_status == GreenLabelStatus::ActiveGreenLabel,
+        CustomError::InvalidGreenLabelStatus
+    );
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn record_green_label_approve_certification_v1(
+    project: &mut GreenLabelProjectV1,
+    certification_state: &mut GreenLabelCertificationStateV1,
+    execution_record: &mut GreenLabelCertificationExecutionRecordV1,
+    execution_queue_item: Pubkey,
+    proposal_decision: Pubkey,
+    governance_proposal: Pubkey,
+    governance_proposal_action: Pubkey,
+    project_key: Pubkey,
+    certification_state_key: Pubkey,
+    module_registry: Pubkey,
+    execution_record_key: Pubkey,
+    parameters: GreenLabelCertificationDecisionParametersV1,
+    canonical_governance_payload_hash: [u8; 32],
+    project_status_before: GreenLabelStatus,
+    certification_status_before: GreenLabelCertificationStatusV1,
+    executor: Pubkey,
+    now: i64,
+    bump: u8,
+) -> Result<()> {
+    validate_green_label_status_transition(
+        project.status,
+        GreenLabelStatus::ActiveGreenLabel,
+        false,
+    )?;
+    project.status = GreenLabelStatus::ActiveGreenLabel;
+    project.approved_at = now;
+    record_green_label_certification_decision_v1(
+        certification_state,
+        execution_record,
+        execution_queue_item,
+        proposal_decision,
+        governance_proposal,
+        governance_proposal_action,
+        project_key,
+        certification_state_key,
+        module_registry,
+        execution_record_key,
+        GreenLabelCertificationExecutionTypeV1::Approve,
+        GreenLabelCertificationStatusV1::Approved,
+        GovernanceActionTypeV1::GreenLabelApproveCertification,
+        parameters,
+        canonical_governance_payload_hash,
+        project_status_before,
+        GreenLabelStatus::ActiveGreenLabel,
+        certification_status_before,
+        executor,
+        now,
+        bump,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn record_green_label_certification_decision_v1(
+    certification_state: &mut GreenLabelCertificationStateV1,
+    execution_record: &mut GreenLabelCertificationExecutionRecordV1,
+    execution_queue_item: Pubkey,
+    proposal_decision: Pubkey,
+    governance_proposal: Pubkey,
+    governance_proposal_action: Pubkey,
+    project_key: Pubkey,
+    certification_state_key: Pubkey,
+    module_registry: Pubkey,
+    execution_record_key: Pubkey,
+    execution_type: GreenLabelCertificationExecutionTypeV1,
+    next_certification_status: GreenLabelCertificationStatusV1,
+    governance_action_type: GovernanceActionTypeV1,
+    parameters: GreenLabelCertificationDecisionParametersV1,
+    canonical_governance_payload_hash: [u8; 32],
+    project_status_before: GreenLabelStatus,
+    project_status_after: GreenLabelStatus,
+    certification_status_before: GreenLabelCertificationStatusV1,
+    executor: Pubkey,
+    executed_at: i64,
+    bump: u8,
+) -> Result<()> {
+    require!(
+        execution_record.execution_queue_item == Pubkey::default(),
+        CustomError::GreenLabelCertificationExecutionAlreadyCompleted
+    );
+    require_keys_eq!(
+        certification_state.green_label_project,
+        project_key,
+        CustomError::GreenLabelCertificationStateMismatch
+    );
+    require_keys_eq!(
+        parameters.certification_state,
+        certification_state_key,
+        CustomError::GreenLabelCertificationStateMismatch
+    );
+    require!(
+        certification_status_before == certification_state.certification_status,
+        CustomError::GreenLabelCertificationStateMismatch
+    );
+    validate_green_label_certification_status_transition(
+        certification_state.certification_status,
+        next_certification_status,
+    )?;
+    let parameters_hash = hash_green_label_certification_decision_parameters_v1(&parameters)?;
+
+    certification_state.certification_status = next_certification_status;
+    certification_state.last_governance_proposal = governance_proposal;
+    certification_state.last_execution_queue = execution_queue_item;
+    certification_state.last_execution_record = execution_record_key;
+    certification_state.last_action_type = governance_action_type;
+    certification_state.decision_at = executed_at;
+    certification_state.updated_at = executed_at;
+
+    execution_record.execution_queue_item = execution_queue_item;
+    execution_record.proposal_decision = proposal_decision;
+    execution_record.governance_proposal = governance_proposal;
+    execution_record.governance_proposal_action = governance_proposal_action;
+    execution_record.green_label_project = project_key;
+    execution_record.certification_state = certification_state_key;
+    execution_record.module_registry = module_registry;
+    execution_record.execution_type = execution_type;
+    execution_record.governance_action_type = governance_action_type;
+    execution_record.target_account = project_key;
+    execution_record.parameters_hash = parameters_hash;
+    execution_record.canonical_governance_payload_hash = canonical_governance_payload_hash;
+    execution_record.project_status_before = project_status_before;
+    execution_record.project_status_after = project_status_after;
+    execution_record.certification_status_before = certification_status_before;
+    execution_record.certification_status_after = next_certification_status;
+    execution_record.executor = executor;
+    execution_record.executed_at = executed_at;
+    execution_record.schema_version = GREEN_LABEL_CERTIFICATION_SCHEMA_VERSION;
+    execution_record.bump = bump;
+
+    Ok(())
+}
+
+pub fn validate_green_label_certification_status_transition(
+    current: GreenLabelCertificationStatusV1,
+    next: GreenLabelCertificationStatusV1,
+) -> Result<()> {
+    let valid = matches!(
+        (current, next),
+        (
+            GreenLabelCertificationStatusV1::Pending,
+            GreenLabelCertificationStatusV1::Approved
+        ) | (
+            GreenLabelCertificationStatusV1::Pending,
+            GreenLabelCertificationStatusV1::Rejected
+        ) | (
+            GreenLabelCertificationStatusV1::Approved,
+            GreenLabelCertificationStatusV1::Revoked
+        )
+    );
+    require!(valid, CustomError::GreenLabelCertificationAlreadyFinalized);
+    Ok(())
 }
 
 pub fn validate_green_label_window_update(
@@ -3393,6 +4687,364 @@ mod tests {
         assert!(
             message.contains(expected),
             "expected {expected}, got {message}"
+        );
+    }
+
+    #[test]
+    fn certification_execution_type_stable_code_roundtrips() {
+        for execution_type in [
+            GreenLabelCertificationExecutionTypeV1::Approve,
+            GreenLabelCertificationExecutionTypeV1::Reject,
+            GreenLabelCertificationExecutionTypeV1::Revoke,
+        ] {
+            let code = green_label_certification_execution_type_stable_code_v1(execution_type);
+            assert_eq!(
+                green_label_certification_execution_type_from_stable_code_v1(code).unwrap(),
+                execution_type
+            );
+        }
+    }
+
+    #[test]
+    fn certification_execution_type_unknown_code_fails() {
+        let err = green_label_certification_execution_type_from_stable_code_v1(99).unwrap_err();
+        assert_eq!(
+            err,
+            CustomError::InvalidGreenLabelCertificationSchema.into()
+        );
+    }
+
+    #[test]
+    fn certification_state_init_accepts_pending_bond_deposit() {
+        let mut state = blank_certification_state();
+        record_green_label_certification_state_init(
+            &mut state,
+            Pubkey::new_from_array([31; 32]),
+            Pubkey::new_from_array([32; 32]),
+            GreenLabelStatus::PendingBondDeposit,
+            100,
+            7,
+        )
+        .unwrap();
+
+        assert_eq!(
+            state.certification_status,
+            GreenLabelCertificationStatusV1::Pending
+        );
+        assert_eq!(
+            state.schema_version,
+            GREEN_LABEL_CERTIFICATION_SCHEMA_VERSION
+        );
+        assert_eq!(state.bump, 7);
+    }
+
+    #[test]
+    fn certification_state_init_accepts_pending_observation() {
+        let mut state = blank_certification_state();
+        record_green_label_certification_state_init(
+            &mut state,
+            Pubkey::new_from_array([31; 32]),
+            Pubkey::new_from_array([32; 32]),
+            GreenLabelStatus::PendingObservation,
+            100,
+            7,
+        )
+        .unwrap();
+
+        assert_eq!(
+            state.certification_status,
+            GreenLabelCertificationStatusV1::Pending
+        );
+    }
+
+    #[test]
+    fn certification_state_init_rejects_active_green_label() {
+        let mut state = blank_certification_state();
+        let err = record_green_label_certification_state_init(
+            &mut state,
+            Pubkey::new_from_array([31; 32]),
+            Pubkey::new_from_array([32; 32]),
+            GreenLabelStatus::ActiveGreenLabel,
+            100,
+            7,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, CustomError::InvalidGreenLabelStatus.into());
+    }
+
+    #[test]
+    fn certification_parameters_hash_is_deterministic_and_field_bound() {
+        let config = green_label_config();
+        let project = green_label_project();
+        let base = build_green_label_certification_decision_parameters_v1(
+            &config,
+            Pubkey::new_from_array([30; 32]),
+            &project,
+            Pubkey::new_from_array([31; 32]),
+            Pubkey::new_from_array([32; 32]),
+            GovernanceActionTypeV1::GreenLabelApproveCertification,
+            GreenLabelCertificationStatusV1::Pending,
+            7,
+        )
+        .unwrap();
+        let base_hash = hash_green_label_certification_decision_parameters_v1(&base).unwrap();
+        assert_eq!(
+            base_hash,
+            hash_green_label_certification_decision_parameters_v1(&base).unwrap()
+        );
+
+        let mut changed_action = base;
+        changed_action.action_type = GovernanceActionTypeV1::GreenLabelRejectCertification;
+        assert_ne!(
+            base_hash,
+            hash_green_label_certification_decision_parameters_v1(&changed_action).unwrap()
+        );
+
+        let mut changed_project = base;
+        changed_project.green_label_project = Pubkey::new_from_array([33; 32]);
+        assert_ne!(
+            base_hash,
+            hash_green_label_certification_decision_parameters_v1(&changed_project).unwrap()
+        );
+
+        let mut changed_state = base;
+        changed_state.certification_state = Pubkey::new_from_array([34; 32]);
+        assert_ne!(
+            base_hash,
+            hash_green_label_certification_decision_parameters_v1(&changed_state).unwrap()
+        );
+
+        let mut changed_authority = base;
+        changed_authority.project_authority = Pubkey::new_from_array([35; 32]);
+        assert_ne!(
+            base_hash,
+            hash_green_label_certification_decision_parameters_v1(&changed_authority).unwrap()
+        );
+
+        let mut changed_vault = base;
+        changed_vault.bond_vault = Pubkey::new_from_array([36; 32]);
+        assert_ne!(
+            base_hash,
+            hash_green_label_certification_decision_parameters_v1(&changed_vault).unwrap()
+        );
+
+        let mut changed_mint = base;
+        changed_mint.usdc_mint = Pubkey::new_from_array([37; 32]);
+        assert_ne!(
+            base_hash,
+            hash_green_label_certification_decision_parameters_v1(&changed_mint).unwrap()
+        );
+
+        let mut changed_observation = base;
+        changed_observation.observation_end_ts += 1;
+        assert_ne!(
+            base_hash,
+            hash_green_label_certification_decision_parameters_v1(&changed_observation).unwrap()
+        );
+
+        let mut changed_proposal = base;
+        changed_proposal.proposal_id += 1;
+        assert_ne!(
+            base_hash,
+            hash_green_label_certification_decision_parameters_v1(&changed_proposal).unwrap()
+        );
+
+        let mut wrong_domain_bytes = Vec::new();
+        wrong_domain_bytes.extend_from_slice(b"wrong_green_label_certification_domain");
+        base.serialize(&mut wrong_domain_bytes).unwrap();
+        assert_ne!(
+            base_hash,
+            hash_contributor_payload(&wrong_domain_bytes).unwrap()
+        );
+    }
+
+    #[test]
+    fn approve_certification_record_sets_project_and_state() {
+        let config = green_label_config();
+        let mut project = green_label_project();
+        project.status = GreenLabelStatus::PendingObservation;
+        project.observation_end_ts = 100;
+        let project_key = Pubkey::new_from_array([31; 32]);
+        let state_key = Pubkey::new_from_array([32; 32]);
+        let mut state = certification_state(project_key, Pubkey::new_from_array([30; 32]));
+        let mut record = blank_certification_execution_record();
+        let parameters = build_green_label_certification_decision_parameters_v1(
+            &config,
+            Pubkey::new_from_array([30; 32]),
+            &project,
+            project_key,
+            state_key,
+            GovernanceActionTypeV1::GreenLabelApproveCertification,
+            state.certification_status,
+            7,
+        )
+        .unwrap();
+
+        record_green_label_approve_certification_v1(
+            &mut project,
+            &mut state,
+            &mut record,
+            Pubkey::new_from_array([40; 32]),
+            Pubkey::new_from_array([41; 32]),
+            Pubkey::new_from_array([42; 32]),
+            Pubkey::new_from_array([43; 32]),
+            project_key,
+            state_key,
+            Pubkey::new_from_array([44; 32]),
+            Pubkey::new_from_array([45; 32]),
+            parameters,
+            [99; 32],
+            GreenLabelStatus::PendingObservation,
+            GreenLabelCertificationStatusV1::Pending,
+            Pubkey::new_from_array([46; 32]),
+            200,
+            9,
+        )
+        .unwrap();
+
+        assert_eq!(project.status, GreenLabelStatus::ActiveGreenLabel);
+        assert_eq!(project.approved_at, 200);
+        assert_eq!(
+            state.certification_status,
+            GreenLabelCertificationStatusV1::Approved
+        );
+        assert_eq!(
+            record.execution_type,
+            GreenLabelCertificationExecutionTypeV1::Approve
+        );
+        assert_eq!(
+            record.project_status_after,
+            GreenLabelStatus::ActiveGreenLabel
+        );
+        assert_eq!(
+            record.certification_status_after,
+            GreenLabelCertificationStatusV1::Approved
+        );
+    }
+
+    #[test]
+    fn reject_certification_record_does_not_change_project_status() {
+        let config = green_label_config();
+        let mut project = green_label_project();
+        project.status = GreenLabelStatus::PendingBondDeposit;
+        let project_key = Pubkey::new_from_array([31; 32]);
+        let state_key = Pubkey::new_from_array([32; 32]);
+        let mut state = certification_state(project_key, Pubkey::new_from_array([30; 32]));
+        let mut record = blank_certification_execution_record();
+        let parameters = build_green_label_certification_decision_parameters_v1(
+            &config,
+            Pubkey::new_from_array([30; 32]),
+            &project,
+            project_key,
+            state_key,
+            GovernanceActionTypeV1::GreenLabelRejectCertification,
+            state.certification_status,
+            7,
+        )
+        .unwrap();
+
+        record_green_label_certification_decision_v1(
+            &mut state,
+            &mut record,
+            Pubkey::new_from_array([40; 32]),
+            Pubkey::new_from_array([41; 32]),
+            Pubkey::new_from_array([42; 32]),
+            Pubkey::new_from_array([43; 32]),
+            project_key,
+            state_key,
+            Pubkey::new_from_array([44; 32]),
+            Pubkey::new_from_array([45; 32]),
+            GreenLabelCertificationExecutionTypeV1::Reject,
+            GreenLabelCertificationStatusV1::Rejected,
+            GovernanceActionTypeV1::GreenLabelRejectCertification,
+            parameters,
+            [99; 32],
+            GreenLabelStatus::PendingBondDeposit,
+            GreenLabelStatus::PendingBondDeposit,
+            GreenLabelCertificationStatusV1::Pending,
+            Pubkey::new_from_array([46; 32]),
+            200,
+            9,
+        )
+        .unwrap();
+
+        assert_eq!(project.status, GreenLabelStatus::PendingBondDeposit);
+        assert_eq!(
+            state.certification_status,
+            GreenLabelCertificationStatusV1::Rejected
+        );
+        assert_eq!(
+            record.project_status_after,
+            GreenLabelStatus::PendingBondDeposit
+        );
+    }
+
+    #[test]
+    fn revoke_certification_record_requires_approved_state() {
+        validate_green_label_revoke_certification_business_v1(
+            GreenLabelStatus::ActiveGreenLabel,
+            GreenLabelCertificationStatusV1::Approved,
+        )
+        .unwrap();
+
+        let err = validate_green_label_revoke_certification_business_v1(
+            GreenLabelStatus::ActiveGreenLabel,
+            GreenLabelCertificationStatusV1::Pending,
+        )
+        .unwrap_err();
+        assert_eq!(err, CustomError::GreenLabelCertificationNotApproved.into());
+    }
+
+    #[test]
+    fn duplicate_certification_record_fails() {
+        let config = green_label_config();
+        let project = green_label_project();
+        let project_key = Pubkey::new_from_array([31; 32]);
+        let state_key = Pubkey::new_from_array([32; 32]);
+        let mut state = certification_state(project_key, Pubkey::new_from_array([30; 32]));
+        let mut record = blank_certification_execution_record();
+        record.execution_queue_item = Pubkey::new_from_array([40; 32]);
+        let parameters = build_green_label_certification_decision_parameters_v1(
+            &config,
+            Pubkey::new_from_array([30; 32]),
+            &project,
+            project_key,
+            state_key,
+            GovernanceActionTypeV1::GreenLabelRejectCertification,
+            state.certification_status,
+            7,
+        )
+        .unwrap();
+
+        let err = record_green_label_certification_decision_v1(
+            &mut state,
+            &mut record,
+            Pubkey::new_from_array([40; 32]),
+            Pubkey::new_from_array([41; 32]),
+            Pubkey::new_from_array([42; 32]),
+            Pubkey::new_from_array([43; 32]),
+            project_key,
+            state_key,
+            Pubkey::new_from_array([44; 32]),
+            Pubkey::new_from_array([45; 32]),
+            GreenLabelCertificationExecutionTypeV1::Reject,
+            GreenLabelCertificationStatusV1::Rejected,
+            GovernanceActionTypeV1::GreenLabelRejectCertification,
+            parameters,
+            [99; 32],
+            project.status,
+            project.status,
+            GreenLabelCertificationStatusV1::Pending,
+            Pubkey::new_from_array([46; 32]),
+            200,
+            9,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            err,
+            CustomError::GreenLabelCertificationExecutionAlreadyCompleted.into()
         );
     }
 
@@ -6310,6 +7962,68 @@ mod tests {
             is_paused: false,
             bump: 250,
             reserved: [0; GREEN_LABEL_CONFIG_RESERVED_BYTES],
+        }
+    }
+
+    fn blank_certification_state() -> GreenLabelCertificationStateV1 {
+        GreenLabelCertificationStateV1 {
+            green_label_project: Pubkey::default(),
+            green_label_config: Pubkey::default(),
+            certification_status: GreenLabelCertificationStatusV1::Pending,
+            last_governance_proposal: Pubkey::default(),
+            last_execution_queue: Pubkey::default(),
+            last_execution_record: Pubkey::default(),
+            last_action_type: GovernanceActionTypeV1::GreenLabelApproveCertification,
+            decision_at: 0,
+            created_at: 0,
+            updated_at: 0,
+            schema_version: 0,
+            bump: 0,
+        }
+    }
+
+    fn certification_state(
+        project_key: Pubkey,
+        config_key: Pubkey,
+    ) -> GreenLabelCertificationStateV1 {
+        GreenLabelCertificationStateV1 {
+            green_label_project: project_key,
+            green_label_config: config_key,
+            certification_status: GreenLabelCertificationStatusV1::Pending,
+            last_governance_proposal: Pubkey::default(),
+            last_execution_queue: Pubkey::default(),
+            last_execution_record: Pubkey::default(),
+            last_action_type: GovernanceActionTypeV1::GreenLabelApproveCertification,
+            decision_at: 0,
+            created_at: 100,
+            updated_at: 100,
+            schema_version: GREEN_LABEL_CERTIFICATION_SCHEMA_VERSION,
+            bump: 7,
+        }
+    }
+
+    fn blank_certification_execution_record() -> GreenLabelCertificationExecutionRecordV1 {
+        GreenLabelCertificationExecutionRecordV1 {
+            execution_queue_item: Pubkey::default(),
+            proposal_decision: Pubkey::default(),
+            governance_proposal: Pubkey::default(),
+            governance_proposal_action: Pubkey::default(),
+            green_label_project: Pubkey::default(),
+            certification_state: Pubkey::default(),
+            module_registry: Pubkey::default(),
+            execution_type: GreenLabelCertificationExecutionTypeV1::Approve,
+            governance_action_type: GovernanceActionTypeV1::GreenLabelApproveCertification,
+            target_account: Pubkey::default(),
+            parameters_hash: [0; 32],
+            canonical_governance_payload_hash: [0; 32],
+            project_status_before: GreenLabelStatus::PendingBondDeposit,
+            project_status_after: GreenLabelStatus::PendingBondDeposit,
+            certification_status_before: GreenLabelCertificationStatusV1::Pending,
+            certification_status_after: GreenLabelCertificationStatusV1::Pending,
+            executor: Pubkey::default(),
+            executed_at: 0,
+            schema_version: 0,
+            bump: 0,
         }
     }
 

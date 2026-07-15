@@ -217,3 +217,24 @@ Treasury request accounts, then recompute the Stage 4 parameters hash.
 
 The adapter remains a bridge only. It still does not transfer USDC, mutate
 Treasury requests, or choose a source vault.
+
+## 11. Green Label Certification Consumer
+
+Phase 2E-FINAL Stage 5B-1 adds the next strict module consumer of adapter
+output:
+
+```text
+UniversalGovernanceDecisionAdapterV1
+-> ProposalDecisionV1 Approved
+-> ExecutionQueueItemV1 Executed
+-> Green Label certification wrapper
+-> GreenLabelCertificationStateV1
+-> GreenLabelCertificationExecutionRecordV1
+```
+
+The certification wrappers read the typed action sidecar, adapter, decision,
+queue item, Green Label module registry, and real Green Label accounts. They
+recompute the certification parameters hash and reject any mismatch.
+
+The adapter remains a bridge only. It does not approve certification by itself,
+does not refund or slash bonds, and does not move tokens.

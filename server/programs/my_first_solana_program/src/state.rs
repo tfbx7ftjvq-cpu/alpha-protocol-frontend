@@ -697,6 +697,21 @@ pub enum GreenLabelEscrowStatusV1 {
     Forfeited,
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GreenLabelCertificationStatusV1 {
+    Pending,
+    Approved,
+    Rejected,
+    Revoked,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GreenLabelCertificationExecutionTypeV1 {
+    Approve,
+    Reject,
+    Revoke,
+}
+
 #[account]
 pub struct GreenLabelConfigV1 {
     pub authority: Pubkey,
@@ -806,6 +821,54 @@ pub struct GreenLabelRefundableEscrowV1 {
 
 impl GreenLabelRefundableEscrowV1 {
     pub const INIT_SPACE: usize = (32 * 5) + (8 * 5) + (8 * 2) + 3;
+}
+
+#[account]
+pub struct GreenLabelCertificationStateV1 {
+    pub green_label_project: Pubkey,
+    pub green_label_config: Pubkey,
+    pub certification_status: GreenLabelCertificationStatusV1,
+    pub last_governance_proposal: Pubkey,
+    pub last_execution_queue: Pubkey,
+    pub last_execution_record: Pubkey,
+    pub last_action_type: GovernanceActionTypeV1,
+    pub decision_at: i64,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+}
+
+impl GreenLabelCertificationStateV1 {
+    pub const INIT_SPACE: usize = (32 * 5) + 1 + 1 + (8 * 3) + 2 + 1;
+}
+
+#[account]
+pub struct GreenLabelCertificationExecutionRecordV1 {
+    pub execution_queue_item: Pubkey,
+    pub proposal_decision: Pubkey,
+    pub governance_proposal: Pubkey,
+    pub governance_proposal_action: Pubkey,
+    pub green_label_project: Pubkey,
+    pub certification_state: Pubkey,
+    pub module_registry: Pubkey,
+    pub execution_type: GreenLabelCertificationExecutionTypeV1,
+    pub governance_action_type: GovernanceActionTypeV1,
+    pub target_account: Pubkey,
+    pub parameters_hash: [u8; 32],
+    pub canonical_governance_payload_hash: [u8; 32],
+    pub project_status_before: GreenLabelStatus,
+    pub project_status_after: GreenLabelStatus,
+    pub certification_status_before: GreenLabelCertificationStatusV1,
+    pub certification_status_after: GreenLabelCertificationStatusV1,
+    pub executor: Pubkey,
+    pub executed_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+}
+
+impl GreenLabelCertificationExecutionRecordV1 {
+    pub const INIT_SPACE: usize = (32 * 8) + 1 + 1 + (32 * 2) + 1 + 1 + 1 + 1 + 32 + 8 + 2 + 1;
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -1047,6 +1110,23 @@ mod tests {
         let minimum = (32 * 10) + 2 + 8 + (32 * 2) + 8 + 2 + 1;
         assert_eq!(TreasuryExecutionRecordV1::INIT_SPACE, minimum);
         assert_eq!(TreasuryExecutionRecordV1::INIT_SPACE, 405);
+    }
+
+    #[test]
+    fn green_label_certification_state_space_is_exact() {
+        let minimum = (32 * 5) + 1 + 1 + (8 * 3) + 2 + 1;
+        assert_eq!(GreenLabelCertificationStateV1::INIT_SPACE, minimum);
+        assert_eq!(GreenLabelCertificationStateV1::INIT_SPACE, 189);
+    }
+
+    #[test]
+    fn green_label_certification_execution_record_space_is_exact() {
+        let minimum = (32 * 8) + 1 + 1 + (32 * 2) + 1 + 1 + 1 + 1 + 32 + 8 + 2 + 1;
+        assert_eq!(
+            GreenLabelCertificationExecutionRecordV1::INIT_SPACE,
+            minimum
+        );
+        assert_eq!(GreenLabelCertificationExecutionRecordV1::INIT_SPACE, 369);
     }
 
     #[test]

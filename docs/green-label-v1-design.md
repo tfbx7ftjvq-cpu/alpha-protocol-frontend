@@ -171,6 +171,47 @@ Suggested future weighting principle:
 
 Phase 1 should not use automated rug detection, oracle feeds, or off-chain crawlers to compute the score.
 
+## Strict DAO Certification Governance
+
+Phase 2E-FINAL Stage 5B-1 adds a strict DAO certification sidecar model.
+
+`GreenLabelCertificationStateV1` is the strict-path certification source of
+truth. `GreenLabelProjectV1.status` remains a compatibility and bond lifecycle
+field, so strict Green Label UI and future execution should read the
+certification sidecar for `Pending`, `Approved`, `Rejected`, or `Revoked`.
+
+The strict path supports:
+
+- approve certification: `Pending` -> `Approved`, and project status becomes `ActiveGreenLabel`
+- reject certification: `Pending` -> `Rejected`, without changing project status
+- revoke certification: `Approved` -> `Revoked`, without changing project status
+
+Reject is not a refund. Revoke is not a slash. Refund and slash must be handled
+by separate governance actions. Certification wrappers do not transfer tokens,
+do not route Treasury revenue, do not collect certification fees, and do not
+touch refundable escrow.
+
+Strict certification execution requires:
+
+- typed `GovernanceProposalActionV1`
+- Green Label `ProtocolModuleRegistryV1`
+- Universal Governance Decision Adapter
+- approved `ProposalDecisionV1`
+- executed `ExecutionQueueItemV1`
+- recomputed `GreenLabelCertificationDecisionParametersV1` hash
+- immutable `GreenLabelCertificationExecutionRecordV1`
+
+The executor can be permissionless because action, target, expected state, and
+payload hashes are all read from on-chain governance accounts and recomputed
+from real Green Label accounts.
+
+Legacy Green Label refund/slash paths still exist. This stage does not solve
+legacy slash bypass, does not implement `DaoControlled` mode, and does not
+auto-migrate old Devnet `ActiveGreenLabel` projects.
+
+This local implementation is not Devnet or Mainnet verification. Token launch
+and Mainnet production remain NO-GO.
+
 ## 6. Account Design
 
 The following field lists are Rust-like / Anchor-like design sketches. They are not formal contract code.

@@ -364,4 +364,34 @@ pub enum CustomError {
 
     #[msg("Invalid treasury execution schema")]
     InvalidTreasuryExecutionSchema,
+
+    #[msg("Green Label certification state mismatch")]
+    GreenLabelCertificationStateMismatch,
+
+    #[msg("Green Label certification is already finalized")]
+    GreenLabelCertificationAlreadyFinalized,
+
+    #[msg("Green Label certification is not approved")]
+    GreenLabelCertificationNotApproved,
+
+    #[msg("Green Label observation period is not complete")]
+    GreenLabelObservationPeriodNotComplete,
+
+    #[msg("Green Label has an unresolved dispute")]
+    GreenLabelUnresolvedDispute,
+
+    #[msg("Green Label certification action mismatch")]
+    GreenLabelCertificationActionMismatch,
+
+    #[msg("Green Label certification target mismatch")]
+    GreenLabelCertificationTargetMismatch,
+
+    #[msg("Green Label certification parameters mismatch")]
+    GreenLabelCertificationParametersMismatch,
+
+    #[msg("Green Label certification execution already completed")]
+    GreenLabelCertificationExecutionAlreadyCompleted,
+
+    #[msg("Invalid Green Label certification schema")]
+    InvalidGreenLabelCertificationSchema,
 }

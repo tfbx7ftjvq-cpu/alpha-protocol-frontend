@@ -549,6 +549,30 @@ pub mod my_first_solana_program {
         instructions::green_label_v1::route_green_label_certification_fee_v1_handler(ctx, amount)
     }
 
+    pub fn initialize_green_label_certification_state_v1(
+        ctx: Context<InitializeGreenLabelCertificationStateV1>,
+    ) -> Result<()> {
+        instructions::green_label_v1::initialize_green_label_certification_state_v1_handler(ctx)
+    }
+
+    pub fn execute_green_label_approve_certification_v1(
+        ctx: Context<ExecuteGreenLabelApproveCertificationV1>,
+    ) -> Result<()> {
+        instructions::green_label_v1::execute_green_label_approve_certification_v1_handler(ctx)
+    }
+
+    pub fn execute_green_label_reject_certification_v1(
+        ctx: Context<ExecuteGreenLabelRejectCertificationV1>,
+    ) -> Result<()> {
+        instructions::green_label_v1::execute_green_label_reject_certification_v1_handler(ctx)
+    }
+
+    pub fn execute_green_label_revoke_certification_v1(
+        ctx: Context<ExecuteGreenLabelRevokeCertificationV1>,
+    ) -> Result<()> {
+        instructions::green_label_v1::execute_green_label_revoke_certification_v1_handler(ctx)
+    }
+
     pub fn refund_green_label_escrow_v1(ctx: Context<RefundGreenLabelEscrowV1>) -> Result<()> {
         instructions::green_label_v1::refund_green_label_escrow_v1_handler(ctx)
     }

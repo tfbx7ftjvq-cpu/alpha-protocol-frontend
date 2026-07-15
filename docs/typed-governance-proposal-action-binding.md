@@ -157,6 +157,31 @@ DAO-voted parameters == Security queue payload == Treasury transfer parameters
 Stage 4 still does not implement generic Treasury transfers, batch payout,
 registry mutation, Green Label execution changes, or frontend writes.
 
+## Stage 5B-1 Green Label Certification Parameters Binding
+
+Phase 2E-FINAL Stage 5B-1 uses `GovernanceProposalActionV1.parameters_hash`
+as the trusted binding for Green Label certification decisions.
+
+For approve, reject, and revoke certification wrappers, the program rebuilds a
+typed `GreenLabelCertificationDecisionParametersV1` from real accounts:
+
+- Green Label config
+- Green Label project
+- certification state sidecar
+- governance action type
+- project authority
+- bond tier
+- bond vault
+- USDC mint
+- observation end timestamp
+- expected project status
+- expected certification status
+- proposal id
+
+If the rebuilt parameters hash differs from the DAO-voted sidecar, execution
+fails. Reject and revoke do not imply refund or slash. The certification wrappers
+do not transfer tokens.
+
 ## Explicit Non-Goals
 
 This phase does not implement:
