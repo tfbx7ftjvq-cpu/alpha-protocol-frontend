@@ -365,9 +365,9 @@ Unified USDC revenue routing is now implemented at the contract layer:
 - `route_usdc_revenue_v1` routes USDC revenue through the existing Treasury V2 50 / 20 / 20 / 10 split.
 - `deposit_usdc_revenue` remains available as the legacy/simple Treasury V2 USDC deposit path.
 
-Remaining gaps after Phase 2E-2B and before the later Green Label escrow phases:
+Historical gaps after Phase 2E-2B and before the later Green Label escrow phases:
 
-- Green Label certification fee integration was still not wired into the router.
+- Green Label certification fee integration was still not wired into a strict receipt route.
 - Green Label forfeited bond routing was still not wired into the router.
 - Refundable Green Label escrow was still not implemented.
 - Future refundable escrow needed to refund only to the original payer.
@@ -387,14 +387,25 @@ Green Label refundable escrow and Treasury routing are now implemented at the co
 - `GreenLabelEscrowStatusV1` prevents repeat refund / repeat forfeit.
 - `initialize_green_label_refundable_escrow_v1` initializes the sidecar escrow and refundable token vault.
 - `deposit_green_label_refundable_bond_v1` transfers USDC into the refundable vault without updating Treasury revenue totals.
-- `route_green_label_certification_fee_v1` routes non-refundable Green Label certification fee revenue as `RevenueType::GreenLabelCertificationFee`.
 - `refund_green_label_escrow_v1` returns refundable escrow only to the original payer's USDC token account and does not pass through Treasury split.
 - `execute_green_label_forfeit_governance_v1` is the current strict DAO/Security-governed path that routes forfeited escrow as `RevenueType::GreenLabelForfeitedBond` through the Treasury router and 50 / 20 / 20 / 10 split.
+
+### Phase 2E-FINAL Stage 5B-4B-1 Implementation Update
+
+Green Label certification fee routing is now strict and receipt-based:
+
+- `GreenLabelCertificationFeePolicyV1` stores the authoritative non-refundable fee amount for a Green Label config.
+- `GreenLabelCertificationFeeReceiptV1` records one immutable receipt per project.
+- `GreenLabelCertificationFeeParametersV1` binds project, payer, token account, exact amount, Treasury accounts, four vaults, mint, and `RevenueType::GreenLabelCertificationFee`.
+- `route_green_label_certification_fee_once_v1` routes the exact policy amount through the shared Treasury router and writes the receipt atomically.
+- The legacy caller-amount `route_green_label_certification_fee_v1(ctx, amount)` fails closed with `LegacyGreenLabelCertificationFeeRouteDisabled`.
+- Receipt gates for bond lock / PendingObservation and approve certification are still pending.
 
 Important boundaries:
 
 - Refundable escrow funds are not Treasury revenue before forfeiture.
 - Normal refund does not update `TreasuryUsdcStateV2` or `RevenueRoutingStatsV1`.
+- Certification fee receipts do not update refundable escrow balances and are not refunded by reject, revoke, or refund-bond paths.
 - No time-only forfeit path is implemented.
 - Forfeiture requires the linked Green Label / Security Layer slash decision path, including dispute, proposal decision, execution queue item, action type, payload hash, target account, and timelock checks.
 - Legacy `execute_green_label_slash` and `forfeit_green_label_escrow_to_treasury_v1` instruction names are retained for ABI / Devnet history, but their public handlers fail closed with `LegacyGreenLabelSlashDisabled` and `LegacyGreenLabelForfeitDisabled`.

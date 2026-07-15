@@ -45,6 +45,10 @@ pub const GREEN_BOND_VAULT_AUTHORITY_SEED: &[u8] = b"green_bond_vault_authority_
 pub const GREEN_LABEL_REFUNDABLE_ESCROW_SEED: &[u8] = b"green_label_refundable_escrow_v1";
 pub const GREEN_LABEL_REFUNDABLE_VAULT_SEED: &[u8] = b"green_label_refundable_vault_v1";
 pub const GREEN_LABEL_CERTIFICATION_STATE_SEED: &[u8] = b"green_label_certification_state_v1";
+pub const GREEN_LABEL_CERTIFICATION_FEE_POLICY_SEED: &[u8] =
+    b"green_label_certification_fee_policy_v1";
+pub const GREEN_LABEL_CERTIFICATION_FEE_RECEIPT_SEED: &[u8] =
+    b"green_label_certification_fee_receipt_v1";
 pub const GREEN_LABEL_CERTIFICATION_EXECUTION_RECORD_SEED: &[u8] =
     b"green_label_certification_execution_record_v1";
 pub const GREEN_LABEL_REFUND_EXECUTION_RECORD_SEED: &[u8] =

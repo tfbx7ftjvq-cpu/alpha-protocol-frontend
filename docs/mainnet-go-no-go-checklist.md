@@ -255,12 +255,16 @@ Manual review notes:
 - `route_usdc_revenue_v1` is implemented for typed USDC protocol revenue routing.
 - `RevenueRoutingStatsV1` tracks typed USDC revenue totals without changing `TreasuryUsdcStateV2`.
 - `deposit_usdc_revenue` remains a legacy/simple Treasury V2 USDC deposit path.
-- Green Label certification fee routing is implemented as `RevenueType::GreenLabelCertificationFee`.
+- Green Label certification fee routing is implemented as `RevenueType::GreenLabelCertificationFee` through `route_green_label_certification_fee_once_v1`.
+- `GreenLabelCertificationFeePolicyV1` is the authoritative fee amount source.
+- `GreenLabelCertificationFeeReceiptV1` records one immutable receipt per project.
+- The legacy caller-amount Green Label fee route is disabled with `LegacyGreenLabelCertificationFeeRouteDisabled`.
 - Refundable Green Label escrow is implemented as `GreenLabelRefundableEscrowV1`.
 - Refundable escrow refunds only to the original payer and does not pass through Treasury split.
 - Green Label forfeited escrow routes to Treasury as `RevenueType::GreenLabelForfeitedBond`.
 - Green Label forfeits must require a valid dispute, dispute-ready / decision-queued state, linked Security Layer / Green Label slash decision, and non-terminal escrow state.
 - No time-only forfeit path is allowed.
+- Bond lock / PendingObservation receipt gate and approve certification receipt gate are still pending Stage 5B-4B-2.
 - SOL revenue split is not supported.
 - Builders payout governance is not implemented.
 - Token launch remains NO-GO until real revenue integrations, builders payout governance, Mainnet authorities, and final launch checks are completed.

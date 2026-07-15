@@ -38,6 +38,15 @@ Phase 2E-FINAL Stage 5B-3:
 - Forfeited escrow routing through the typed Treasury router as `RevenueType::GreenLabelForfeitedBond`.
 - Legacy public slash / forfeit entry points disabled: `execute_green_label_slash` returns `LegacyGreenLabelSlashDisabled`, and `forfeit_green_label_escrow_to_treasury_v1` returns `LegacyGreenLabelForfeitDisabled`.
 
+Phase 2E-FINAL Stage 5B-4B-1:
+
+- `GreenLabelCertificationFeePolicyV1` authoritative fee policy sidecar.
+- `GreenLabelCertificationFeeReceiptV1` immutable one-receipt-per-project payment fact.
+- `GreenLabelCertificationFeeParametersV1` canonical fee route hash.
+- `initialize_green_label_certification_fee_policy_v1` bootstrap instruction.
+- `route_green_label_certification_fee_once_v1` strict route that reads the exact fee amount from policy, routes it as `RevenueType::GreenLabelCertificationFee`, and writes the receipt atomically.
+- Legacy caller-amount `route_green_label_certification_fee_v1(ctx, amount)` disabled with `LegacyGreenLabelCertificationFeeRouteDisabled`.
+
 ## Revenue Types
 
 - `GreenLabelCertificationFee`
@@ -105,14 +114,31 @@ Refundable escrow funds are not Treasury revenue while they remain refundable. T
 
 - `deposit_usdc_revenue` remains available as the legacy/simple USDC revenue entry.
 - SOL revenue split is not implemented.
-- Green Label certification fee routing is implemented as `RevenueType::GreenLabelCertificationFee`.
+- Green Label certification fee routing is implemented as `RevenueType::GreenLabelCertificationFee` through the strict once route documented in `docs/green-label-certification-fee-policy-and-receipt-v1.md`.
+- The legacy caller-amount Green Label certification fee route is disabled and no longer transfers tokens or updates accounting.
 - Green Label refundable escrow is implemented as a sidecar account and independent refundable vault.
 - Green Label forfeited escrow routing is implemented as `RevenueType::GreenLabelForfeitedBond`.
 - Strict Green Label forfeit now requires governance sidecar, module registry, adapter, approved Security decision, executed queue item, and immutable forfeit execution record.
 - Existing Green Label legacy slash / forfeit public entry points are disabled in Stage 5B-3. Legacy refund compatibility remains separate from strict governance refund.
+- Receipt gates for bond lock / PendingObservation and approve certification are still pending Stage 5B-4B-2.
 - Builders payout governance is not implemented in this phase.
 - DAO voting is not implemented in this phase.
 - Token launch remains NO-GO.
+
+## Green Label Certification Fee Route
+
+The strict certification fee route is separate from refundable escrow. The fee is non-refundable protocol revenue, while refundable bond funds remain escrow liability until refund or forfeit.
+
+`route_green_label_certification_fee_once_v1` does not accept a caller-supplied amount. It reads `GreenLabelCertificationFeePolicyV1.fee_amount_usdc`, verifies the project is still `PendingBondDeposit`, verifies the payer is the project owner, verifies Treasury state/stats/vaults, routes the fee through the shared Treasury router, and writes `GreenLabelCertificationFeeReceiptV1` in the same instruction.
+
+One project can have only one receipt PDA:
+
+```text
+[
+  b"green_label_certification_fee_receipt_v1",
+  green_label_project.key().as_ref()
+]
+```
 
 ## Green Label Refundable Escrow Rules
 

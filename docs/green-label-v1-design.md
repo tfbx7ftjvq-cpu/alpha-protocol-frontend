@@ -191,6 +191,10 @@ by separate governance actions. Certification wrappers do not transfer tokens,
 do not route Treasury revenue, do not collect certification fees, and do not
 touch refundable escrow.
 
+Phase 2E-FINAL Stage 5B-4B-1 adds a separate strict certification fee policy and receipt layer. `GreenLabelCertificationFeePolicyV1` stores the authoritative non-refundable fee amount, `route_green_label_certification_fee_once_v1` routes the exact policy amount through Treasury 50 / 20 / 20 / 10 as `RevenueType::GreenLabelCertificationFee`, and `GreenLabelCertificationFeeReceiptV1` records one immutable receipt per project. The legacy caller-amount fee route now fails closed. See `docs/green-label-certification-fee-policy-and-receipt-v1.md`.
+
+Receipt gates for bond lock / PendingObservation and approve certification are still pending Stage 5B-4B-2, so fee receipt completion must not yet be described as a fully closed certification lifecycle.
+
 Strict certification execution requires:
 
 - typed `GovernanceProposalActionV1`

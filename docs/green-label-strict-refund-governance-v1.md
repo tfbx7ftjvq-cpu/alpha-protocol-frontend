@@ -185,6 +185,8 @@ On success:
 
 The refund path does not touch Treasury revenue totals or Treasury execution records.
 
+Certification fee receipts are separate from refundable escrow. A rejected, revoked, or refunded Green Label project does not receive the non-refundable certification fee back through this refund path. See `docs/green-label-certification-fee-policy-and-receipt-v1.md`.
+
 ## Legacy Boundaries
 
 The legacy paths remain for compatibility:

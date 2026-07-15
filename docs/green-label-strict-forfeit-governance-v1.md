@@ -154,6 +154,8 @@ The PDA is:
 
 One executed queue item can create only one business forfeit record. The same escrow can finish as either refunded or forfeited, not both.
 
+Certification fee receipts are separate from refundable escrow. A Green Label bond forfeit routes only remaining refundable escrow liability as `RevenueType::GreenLabelForfeitedBond`; it must not route the already-paid non-refundable certification fee a second time. See `docs/green-label-certification-fee-policy-and-receipt-v1.md`.
+
 ## Legacy Shutdown
 
 The legacy slash / forfeit public entry points are disabled:

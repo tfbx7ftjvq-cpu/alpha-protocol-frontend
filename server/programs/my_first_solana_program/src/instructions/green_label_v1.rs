@@ -7,7 +7,8 @@ use crate::constants::{
     DEFAULT_RESPONSE_WINDOW_SECONDS, EXECUTION_QUEUE_ITEM_V1_SEED, GOVERNANCE_CONFIG_V1_SEED,
     GOVERNANCE_PROPOSAL_ACTION_V1_SEED, GOVERNANCE_PROPOSAL_V1_SEED,
     GREEN_BOND_VAULT_AUTHORITY_SEED, GREEN_BOND_VAULT_SEED, GREEN_LABEL_BRONZE_TIER_THRESHOLD_USDC,
-    GREEN_LABEL_CERTIFICATION_EXECUTION_RECORD_SEED, GREEN_LABEL_CERTIFICATION_STATE_SEED,
+    GREEN_LABEL_CERTIFICATION_EXECUTION_RECORD_SEED, GREEN_LABEL_CERTIFICATION_FEE_POLICY_SEED,
+    GREEN_LABEL_CERTIFICATION_FEE_RECEIPT_SEED, GREEN_LABEL_CERTIFICATION_STATE_SEED,
     GREEN_LABEL_CONFIG_RESERVED_BYTES, GREEN_LABEL_CONFIG_SEED, GREEN_LABEL_CONFIG_SPACE,
     GREEN_LABEL_DISPUTE_RESERVED_BYTES, GREEN_LABEL_DISPUTE_SEED, GREEN_LABEL_DISPUTE_SPACE,
     GREEN_LABEL_FORFEIT_EXECUTION_RECORD_SEED, GREEN_LABEL_GOLD_TIER_THRESHOLD_USDC,
@@ -32,7 +33,8 @@ use crate::state::{
     ActionType, BondTier, DisputeStatus, ExecutionQueueItemV1, ExecutionStatus,
     GovernanceActionTypeV1, GovernanceConfigV1, GovernanceProposalActionV1,
     GovernanceProposalStatusV1, GovernanceProposalV1, GreenLabelCertificationExecutionRecordV1,
-    GreenLabelCertificationExecutionTypeV1, GreenLabelCertificationStateV1,
+    GreenLabelCertificationExecutionTypeV1, GreenLabelCertificationFeePolicyV1,
+    GreenLabelCertificationFeeReceiptV1, GreenLabelCertificationStateV1,
     GreenLabelCertificationStatusV1, GreenLabelConfigV1, GreenLabelDisputeV1,
     GreenLabelEscrowExecutionTypeV1, GreenLabelEscrowStatusV1, GreenLabelForfeitExecutionRecordV1,
     GreenLabelProjectV1, GreenLabelRefundExecutionRecordV1, GreenLabelRefundableEscrowV1,
@@ -45,6 +47,10 @@ pub const MAX_GREEN_LABEL_WINDOW_SECONDS: i64 = 30 * 24 * 60 * 60;
 pub const GREEN_LABEL_CERTIFICATION_SCHEMA_VERSION: u16 = 1;
 pub const GREEN_LABEL_CERTIFICATION_DECISION_PARAMETERS_V1_DOMAIN: &[u8] =
     b"alpha_green_label_certification_decision_v1";
+pub const GREEN_LABEL_CERTIFICATION_FEE_SCHEMA_VERSION: u16 = 1;
+pub const GREEN_LABEL_CERTIFICATION_FEE_POLICY_VERSION: u64 = 1;
+pub const GREEN_LABEL_CERTIFICATION_FEE_PARAMETERS_V1_DOMAIN: &[u8] =
+    b"alpha_green_label_certification_fee_parameters_v1";
 pub const GREEN_LABEL_REFUND_SCHEMA_VERSION: u16 = 1;
 pub const GREEN_LABEL_REFUND_PARAMETERS_V1_DOMAIN: &[u8] =
     b"alpha_green_label_refund_parameters_v1";
@@ -67,6 +73,29 @@ pub struct GreenLabelCertificationDecisionParametersV1 {
     pub expected_project_status: GreenLabelStatus,
     pub expected_certification_status: GreenLabelCertificationStatusV1,
     pub proposal_id: u64,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GreenLabelCertificationFeeParametersV1 {
+    pub schema_version: u16,
+    pub green_label_config: Pubkey,
+    pub fee_policy: Pubkey,
+    pub policy_version: u64,
+    pub green_label_project: Pubkey,
+    pub project_id: u64,
+    pub project_owner: Pubkey,
+    pub payer: Pubkey,
+    pub payer_token_account: Pubkey,
+    pub fee_amount_usdc: u64,
+    pub usdc_mint: Pubkey,
+    pub treasury_config: Pubkey,
+    pub treasury_usdc_state: Pubkey,
+    pub revenue_routing_stats: Pubkey,
+    pub relief_usdc_vault: Pubkey,
+    pub buyback_usdc_vault: Pubkey,
+    pub builders_usdc_vault: Pubkey,
+    pub staking_usdc_vault: Pubkey,
+    pub revenue_type: RevenueType,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -694,6 +723,36 @@ pub struct DepositGreenLabelRefundableBondV1<'info> {
 }
 
 #[derive(Accounts)]
+pub struct InitializeGreenLabelCertificationFeePolicyV1<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    pub authority: Signer<'info>,
+
+    #[account(
+        seeds = [GREEN_LABEL_CONFIG_SEED],
+        bump = green_label_config.bump,
+        constraint = green_label_config.authority == authority.key() @ CustomError::UnauthorizedGreenLabelAuthority
+    )]
+    pub green_label_config: Box<Account<'info, GreenLabelConfigV1>>,
+
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + GreenLabelCertificationFeePolicyV1::INIT_SPACE,
+        seeds = [
+            GREEN_LABEL_CERTIFICATION_FEE_POLICY_SEED,
+            green_label_config.key().as_ref()
+        ],
+        bump
+    )]
+    pub green_label_certification_fee_policy:
+        Box<Account<'info, GreenLabelCertificationFeePolicyV1>>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 pub struct RouteGreenLabelCertificationFeeV1<'info> {
     #[account(
         seeds = [GREEN_LABEL_CONFIG_SEED],
@@ -783,6 +842,132 @@ pub struct RouteGreenLabelCertificationFeeV1<'info> {
     pub staking_usdc_vault: Box<Account<'info, TokenAccount>>,
 
     pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct RouteGreenLabelCertificationFeeOnceV1<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    #[account(
+        seeds = [GREEN_LABEL_CONFIG_SEED],
+        bump = green_label_config.bump
+    )]
+    pub green_label_config: Box<Account<'info, GreenLabelConfigV1>>,
+
+    #[account(
+        seeds = [
+            GREEN_LABEL_PROJECT_SEED,
+            &green_label_project.project_id.to_le_bytes()
+        ],
+        bump = green_label_project.bump
+    )]
+    pub green_label_project: Box<Account<'info, GreenLabelProjectV1>>,
+
+    #[account(
+        seeds = [
+            GREEN_LABEL_CERTIFICATION_FEE_POLICY_SEED,
+            green_label_config.key().as_ref()
+        ],
+        bump = green_label_certification_fee_policy.bump
+    )]
+    pub green_label_certification_fee_policy:
+        Box<Account<'info, GreenLabelCertificationFeePolicyV1>>,
+
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + GreenLabelCertificationFeeReceiptV1::INIT_SPACE,
+        seeds = [
+            GREEN_LABEL_CERTIFICATION_FEE_RECEIPT_SEED,
+            green_label_project.key().as_ref()
+        ],
+        bump
+    )]
+    pub green_label_certification_fee_receipt:
+        Box<Account<'info, GreenLabelCertificationFeeReceiptV1>>,
+
+    #[account(
+        mut,
+        constraint = payer_usdc_account.mint == green_label_config.usdc_mint @ CustomError::GreenLabelCertificationFeeMintMismatch,
+        constraint = payer_usdc_account.owner == payer.key() @ CustomError::GreenLabelCertificationFeePayerMismatch
+    )]
+    pub payer_usdc_account: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        seeds = [TREASURY_CONFIG_V2_SEED],
+        bump = treasury_config.bump,
+        constraint = treasury_config.usdc_mint == green_label_config.usdc_mint @ CustomError::GreenLabelCertificationFeeMintMismatch
+    )]
+    pub treasury_config: Box<Account<'info, TreasuryConfigV2>>,
+
+    #[account(
+        mut,
+        seeds = [TREASURY_USDC_STATE_V2_SEED],
+        bump = treasury_usdc_state.bump
+    )]
+    pub treasury_usdc_state: Box<Account<'info, TreasuryUsdcStateV2>>,
+
+    #[account(
+        mut,
+        seeds = [REVENUE_ROUTING_STATS_V1_SEED, treasury_config.key().as_ref()],
+        bump = revenue_routing_stats.bump,
+        constraint = revenue_routing_stats.authority == treasury_config.authority @ CustomError::UnauthorizedTreasuryAuthority,
+        constraint = revenue_routing_stats.usdc_mint == treasury_config.usdc_mint @ CustomError::GreenLabelCertificationFeeMintMismatch
+    )]
+    pub revenue_routing_stats: Box<Account<'info, RevenueRoutingStatsV1>>,
+
+    #[account(
+        constraint = usdc_mint.key() == green_label_config.usdc_mint @ CustomError::GreenLabelCertificationFeeMintMismatch
+    )]
+    pub usdc_mint: Box<Account<'info, Mint>>,
+
+    /// CHECK: This PDA only owns the USDC vault token accounts.
+    #[account(
+        seeds = [VAULT_AUTHORITY_V2_SEED],
+        bump,
+        constraint = vault_authority.key() == green_label_config.vault_authority_v2 @ CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    )]
+    pub vault_authority: UncheckedAccount<'info>,
+
+    #[account(
+        mut,
+        seeds = [RELIEF_USDC_VAULT_SEED],
+        bump,
+        constraint = relief_usdc_vault.mint == treasury_config.usdc_mint @ CustomError::GreenLabelCertificationFeeMintMismatch,
+        constraint = relief_usdc_vault.owner == vault_authority.key() @ CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    )]
+    pub relief_usdc_vault: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        mut,
+        seeds = [BUYBACK_USDC_VAULT_SEED],
+        bump,
+        constraint = buyback_usdc_vault.mint == treasury_config.usdc_mint @ CustomError::GreenLabelCertificationFeeMintMismatch,
+        constraint = buyback_usdc_vault.owner == vault_authority.key() @ CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    )]
+    pub buyback_usdc_vault: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        mut,
+        seeds = [BUILDERS_USDC_VAULT_SEED],
+        bump,
+        constraint = builders_usdc_vault.mint == treasury_config.usdc_mint @ CustomError::GreenLabelCertificationFeeMintMismatch,
+        constraint = builders_usdc_vault.owner == vault_authority.key() @ CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    )]
+    pub builders_usdc_vault: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        mut,
+        seeds = [STAKING_USDC_VAULT_SEED],
+        bump,
+        constraint = staking_usdc_vault.mint == treasury_config.usdc_mint @ CustomError::GreenLabelCertificationFeeMintMismatch,
+        constraint = staking_usdc_vault.owner == vault_authority.key() @ CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    )]
+    pub staking_usdc_vault: Box<Account<'info, TokenAccount>>,
+
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -2208,18 +2393,91 @@ pub fn deposit_green_label_refundable_bond_v1_handler(
     )
 }
 
-pub fn route_green_label_certification_fee_v1_handler(
-    ctx: Context<RouteGreenLabelCertificationFeeV1>,
-    amount: u64,
+pub fn initialize_green_label_certification_fee_policy_v1_handler(
+    ctx: Context<InitializeGreenLabelCertificationFeePolicyV1>,
+    fee_amount_usdc: u64,
 ) -> Result<()> {
-    require!(
-        !ctx.accounts.green_label_config.is_paused,
-        CustomError::InvalidGreenLabelStatus
-    );
-    require!(
-        ctx.accounts.usdc_mint.decimals == GREEN_LABEL_USDC_DECIMALS,
-        CustomError::InvalidGreenLabelMint
-    );
+    let now = Clock::get()?.unix_timestamp;
+    validate_green_label_certification_fee_policy_init_v1(
+        ctx.accounts.green_label_config.authority,
+        ctx.accounts.authority.key(),
+        ctx.accounts.green_label_config.usdc_mint,
+        fee_amount_usdc,
+    )?;
+
+    record_green_label_certification_fee_policy_init_v1(
+        &mut ctx.accounts.green_label_certification_fee_policy,
+        ctx.accounts.green_label_config.key(),
+        ctx.accounts.green_label_config.usdc_mint,
+        fee_amount_usdc,
+        ctx.accounts.authority.key(),
+        now,
+        ctx.bumps.green_label_certification_fee_policy,
+    )
+}
+
+pub fn route_green_label_certification_fee_v1_handler(
+    _ctx: Context<RouteGreenLabelCertificationFeeV1>,
+    _amount: u64,
+) -> Result<()> {
+    reject_legacy_green_label_certification_fee_route_v1()
+}
+
+pub fn route_green_label_certification_fee_once_v1_handler(
+    ctx: Context<RouteGreenLabelCertificationFeeOnceV1>,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let config_key = ctx.accounts.green_label_config.key();
+    let project_key = ctx.accounts.green_label_project.key();
+    let fee_policy_key = ctx.accounts.green_label_certification_fee_policy.key();
+    let receipt_key = ctx.accounts.green_label_certification_fee_receipt.key();
+
+    let parameters = build_green_label_certification_fee_parameters_v1(
+        config_key,
+        fee_policy_key,
+        &ctx.accounts.green_label_certification_fee_policy,
+        project_key,
+        &ctx.accounts.green_label_project,
+        ctx.accounts.payer.key(),
+        ctx.accounts.payer_usdc_account.key(),
+        ctx.accounts.treasury_config.key(),
+        ctx.accounts.treasury_usdc_state.key(),
+        ctx.accounts.revenue_routing_stats.key(),
+        ctx.accounts.relief_usdc_vault.key(),
+        ctx.accounts.buyback_usdc_vault.key(),
+        ctx.accounts.builders_usdc_vault.key(),
+        ctx.accounts.staking_usdc_vault.key(),
+    )?;
+
+    let parameters_hash = validate_green_label_certification_fee_once_v1(
+        &ctx.accounts.green_label_config,
+        config_key,
+        &ctx.accounts.green_label_project,
+        project_key,
+        &ctx.accounts.green_label_certification_fee_policy,
+        fee_policy_key,
+        &ctx.accounts.payer_usdc_account,
+        ctx.accounts.payer_usdc_account.key(),
+        ctx.accounts.payer.key(),
+        &ctx.accounts.treasury_config,
+        ctx.accounts.treasury_config.key(),
+        &ctx.accounts.treasury_usdc_state,
+        ctx.accounts.treasury_usdc_state.key(),
+        &ctx.accounts.revenue_routing_stats,
+        ctx.accounts.revenue_routing_stats.key(),
+        ctx.accounts.vault_authority.key(),
+        ctx.accounts.relief_usdc_vault.key(),
+        &ctx.accounts.relief_usdc_vault,
+        ctx.accounts.buyback_usdc_vault.key(),
+        &ctx.accounts.buyback_usdc_vault,
+        ctx.accounts.builders_usdc_vault.key(),
+        &ctx.accounts.builders_usdc_vault,
+        ctx.accounts.staking_usdc_vault.key(),
+        &ctx.accounts.staking_usdc_vault,
+        ctx.accounts.usdc_mint.key(),
+        ctx.accounts.usdc_mint.decimals,
+        &parameters,
+    )?;
 
     route_usdc_revenue_from_token_account(
         ctx.accounts.token_program.key(),
@@ -2235,8 +2493,19 @@ pub fn route_green_label_certification_fee_v1_handler(
         &mut ctx.accounts.revenue_routing_stats,
         ctx.accounts.usdc_mint.key(),
         RevenueType::GreenLabelCertificationFee,
-        amount,
+        ctx.accounts
+            .green_label_certification_fee_policy
+            .fee_amount_usdc,
         GREEN_LABEL_USDC_DECIMALS,
+    )?;
+
+    record_green_label_certification_fee_receipt_v1(
+        &mut ctx.accounts.green_label_certification_fee_receipt,
+        &parameters,
+        parameters_hash,
+        now,
+        ctx.bumps.green_label_certification_fee_receipt,
+        receipt_key,
     )
 }
 
@@ -3095,6 +3364,144 @@ pub fn build_green_label_certification_decision_parameters_v1(
         expected_project_status: project.status,
         expected_certification_status,
         proposal_id,
+    })
+}
+
+pub fn hash_green_label_certification_fee_parameters_v1(
+    parameters: &GreenLabelCertificationFeeParametersV1,
+) -> Result<[u8; 32]> {
+    require!(
+        parameters.schema_version == GREEN_LABEL_CERTIFICATION_FEE_SCHEMA_VERSION,
+        CustomError::InvalidGreenLabelCertificationFeePolicySchema
+    );
+    require!(
+        parameters.policy_version == GREEN_LABEL_CERTIFICATION_FEE_POLICY_VERSION,
+        CustomError::InvalidGreenLabelCertificationFeePolicySchema
+    );
+    require!(
+        parameters.revenue_type == RevenueType::GreenLabelCertificationFee,
+        CustomError::GreenLabelCertificationFeeParametersMismatch
+    );
+    require_keys_neq!(
+        parameters.green_label_config,
+        Pubkey::default(),
+        CustomError::GreenLabelCertificationFeeParametersMismatch
+    );
+    require_keys_neq!(
+        parameters.fee_policy,
+        Pubkey::default(),
+        CustomError::GreenLabelCertificationFeeParametersMismatch
+    );
+    require_keys_neq!(
+        parameters.green_label_project,
+        Pubkey::default(),
+        CustomError::GreenLabelCertificationFeeProjectMismatch
+    );
+    require_keys_neq!(
+        parameters.project_owner,
+        Pubkey::default(),
+        CustomError::GreenLabelCertificationFeePayerMismatch
+    );
+    require_keys_neq!(
+        parameters.payer,
+        Pubkey::default(),
+        CustomError::GreenLabelCertificationFeePayerMismatch
+    );
+    require_keys_neq!(
+        parameters.payer_token_account,
+        Pubkey::default(),
+        CustomError::GreenLabelCertificationFeePayerMismatch
+    );
+    require!(
+        parameters.fee_amount_usdc > 0,
+        CustomError::InvalidGreenLabelCertificationFeeAmount
+    );
+    require_keys_neq!(
+        parameters.usdc_mint,
+        Pubkey::default(),
+        CustomError::GreenLabelCertificationFeeMintMismatch
+    );
+    require_keys_neq!(
+        parameters.treasury_config,
+        Pubkey::default(),
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_neq!(
+        parameters.treasury_usdc_state,
+        Pubkey::default(),
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_neq!(
+        parameters.revenue_routing_stats,
+        Pubkey::default(),
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_neq!(
+        parameters.relief_usdc_vault,
+        Pubkey::default(),
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_neq!(
+        parameters.buyback_usdc_vault,
+        Pubkey::default(),
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_neq!(
+        parameters.builders_usdc_vault,
+        Pubkey::default(),
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_neq!(
+        parameters.staking_usdc_vault,
+        Pubkey::default(),
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(GREEN_LABEL_CERTIFICATION_FEE_PARAMETERS_V1_DOMAIN);
+    parameters
+        .serialize(&mut bytes)
+        .map_err(|_| error!(CustomError::GreenLabelCertificationFeeParametersMismatch))?;
+    hash_contributor_payload(&bytes)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn build_green_label_certification_fee_parameters_v1(
+    green_label_config: Pubkey,
+    fee_policy: Pubkey,
+    policy: &GreenLabelCertificationFeePolicyV1,
+    green_label_project: Pubkey,
+    project: &GreenLabelProjectV1,
+    payer: Pubkey,
+    payer_token_account: Pubkey,
+    treasury_config: Pubkey,
+    treasury_usdc_state: Pubkey,
+    revenue_routing_stats: Pubkey,
+    relief_usdc_vault: Pubkey,
+    buyback_usdc_vault: Pubkey,
+    builders_usdc_vault: Pubkey,
+    staking_usdc_vault: Pubkey,
+) -> Result<GreenLabelCertificationFeeParametersV1> {
+    Ok(GreenLabelCertificationFeeParametersV1 {
+        schema_version: GREEN_LABEL_CERTIFICATION_FEE_SCHEMA_VERSION,
+        green_label_config,
+        fee_policy,
+        policy_version: policy.policy_version,
+        green_label_project,
+        project_id: project.project_id,
+        project_owner: project.project_owner,
+        payer,
+        payer_token_account,
+        fee_amount_usdc: policy.fee_amount_usdc,
+        usdc_mint: policy.usdc_mint,
+        treasury_config,
+        treasury_usdc_state,
+        revenue_routing_stats,
+        relief_usdc_vault,
+        buyback_usdc_vault,
+        builders_usdc_vault,
+        staking_usdc_vault,
+        revenue_type: RevenueType::GreenLabelCertificationFee,
     })
 }
 
@@ -6002,6 +6409,305 @@ pub fn calculate_green_label_slash_amount(total_bond_amount: u64) -> Result<u64>
     Ok(total_bond_amount)
 }
 
+pub fn validate_green_label_certification_fee_policy_init_v1(
+    expected_authority: Pubkey,
+    authority: Pubkey,
+    usdc_mint: Pubkey,
+    fee_amount_usdc: u64,
+) -> Result<()> {
+    require_keys_eq!(
+        expected_authority,
+        authority,
+        CustomError::UnauthorizedGreenLabelAuthority
+    );
+    require_keys_neq!(
+        usdc_mint,
+        Pubkey::default(),
+        CustomError::GreenLabelCertificationFeeMintMismatch
+    );
+    require!(
+        fee_amount_usdc > 0,
+        CustomError::InvalidGreenLabelCertificationFeeAmount
+    );
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn validate_green_label_certification_fee_once_v1(
+    green_label_config: &GreenLabelConfigV1,
+    green_label_config_key: Pubkey,
+    green_label_project: &GreenLabelProjectV1,
+    green_label_project_key: Pubkey,
+    fee_policy: &GreenLabelCertificationFeePolicyV1,
+    fee_policy_key: Pubkey,
+    payer_usdc_account: &TokenAccount,
+    payer_usdc_account_key: Pubkey,
+    payer: Pubkey,
+    treasury_config: &TreasuryConfigV2,
+    treasury_config_key: Pubkey,
+    _treasury_usdc_state: &TreasuryUsdcStateV2,
+    treasury_usdc_state_key: Pubkey,
+    revenue_routing_stats: &RevenueRoutingStatsV1,
+    revenue_routing_stats_key: Pubkey,
+    vault_authority_key: Pubkey,
+    relief_usdc_vault_key: Pubkey,
+    relief_usdc_vault: &TokenAccount,
+    buyback_usdc_vault_key: Pubkey,
+    buyback_usdc_vault: &TokenAccount,
+    builders_usdc_vault_key: Pubkey,
+    builders_usdc_vault: &TokenAccount,
+    staking_usdc_vault_key: Pubkey,
+    staking_usdc_vault: &TokenAccount,
+    usdc_mint_key: Pubkey,
+    usdc_decimals: u8,
+    parameters: &GreenLabelCertificationFeeParametersV1,
+) -> Result<[u8; 32]> {
+    require!(
+        !green_label_config.is_paused,
+        CustomError::InvalidGreenLabelStatus
+    );
+    require!(
+        fee_policy.schema_version == GREEN_LABEL_CERTIFICATION_FEE_SCHEMA_VERSION,
+        CustomError::InvalidGreenLabelCertificationFeePolicySchema
+    );
+    require!(
+        fee_policy.policy_version == GREEN_LABEL_CERTIFICATION_FEE_POLICY_VERSION,
+        CustomError::InvalidGreenLabelCertificationFeePolicySchema
+    );
+    require!(
+        fee_policy.active,
+        CustomError::GreenLabelCertificationFeePolicyInactive
+    );
+    require!(
+        fee_policy.fee_amount_usdc > 0,
+        CustomError::InvalidGreenLabelCertificationFeeAmount
+    );
+    require_keys_eq!(
+        fee_policy.green_label_config,
+        green_label_config_key,
+        CustomError::GreenLabelCertificationFeeParametersMismatch
+    );
+    require_keys_eq!(
+        fee_policy.usdc_mint,
+        green_label_config.usdc_mint,
+        CustomError::GreenLabelCertificationFeeMintMismatch
+    );
+    require!(
+        matches!(
+            green_label_project.status,
+            GreenLabelStatus::PendingBondDeposit
+        ),
+        CustomError::GreenLabelCertificationFeeStatusMismatch
+    );
+    require_keys_eq!(
+        green_label_project.project_owner,
+        payer,
+        CustomError::GreenLabelCertificationFeePayerMismatch
+    );
+    require_keys_eq!(
+        payer_usdc_account.owner,
+        payer,
+        CustomError::GreenLabelCertificationFeePayerMismatch
+    );
+    require_keys_eq!(
+        payer_usdc_account.mint,
+        fee_policy.usdc_mint,
+        CustomError::GreenLabelCertificationFeeMintMismatch
+    );
+    require!(
+        payer_usdc_account.amount >= fee_policy.fee_amount_usdc,
+        CustomError::GreenLabelCertificationFeeInsufficientFunds
+    );
+    require_keys_eq!(
+        usdc_mint_key,
+        fee_policy.usdc_mint,
+        CustomError::GreenLabelCertificationFeeMintMismatch
+    );
+    require!(
+        usdc_decimals == GREEN_LABEL_USDC_DECIMALS,
+        CustomError::GreenLabelCertificationFeeDecimalsMismatch
+    );
+    require_keys_eq!(
+        treasury_config.usdc_mint,
+        fee_policy.usdc_mint,
+        CustomError::GreenLabelCertificationFeeMintMismatch
+    );
+    require_keys_eq!(
+        green_label_config.treasury_usdc_state_v2,
+        treasury_usdc_state_key,
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_eq!(
+        revenue_routing_stats.authority,
+        treasury_config.authority,
+        CustomError::UnauthorizedTreasuryAuthority
+    );
+    require_keys_eq!(
+        revenue_routing_stats.usdc_mint,
+        fee_policy.usdc_mint,
+        CustomError::GreenLabelCertificationFeeMintMismatch
+    );
+    require_keys_eq!(
+        green_label_config.vault_authority_v2,
+        vault_authority_key,
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_eq!(
+        relief_usdc_vault.mint,
+        fee_policy.usdc_mint,
+        CustomError::GreenLabelCertificationFeeMintMismatch
+    );
+    require_keys_eq!(
+        buyback_usdc_vault.mint,
+        fee_policy.usdc_mint,
+        CustomError::GreenLabelCertificationFeeMintMismatch
+    );
+    require_keys_eq!(
+        builders_usdc_vault.mint,
+        fee_policy.usdc_mint,
+        CustomError::GreenLabelCertificationFeeMintMismatch
+    );
+    require_keys_eq!(
+        staking_usdc_vault.mint,
+        fee_policy.usdc_mint,
+        CustomError::GreenLabelCertificationFeeMintMismatch
+    );
+    require_keys_eq!(
+        relief_usdc_vault.owner,
+        vault_authority_key,
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_eq!(
+        buyback_usdc_vault.owner,
+        vault_authority_key,
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_eq!(
+        builders_usdc_vault.owner,
+        vault_authority_key,
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_eq!(
+        staking_usdc_vault.owner,
+        vault_authority_key,
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_neq!(
+        relief_usdc_vault_key,
+        payer_usdc_account_key,
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_neq!(
+        buyback_usdc_vault_key,
+        payer_usdc_account_key,
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_neq!(
+        builders_usdc_vault_key,
+        payer_usdc_account_key,
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_neq!(
+        staking_usdc_vault_key,
+        payer_usdc_account_key,
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+
+    require!(
+        parameters.schema_version == GREEN_LABEL_CERTIFICATION_FEE_SCHEMA_VERSION,
+        CustomError::InvalidGreenLabelCertificationFeePolicySchema
+    );
+    require_keys_eq!(
+        parameters.green_label_config,
+        green_label_config_key,
+        CustomError::GreenLabelCertificationFeeParametersMismatch
+    );
+    require_keys_eq!(
+        parameters.fee_policy,
+        fee_policy_key,
+        CustomError::GreenLabelCertificationFeeParametersMismatch
+    );
+    require!(
+        parameters.policy_version == fee_policy.policy_version,
+        CustomError::GreenLabelCertificationFeeParametersMismatch
+    );
+    require_keys_eq!(
+        parameters.green_label_project,
+        green_label_project_key,
+        CustomError::GreenLabelCertificationFeeProjectMismatch
+    );
+    require!(
+        parameters.project_id == green_label_project.project_id,
+        CustomError::GreenLabelCertificationFeeProjectMismatch
+    );
+    require_keys_eq!(
+        parameters.project_owner,
+        green_label_project.project_owner,
+        CustomError::GreenLabelCertificationFeePayerMismatch
+    );
+    require_keys_eq!(
+        parameters.payer,
+        payer,
+        CustomError::GreenLabelCertificationFeePayerMismatch
+    );
+    require_keys_eq!(
+        parameters.payer_token_account,
+        payer_usdc_account_key,
+        CustomError::GreenLabelCertificationFeePayerMismatch
+    );
+    require!(
+        parameters.fee_amount_usdc == fee_policy.fee_amount_usdc,
+        CustomError::InvalidGreenLabelCertificationFeeAmount
+    );
+    require_keys_eq!(
+        parameters.usdc_mint,
+        fee_policy.usdc_mint,
+        CustomError::GreenLabelCertificationFeeMintMismatch
+    );
+    require_keys_eq!(
+        parameters.treasury_config,
+        treasury_config_key,
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_eq!(
+        parameters.treasury_usdc_state,
+        treasury_usdc_state_key,
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_eq!(
+        parameters.revenue_routing_stats,
+        revenue_routing_stats_key,
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_eq!(
+        parameters.relief_usdc_vault,
+        relief_usdc_vault_key,
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_eq!(
+        parameters.buyback_usdc_vault,
+        buyback_usdc_vault_key,
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_eq!(
+        parameters.builders_usdc_vault,
+        builders_usdc_vault_key,
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require_keys_eq!(
+        parameters.staking_usdc_vault,
+        staking_usdc_vault_key,
+        CustomError::GreenLabelCertificationFeeTreasuryMismatch
+    );
+    require!(
+        parameters.revenue_type == RevenueType::GreenLabelCertificationFee,
+        CustomError::GreenLabelCertificationFeeParametersMismatch
+    );
+
+    hash_green_label_certification_fee_parameters_v1(parameters)
+}
+
 pub fn validate_green_label_refundable_escrow_initialization(
     config_is_paused: bool,
     project_owner: Pubkey,
@@ -6520,6 +7226,87 @@ pub fn record_green_label_refundable_bond_deposit(
     Ok(())
 }
 
+pub fn record_green_label_certification_fee_policy_init_v1(
+    policy: &mut GreenLabelCertificationFeePolicyV1,
+    green_label_config: Pubkey,
+    usdc_mint: Pubkey,
+    fee_amount_usdc: u64,
+    initialized_by: Pubkey,
+    now: i64,
+    bump: u8,
+) -> Result<()> {
+    require!(
+        policy.green_label_config == Pubkey::default(),
+        CustomError::GreenLabelCertificationFeePolicyAlreadyInitialized
+    );
+    validate_green_label_certification_fee_policy_init_v1(
+        initialized_by,
+        initialized_by,
+        usdc_mint,
+        fee_amount_usdc,
+    )?;
+
+    policy.green_label_config = green_label_config;
+    policy.usdc_mint = usdc_mint;
+    policy.fee_amount_usdc = fee_amount_usdc;
+    policy.policy_version = GREEN_LABEL_CERTIFICATION_FEE_POLICY_VERSION;
+    policy.active = true;
+    policy.initialized_by = initialized_by;
+    policy.created_at = now;
+    policy.schema_version = GREEN_LABEL_CERTIFICATION_FEE_SCHEMA_VERSION;
+    policy.bump = bump;
+
+    Ok(())
+}
+
+pub fn record_green_label_certification_fee_receipt_v1(
+    receipt: &mut GreenLabelCertificationFeeReceiptV1,
+    parameters: &GreenLabelCertificationFeeParametersV1,
+    parameters_hash: [u8; 32],
+    routed_at: i64,
+    bump: u8,
+    receipt_key: Pubkey,
+) -> Result<()> {
+    require!(
+        receipt.green_label_project == Pubkey::default(),
+        CustomError::GreenLabelCertificationFeeAlreadyPaid
+    );
+    require_keys_neq!(
+        receipt_key,
+        Pubkey::default(),
+        CustomError::GreenLabelCertificationFeeParametersMismatch
+    );
+    require!(
+        parameters_hash == hash_green_label_certification_fee_parameters_v1(parameters)?,
+        CustomError::GreenLabelCertificationFeeParametersMismatch
+    );
+
+    receipt.green_label_config = parameters.green_label_config;
+    receipt.fee_policy = parameters.fee_policy;
+    receipt.policy_version = parameters.policy_version;
+    receipt.green_label_project = parameters.green_label_project;
+    receipt.project_id = parameters.project_id;
+    receipt.project_owner = parameters.project_owner;
+    receipt.payer = parameters.payer;
+    receipt.payer_token_account = parameters.payer_token_account;
+    receipt.amount_usdc = parameters.fee_amount_usdc;
+    receipt.usdc_mint = parameters.usdc_mint;
+    receipt.treasury_config = parameters.treasury_config;
+    receipt.treasury_usdc_state = parameters.treasury_usdc_state;
+    receipt.revenue_routing_stats = parameters.revenue_routing_stats;
+    receipt.relief_usdc_vault = parameters.relief_usdc_vault;
+    receipt.buyback_usdc_vault = parameters.buyback_usdc_vault;
+    receipt.builders_usdc_vault = parameters.builders_usdc_vault;
+    receipt.staking_usdc_vault = parameters.staking_usdc_vault;
+    receipt.revenue_type = RevenueType::GreenLabelCertificationFee;
+    receipt.parameters_hash = parameters_hash;
+    receipt.routed_at = routed_at;
+    receipt.schema_version = GREEN_LABEL_CERTIFICATION_FEE_SCHEMA_VERSION;
+    receipt.bump = bump;
+
+    Ok(())
+}
+
 pub fn record_green_label_escrow_refunded(
     escrow: &mut GreenLabelRefundableEscrowV1,
     refund_amount: u64,
@@ -6687,6 +7474,10 @@ pub fn reject_legacy_green_label_forfeit_v1() -> Result<()> {
     err!(CustomError::LegacyGreenLabelForfeitDisabled)
 }
 
+pub fn reject_legacy_green_label_certification_fee_route_v1() -> Result<()> {
+    err!(CustomError::LegacyGreenLabelCertificationFeeRouteDisabled)
+}
+
 fn calculate_bps_amount(amount: u64, bps: u16) -> Result<u64> {
     amount
         .checked_mul(bps as u64)
@@ -6718,6 +7509,10 @@ mod tests {
     use crate::state::{
         DisputeStatus, GreenLabelConfigV1, GreenLabelDisputeV1, GreenLabelProjectV1, RugReasonCode,
     };
+    use anchor_lang::solana_program::program_option::COption;
+    use anchor_lang::solana_program::program_pack::Pack;
+    use anchor_lang::AccountDeserialize;
+    use anchor_spl::token::spl_token::state::{Account as SplTokenAccount, AccountState};
 
     fn assert_error_contains(err: anchor_lang::error::Error, expected: &str) {
         let message = format!("{err:?}");
@@ -6900,6 +7695,261 @@ mod tests {
         assert_ne!(
             base_hash,
             hash_contributor_payload(&wrong_domain_bytes).unwrap()
+        );
+    }
+
+    #[test]
+    fn certification_fee_policy_and_receipt_spaces_match_layout() {
+        assert_eq!(GreenLabelCertificationFeePolicyV1::INIT_SPACE, 124);
+        assert_eq!(8 + GreenLabelCertificationFeePolicyV1::INIT_SPACE, 132);
+        assert_eq!(GreenLabelCertificationFeeReceiptV1::INIT_SPACE, 516);
+        assert_eq!(8 + GreenLabelCertificationFeeReceiptV1::INIT_SPACE, 524);
+    }
+
+    #[test]
+    fn certification_fee_policy_init_records_fixed_fields() {
+        let config_key = Pubkey::new_from_array([30; 32]);
+        let mint = Pubkey::new_from_array([2; 32]);
+        let authority = Pubkey::new_from_array([1; 32]);
+        let mut policy = blank_certification_fee_policy();
+
+        record_green_label_certification_fee_policy_init_v1(
+            &mut policy,
+            config_key,
+            mint,
+            1_000_000,
+            authority,
+            100,
+            7,
+        )
+        .unwrap();
+
+        assert_eq!(policy.green_label_config, config_key);
+        assert_eq!(policy.usdc_mint, mint);
+        assert_eq!(policy.fee_amount_usdc, 1_000_000);
+        assert_eq!(
+            policy.policy_version,
+            GREEN_LABEL_CERTIFICATION_FEE_POLICY_VERSION
+        );
+        assert!(policy.active);
+        assert_eq!(
+            policy.schema_version,
+            GREEN_LABEL_CERTIFICATION_FEE_SCHEMA_VERSION
+        );
+        assert_eq!(policy.bump, 7);
+
+        let err = record_green_label_certification_fee_policy_init_v1(
+            &mut policy,
+            config_key,
+            mint,
+            1_000_000,
+            authority,
+            101,
+            8,
+        )
+        .unwrap_err();
+        assert_eq!(
+            err,
+            CustomError::GreenLabelCertificationFeePolicyAlreadyInitialized.into()
+        );
+    }
+
+    #[test]
+    fn certification_fee_policy_init_rejects_wrong_authority_and_zero_amount() {
+        let authority = Pubkey::new_from_array([1; 32]);
+        let wrong_authority = Pubkey::new_from_array([9; 32]);
+        let mint = Pubkey::new_from_array([2; 32]);
+
+        let wrong_authority_err = validate_green_label_certification_fee_policy_init_v1(
+            authority,
+            wrong_authority,
+            mint,
+            1_000_000,
+        )
+        .unwrap_err();
+        assert_eq!(
+            wrong_authority_err,
+            CustomError::UnauthorizedGreenLabelAuthority.into()
+        );
+
+        let zero_amount_err =
+            validate_green_label_certification_fee_policy_init_v1(authority, authority, mint, 0)
+                .unwrap_err();
+        assert_eq!(
+            zero_amount_err,
+            CustomError::InvalidGreenLabelCertificationFeeAmount.into()
+        );
+    }
+
+    #[test]
+    fn certification_fee_parameters_hash_is_deterministic_and_field_bound() {
+        let fixture = fee_validation_fixture();
+        let parameters = fixture.parameters();
+        let base_hash = hash_green_label_certification_fee_parameters_v1(&parameters).unwrap();
+        assert_eq!(
+            base_hash,
+            hash_green_label_certification_fee_parameters_v1(&parameters).unwrap()
+        );
+
+        let mut changed_amount = parameters;
+        changed_amount.fee_amount_usdc = 2_000_000;
+        assert_ne!(
+            base_hash,
+            hash_green_label_certification_fee_parameters_v1(&changed_amount).unwrap()
+        );
+
+        let mut changed_payer = parameters;
+        changed_payer.payer = Pubkey::new_from_array([99; 32]);
+        assert_ne!(
+            base_hash,
+            hash_green_label_certification_fee_parameters_v1(&changed_payer).unwrap()
+        );
+
+        let mut wrong_revenue_type = parameters;
+        wrong_revenue_type.revenue_type = RevenueType::PlatformRevenue;
+        let err =
+            hash_green_label_certification_fee_parameters_v1(&wrong_revenue_type).unwrap_err();
+        assert_eq!(
+            err,
+            CustomError::GreenLabelCertificationFeeParametersMismatch.into()
+        );
+
+        let mut wrong_domain_bytes = Vec::new();
+        wrong_domain_bytes.extend_from_slice(b"wrong_domain");
+        parameters.serialize(&mut wrong_domain_bytes).unwrap();
+        assert_ne!(
+            base_hash,
+            hash_contributor_payload(&wrong_domain_bytes).unwrap()
+        );
+    }
+
+    #[test]
+    fn certification_fee_once_validation_accepts_policy_project_and_treasury() {
+        let fixture = fee_validation_fixture();
+        let expected_hash =
+            hash_green_label_certification_fee_parameters_v1(&fixture.parameters()).unwrap();
+
+        assert_eq!(fixture.validate().unwrap(), expected_hash);
+    }
+
+    #[test]
+    fn certification_fee_once_validation_rejects_wrong_payer_status_and_decimals() {
+        let mut wrong_payer = fee_validation_fixture();
+        wrong_payer.project.project_owner = Pubkey::new_from_array([90; 32]);
+        let err = wrong_payer.validate().unwrap_err();
+        assert_eq!(
+            err,
+            CustomError::GreenLabelCertificationFeePayerMismatch.into()
+        );
+
+        let mut wrong_status = fee_validation_fixture();
+        wrong_status.project.status = GreenLabelStatus::PendingObservation;
+        let err = wrong_status.validate().unwrap_err();
+        assert_eq!(
+            err,
+            CustomError::GreenLabelCertificationFeeStatusMismatch.into()
+        );
+
+        let mut wrong_decimals = fee_validation_fixture();
+        wrong_decimals.usdc_decimals = 9;
+        let err = wrong_decimals.validate().unwrap_err();
+        assert_eq!(
+            err,
+            CustomError::GreenLabelCertificationFeeDecimalsMismatch.into()
+        );
+    }
+
+    #[test]
+    fn certification_fee_once_validation_rejects_treasury_mismatch_and_vault_alias() {
+        let mut treasury_mismatch = fee_validation_fixture();
+        treasury_mismatch.config.treasury_usdc_state_v2 = Pubkey::new_from_array([91; 32]);
+        let err = treasury_mismatch.validate().unwrap_err();
+        assert_eq!(
+            err,
+            CustomError::GreenLabelCertificationFeeTreasuryMismatch.into()
+        );
+
+        let mut vault_alias = fee_validation_fixture();
+        vault_alias.relief_vault_key = vault_alias.payer_token_account_key;
+        let err = vault_alias.validate().unwrap_err();
+        assert_eq!(
+            err,
+            CustomError::GreenLabelCertificationFeeTreasuryMismatch.into()
+        );
+    }
+
+    #[test]
+    fn certification_fee_receipt_records_once_and_preserves_escrow_liability() {
+        let fixture = fee_validation_fixture();
+        let parameters = fixture.parameters();
+        let parameters_hash =
+            hash_green_label_certification_fee_parameters_v1(&parameters).unwrap();
+        let mut receipt = blank_certification_fee_receipt();
+        let escrow = refundable_escrow(100, GreenLabelEscrowStatusV1::Locked);
+        let escrow_before = (
+            escrow.deposited_amount,
+            escrow.refundable_amount,
+            escrow.refunded_amount,
+            escrow.forfeited_amount,
+            escrow.status,
+        );
+
+        record_green_label_certification_fee_receipt_v1(
+            &mut receipt,
+            &parameters,
+            parameters_hash,
+            123,
+            9,
+            Pubkey::new_from_array([88; 32]),
+        )
+        .unwrap();
+
+        assert_eq!(receipt.green_label_config, fixture.config_key);
+        assert_eq!(receipt.green_label_project, fixture.project_key);
+        assert_eq!(receipt.project_id, fixture.project.project_id);
+        assert_eq!(receipt.payer, fixture.payer);
+        assert_eq!(receipt.amount_usdc, fixture.policy.fee_amount_usdc);
+        assert_eq!(
+            receipt.revenue_type,
+            RevenueType::GreenLabelCertificationFee
+        );
+        assert_eq!(receipt.parameters_hash, parameters_hash);
+        assert_eq!(receipt.routed_at, 123);
+        assert_eq!(receipt.bump, 9);
+        assert_eq!(
+            escrow_before,
+            (
+                escrow.deposited_amount,
+                escrow.refundable_amount,
+                escrow.refunded_amount,
+                escrow.forfeited_amount,
+                escrow.status,
+            )
+        );
+
+        let mut changed_payer = parameters;
+        changed_payer.payer = Pubkey::new_from_array([99; 32]);
+        let err = record_green_label_certification_fee_receipt_v1(
+            &mut receipt,
+            &changed_payer,
+            hash_green_label_certification_fee_parameters_v1(&changed_payer).unwrap(),
+            124,
+            10,
+            Pubkey::new_from_array([88; 32]),
+        )
+        .unwrap_err();
+        assert_eq!(
+            err,
+            CustomError::GreenLabelCertificationFeeAlreadyPaid.into()
+        );
+    }
+
+    #[test]
+    fn legacy_green_label_certification_fee_route_is_disabled() {
+        let err = reject_legacy_green_label_certification_fee_route_v1().unwrap_err();
+        assert_eq!(
+            err,
+            CustomError::LegacyGreenLabelCertificationFeeRouteDisabled.into()
         );
     }
 
@@ -10955,6 +12005,242 @@ mod tests {
             is_paused: false,
             bump: 250,
             reserved: [0; GREEN_LABEL_CONFIG_RESERVED_BYTES],
+        }
+    }
+
+    struct FeeValidationFixture {
+        config_key: Pubkey,
+        config: GreenLabelConfigV1,
+        project_key: Pubkey,
+        project: GreenLabelProjectV1,
+        fee_policy_key: Pubkey,
+        policy: GreenLabelCertificationFeePolicyV1,
+        payer: Pubkey,
+        payer_token_account_key: Pubkey,
+        payer_token_account: TokenAccount,
+        treasury_config_key: Pubkey,
+        treasury_config: TreasuryConfigV2,
+        treasury_usdc_state_key: Pubkey,
+        treasury_usdc_state: TreasuryUsdcStateV2,
+        revenue_routing_stats_key: Pubkey,
+        revenue_routing_stats: RevenueRoutingStatsV1,
+        vault_authority: Pubkey,
+        relief_vault_key: Pubkey,
+        relief_vault: TokenAccount,
+        buyback_vault_key: Pubkey,
+        buyback_vault: TokenAccount,
+        builders_vault_key: Pubkey,
+        builders_vault: TokenAccount,
+        staking_vault_key: Pubkey,
+        staking_vault: TokenAccount,
+        usdc_decimals: u8,
+    }
+
+    impl FeeValidationFixture {
+        fn parameters(&self) -> GreenLabelCertificationFeeParametersV1 {
+            build_green_label_certification_fee_parameters_v1(
+                self.config_key,
+                self.fee_policy_key,
+                &self.policy,
+                self.project_key,
+                &self.project,
+                self.payer,
+                self.payer_token_account_key,
+                self.treasury_config_key,
+                self.treasury_usdc_state_key,
+                self.revenue_routing_stats_key,
+                self.relief_vault_key,
+                self.buyback_vault_key,
+                self.builders_vault_key,
+                self.staking_vault_key,
+            )
+            .unwrap()
+        }
+
+        fn validate(&self) -> Result<[u8; 32]> {
+            validate_green_label_certification_fee_once_v1(
+                &self.config,
+                self.config_key,
+                &self.project,
+                self.project_key,
+                &self.policy,
+                self.fee_policy_key,
+                &self.payer_token_account,
+                self.payer_token_account_key,
+                self.payer,
+                &self.treasury_config,
+                self.treasury_config_key,
+                &self.treasury_usdc_state,
+                self.treasury_usdc_state_key,
+                &self.revenue_routing_stats,
+                self.revenue_routing_stats_key,
+                self.vault_authority,
+                self.relief_vault_key,
+                &self.relief_vault,
+                self.buyback_vault_key,
+                &self.buyback_vault,
+                self.builders_vault_key,
+                &self.builders_vault,
+                self.staking_vault_key,
+                &self.staking_vault,
+                self.config.usdc_mint,
+                self.usdc_decimals,
+                &self.parameters(),
+            )
+        }
+    }
+
+    fn fee_validation_fixture() -> FeeValidationFixture {
+        let mint = Pubkey::new_from_array([2; 32]);
+        let config_key = Pubkey::new_from_array([30; 32]);
+        let project_key = Pubkey::new_from_array([31; 32]);
+        let fee_policy_key = Pubkey::new_from_array([32; 32]);
+        let payer = Pubkey::new_from_array([33; 32]);
+        let payer_token_account_key = Pubkey::new_from_array([34; 32]);
+        let treasury_config_key = Pubkey::new_from_array([35; 32]);
+        let treasury_usdc_state_key = Pubkey::new_from_array([36; 32]);
+        let revenue_routing_stats_key = Pubkey::new_from_array([37; 32]);
+        let vault_authority = Pubkey::new_from_array([38; 32]);
+        let relief_vault_key = Pubkey::new_from_array([39; 32]);
+        let buyback_vault_key = Pubkey::new_from_array([40; 32]);
+        let builders_vault_key = Pubkey::new_from_array([41; 32]);
+        let staking_vault_key = Pubkey::new_from_array([42; 32]);
+        let treasury_authority = Pubkey::new_from_array([43; 32]);
+
+        let mut config = green_label_config();
+        config.usdc_mint = mint;
+        config.treasury_usdc_state_v2 = treasury_usdc_state_key;
+        config.vault_authority_v2 = vault_authority;
+
+        let mut project = green_label_project();
+        project.project_id = 7;
+        project.project_owner = payer;
+        project.status = GreenLabelStatus::PendingBondDeposit;
+
+        FeeValidationFixture {
+            config_key,
+            config,
+            project_key,
+            project,
+            fee_policy_key,
+            policy: certification_fee_policy(config_key, mint, 1_000_000),
+            payer,
+            payer_token_account_key,
+            payer_token_account: token_account(mint, payer, 2_000_000),
+            treasury_config_key,
+            treasury_config: TreasuryConfigV2 {
+                authority: treasury_authority,
+                usdc_mint: mint,
+                alpha_mint: Pubkey::new_from_array([44; 32]),
+                bump: 8,
+            },
+            treasury_usdc_state_key,
+            treasury_usdc_state: TreasuryUsdcStateV2 {
+                total_usdc_inflow: 0,
+                relief_usdc_total: 0,
+                buyback_usdc_total: 0,
+                builders_usdc_total: 0,
+                staking_usdc_total: 0,
+                bump: 9,
+            },
+            revenue_routing_stats_key,
+            revenue_routing_stats: RevenueRoutingStatsV1 {
+                authority: treasury_authority,
+                usdc_mint: mint,
+                total_routed_usdc: 0,
+                green_label_certification_fee_total: 0,
+                green_label_forfeited_bond_total: 0,
+                protocol_service_fee_total: 0,
+                platform_revenue_total: 0,
+                partnership_revenue_total: 0,
+                manual_governance_approved_revenue_total: 0,
+                bump: 10,
+            },
+            vault_authority,
+            relief_vault_key,
+            relief_vault: token_account(mint, vault_authority, 0),
+            buyback_vault_key,
+            buyback_vault: token_account(mint, vault_authority, 0),
+            builders_vault_key,
+            builders_vault: token_account(mint, vault_authority, 0),
+            staking_vault_key,
+            staking_vault: token_account(mint, vault_authority, 0),
+            usdc_decimals: GREEN_LABEL_USDC_DECIMALS,
+        }
+    }
+
+    fn token_account(mint: Pubkey, owner: Pubkey, amount: u64) -> TokenAccount {
+        let account = SplTokenAccount {
+            mint,
+            owner,
+            amount,
+            delegate: COption::None,
+            state: AccountState::Initialized,
+            is_native: COption::None,
+            delegated_amount: 0,
+            close_authority: COption::None,
+        };
+        let mut data = vec![0; SplTokenAccount::LEN];
+        SplTokenAccount::pack(account, &mut data).unwrap();
+        TokenAccount::try_deserialize_unchecked(&mut data.as_slice()).unwrap()
+    }
+
+    fn blank_certification_fee_policy() -> GreenLabelCertificationFeePolicyV1 {
+        GreenLabelCertificationFeePolicyV1 {
+            green_label_config: Pubkey::default(),
+            usdc_mint: Pubkey::default(),
+            fee_amount_usdc: 0,
+            policy_version: 0,
+            active: false,
+            initialized_by: Pubkey::default(),
+            created_at: 0,
+            schema_version: 0,
+            bump: 0,
+        }
+    }
+
+    fn certification_fee_policy(
+        green_label_config: Pubkey,
+        usdc_mint: Pubkey,
+        fee_amount_usdc: u64,
+    ) -> GreenLabelCertificationFeePolicyV1 {
+        GreenLabelCertificationFeePolicyV1 {
+            green_label_config,
+            usdc_mint,
+            fee_amount_usdc,
+            policy_version: GREEN_LABEL_CERTIFICATION_FEE_POLICY_VERSION,
+            active: true,
+            initialized_by: Pubkey::new_from_array([1; 32]),
+            created_at: 100,
+            schema_version: GREEN_LABEL_CERTIFICATION_FEE_SCHEMA_VERSION,
+            bump: 7,
+        }
+    }
+
+    fn blank_certification_fee_receipt() -> GreenLabelCertificationFeeReceiptV1 {
+        GreenLabelCertificationFeeReceiptV1 {
+            green_label_config: Pubkey::default(),
+            fee_policy: Pubkey::default(),
+            policy_version: 0,
+            green_label_project: Pubkey::default(),
+            project_id: 0,
+            project_owner: Pubkey::default(),
+            payer: Pubkey::default(),
+            payer_token_account: Pubkey::default(),
+            amount_usdc: 0,
+            usdc_mint: Pubkey::default(),
+            treasury_config: Pubkey::default(),
+            treasury_usdc_state: Pubkey::default(),
+            revenue_routing_stats: Pubkey::default(),
+            relief_usdc_vault: Pubkey::default(),
+            buyback_usdc_vault: Pubkey::default(),
+            builders_usdc_vault: Pubkey::default(),
+            staking_usdc_vault: Pubkey::default(),
+            revenue_type: RevenueType::GreenLabelCertificationFee,
+            parameters_hash: [0; 32],
+            routed_at: 0,
+            schema_version: 0,
+            bump: 0,
         }
     }
 

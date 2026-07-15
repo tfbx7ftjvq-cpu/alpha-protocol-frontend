@@ -478,4 +478,46 @@ pub enum CustomError {
 
     #[msg("Legacy Green Label forfeit is disabled")]
     LegacyGreenLabelForfeitDisabled,
+
+    #[msg("Green Label certification fee policy is already initialized")]
+    GreenLabelCertificationFeePolicyAlreadyInitialized,
+
+    #[msg("Invalid Green Label certification fee policy schema")]
+    InvalidGreenLabelCertificationFeePolicySchema,
+
+    #[msg("Green Label certification fee policy is inactive")]
+    GreenLabelCertificationFeePolicyInactive,
+
+    #[msg("Invalid Green Label certification fee amount")]
+    InvalidGreenLabelCertificationFeeAmount,
+
+    #[msg("Green Label certification fee project mismatch")]
+    GreenLabelCertificationFeeProjectMismatch,
+
+    #[msg("Green Label certification fee payer mismatch")]
+    GreenLabelCertificationFeePayerMismatch,
+
+    #[msg("Green Label certification fee status mismatch")]
+    GreenLabelCertificationFeeStatusMismatch,
+
+    #[msg("Green Label certification fee mint mismatch")]
+    GreenLabelCertificationFeeMintMismatch,
+
+    #[msg("Green Label certification fee decimals mismatch")]
+    GreenLabelCertificationFeeDecimalsMismatch,
+
+    #[msg("Green Label certification fee treasury mismatch")]
+    GreenLabelCertificationFeeTreasuryMismatch,
+
+    #[msg("Green Label certification fee parameters mismatch")]
+    GreenLabelCertificationFeeParametersMismatch,
+
+    #[msg("Green Label certification fee is already paid")]
+    GreenLabelCertificationFeeAlreadyPaid,
+
+    #[msg("Legacy Green Label certification fee route is disabled")]
+    LegacyGreenLabelCertificationFeeRouteDisabled,
+
+    #[msg("Green Label certification fee has insufficient funds")]
+    GreenLabelCertificationFeeInsufficientFunds,
 }

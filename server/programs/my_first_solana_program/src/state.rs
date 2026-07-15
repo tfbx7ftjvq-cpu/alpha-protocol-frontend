@@ -850,6 +850,53 @@ impl GreenLabelCertificationStateV1 {
 }
 
 #[account]
+pub struct GreenLabelCertificationFeePolicyV1 {
+    pub green_label_config: Pubkey,
+    pub usdc_mint: Pubkey,
+    pub fee_amount_usdc: u64,
+    pub policy_version: u64,
+    pub active: bool,
+    pub initialized_by: Pubkey,
+    pub created_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+}
+
+impl GreenLabelCertificationFeePolicyV1 {
+    pub const INIT_SPACE: usize = (32 * 3) + (8 * 3) + 1 + 2 + 1;
+}
+
+#[account]
+pub struct GreenLabelCertificationFeeReceiptV1 {
+    pub green_label_config: Pubkey,
+    pub fee_policy: Pubkey,
+    pub policy_version: u64,
+    pub green_label_project: Pubkey,
+    pub project_id: u64,
+    pub project_owner: Pubkey,
+    pub payer: Pubkey,
+    pub payer_token_account: Pubkey,
+    pub amount_usdc: u64,
+    pub usdc_mint: Pubkey,
+    pub treasury_config: Pubkey,
+    pub treasury_usdc_state: Pubkey,
+    pub revenue_routing_stats: Pubkey,
+    pub relief_usdc_vault: Pubkey,
+    pub buyback_usdc_vault: Pubkey,
+    pub builders_usdc_vault: Pubkey,
+    pub staking_usdc_vault: Pubkey,
+    pub revenue_type: RevenueType,
+    pub parameters_hash: [u8; 32],
+    pub routed_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+}
+
+impl GreenLabelCertificationFeeReceiptV1 {
+    pub const INIT_SPACE: usize = (32 * 14) + (8 * 4) + 1 + 32 + 2 + 1;
+}
+
+#[account]
 pub struct GreenLabelCertificationExecutionRecordV1 {
     pub execution_queue_item: Pubkey,
     pub proposal_decision: Pubkey,

@@ -542,11 +542,27 @@ pub mod my_first_solana_program {
         instructions::green_label_v1::deposit_green_label_refundable_bond_v1_handler(ctx, amount)
     }
 
+    pub fn initialize_green_label_certification_fee_policy_v1(
+        ctx: Context<InitializeGreenLabelCertificationFeePolicyV1>,
+        fee_amount_usdc: u64,
+    ) -> Result<()> {
+        instructions::green_label_v1::initialize_green_label_certification_fee_policy_v1_handler(
+            ctx,
+            fee_amount_usdc,
+        )
+    }
+
     pub fn route_green_label_certification_fee_v1(
         ctx: Context<RouteGreenLabelCertificationFeeV1>,
         amount: u64,
     ) -> Result<()> {
         instructions::green_label_v1::route_green_label_certification_fee_v1_handler(ctx, amount)
+    }
+
+    pub fn route_green_label_certification_fee_once_v1(
+        ctx: Context<RouteGreenLabelCertificationFeeOnceV1>,
+    ) -> Result<()> {
+        instructions::green_label_v1::route_green_label_certification_fee_once_v1_handler(ctx)
     }
 
     pub fn initialize_green_label_certification_state_v1(
