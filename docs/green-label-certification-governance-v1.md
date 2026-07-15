@@ -240,3 +240,17 @@ This phase does not claim that legacy authority bypasses or legacy slash bypasse
 This is a local implementation milestone only. It is not Devnet-verified, not Mainnet-verified, and does not make token launch ready.
 
 Mainnet and token launch remain NO-GO.
+
+## Stage 5B-2 Refund Boundary
+
+Phase 2E-FINAL Stage 5B-2 adds a separate strict governance path for Green Label refundable escrow refunds.
+
+Certification decisions remain separate from refund decisions:
+
+- reject certification does not auto refund
+- revoke certification does not auto slash
+- refund must use `GovernanceActionTypeV1::GreenLabelRefundBond`
+- refund target account is the refundable escrow, not the project or dispute
+- refund parameters bind the original payer, destination token account, vault, mint, amount, and queue
+
+The refund path does not collect certification fees and does not route funds through Treasury 50 / 20 / 20 / 10 split.

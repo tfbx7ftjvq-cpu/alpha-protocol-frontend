@@ -197,3 +197,32 @@ This phase does not implement:
 - authority migration
 
 Mainnet remains NO-GO.
+
+## Stage 5B-2 Green Label Refund Parameters Binding
+
+Phase 2E-FINAL Stage 5B-2 uses `GovernanceProposalActionV1.parameters_hash`
+as the trusted binding for Green Label refundable escrow refunds.
+
+For strict refund wrappers, the program rebuilds
+`GreenLabelRefundParametersV1` from real accounts:
+
+- Green Label config
+- Green Label project
+- optional Green Label dispute
+- refundable escrow
+- refundable vault
+- original payer
+- payer destination token account
+- derived refund amount
+- USDC mint
+- expected escrow status
+- proposal id
+- governance action type
+
+If the rebuilt parameters hash differs from the DAO-voted sidecar, refund fails.
+The adapter and wrapper do not accept caller-controlled action, target, amount,
+destination, or payload data.
+
+The sidecar target for refund is the refundable escrow. The refund path sends
+funds only from the escrow vault to the original payer token account and does
+not pass through Treasury split.

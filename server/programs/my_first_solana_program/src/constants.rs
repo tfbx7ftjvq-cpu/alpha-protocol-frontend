@@ -47,6 +47,8 @@ pub const GREEN_LABEL_REFUNDABLE_VAULT_SEED: &[u8] = b"green_label_refundable_va
 pub const GREEN_LABEL_CERTIFICATION_STATE_SEED: &[u8] = b"green_label_certification_state_v1";
 pub const GREEN_LABEL_CERTIFICATION_EXECUTION_RECORD_SEED: &[u8] =
     b"green_label_certification_execution_record_v1";
+pub const GREEN_LABEL_REFUND_EXECUTION_RECORD_SEED: &[u8] =
+    b"green_label_refund_execution_record_v1";
 pub const CONTRIBUTOR_REGISTRY_V1_SEED: &[u8] = b"contributor_registry_v1";
 pub const CONTRIBUTOR_MILESTONE_V1_SEED: &[u8] = b"contributor_milestone_v1";
 pub const BUILDER_PAYOUT_REQUEST_V1_SEED: &[u8] = b"builder_payout_request_v1";

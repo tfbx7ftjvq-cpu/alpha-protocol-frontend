@@ -898,3 +898,72 @@ Suggested next implementation sequence:
 7. Add refund and slash execution gates.
 8. Add Devnet scripts that print `Transaction signature: <signature>` for successful transactions.
 9. Add focused Devnet tests for refund, slash, pause-blocked, and cancel-blocked paths.
+
+## 14. Strict Refund Governance Path
+
+Phase 2E-FINAL Stage 5B-2 adds a strict DAO-governed refundable escrow refund path.
+
+The new path is:
+
+```text
+GovernanceProposalV1
+-> GovernanceProposalActionV1
+-> GreenLabel ProtocolModuleRegistryV1
+-> UniversalGovernanceDecisionAdapterV1
+-> ProposalDecisionV1 Approved
+-> ExecutionQueueItemV1 Executed
+-> strict Green Label refund wrapper
+-> refundable escrow vault
+-> original payer USDC token account
+-> GreenLabelRefundExecutionRecordV1
+```
+
+Refundable escrow funds are not protocol revenue. A normal refund does not go
+through the Treasury Router, does not update `RevenueRoutingStatsV1`, does not
+update `TreasuryUsdcStateV2`, does not use the 50 / 20 / 20 / 10 split, and does
+not create `TreasuryExecutionRecordV1`.
+
+Strict refund binds the exact execution context through
+`GreenLabelRefundParametersV1`:
+
+- Green Label config
+- Green Label project
+- optional Green Label dispute
+- refundable escrow
+- refundable vault
+- original payer
+- payer destination token account
+- derived refund amount
+- USDC mint
+- expected escrow status
+- proposal id
+- governance action type
+
+The target account for `GovernanceActionTypeV1::GreenLabelRefundBond` is the
+refundable escrow. It is not the project or dispute. The executor is
+permissionless but cannot choose refund parameters.
+
+The refund amount is derived only from escrow stored liability:
+
+```text
+refundable_amount - refunded_amount - forfeited_amount
+```
+
+`refundable_vault.amount` is not the governance amount source. The vault balance
+only needs to be greater than or equal to the recorded refund amount. If a third
+party sends compatible USDC dust to the refundable vault after proposal
+creation, the dust must not increase the payer refund and must not invalidate the
+proposal. Only the recorded amount is transferred; excess token dust remains in
+the vault, does not enter Treasury, and is not counted in revenue stats.
+
+V1 does not include a dust recovery instruction. Any future dust recovery must
+be separately designed under governance and must not allow arbitrary authority
+withdrawal from escrow vaults.
+
+Security queue status `Executed` only proves the Security timelock released the
+decision. The business refund is complete only after
+`GreenLabelRefundExecutionRecordV1` is created.
+
+Reject and revoke certification do not auto refund. Legacy refund and slash
+paths remain for compatibility. Legacy slash bypass and `DaoControlled` mode are
+not solved in this stage.

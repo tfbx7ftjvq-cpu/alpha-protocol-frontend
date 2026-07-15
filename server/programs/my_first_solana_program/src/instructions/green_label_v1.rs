@@ -13,10 +13,10 @@ use crate::constants::{
     GREEN_LABEL_GOLD_TIER_THRESHOLD_USDC, GREEN_LABEL_PLATINUM_TIER_THRESHOLD_USDC,
     GREEN_LABEL_PROJECT_RESERVED_BYTES, GREEN_LABEL_PROJECT_SEED, GREEN_LABEL_PROJECT_SPACE,
     GREEN_LABEL_REFUNDABLE_ESCROW_SEED, GREEN_LABEL_REFUNDABLE_VAULT_SEED,
-    GREEN_LABEL_SILVER_TIER_THRESHOLD_USDC, GREEN_LABEL_USDC_DECIMALS, MAX_BPS,
-    MIN_GREEN_LABEL_BASE_BOND_USDC, PROPOSAL_DECISION_V1_SEED, PROTOCOL_MODULE_REGISTRY_V1_SEED,
-    RELIEF_USDC_VAULT_SEED, REVENUE_ROUTING_STATS_V1_SEED, STAKING_USDC_VAULT_SEED,
-    TREASURY_CONFIG_V2_SEED, TREASURY_USDC_STATE_V2_SEED,
+    GREEN_LABEL_REFUND_EXECUTION_RECORD_SEED, GREEN_LABEL_SILVER_TIER_THRESHOLD_USDC,
+    GREEN_LABEL_USDC_DECIMALS, MAX_BPS, MIN_GREEN_LABEL_BASE_BOND_USDC, PROPOSAL_DECISION_V1_SEED,
+    PROTOCOL_MODULE_REGISTRY_V1_SEED, RELIEF_USDC_VAULT_SEED, REVENUE_ROUTING_STATS_V1_SEED,
+    STAKING_USDC_VAULT_SEED, TREASURY_CONFIG_V2_SEED, TREASURY_USDC_STATE_V2_SEED,
     UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED, VAULT_AUTHORITY_V2_SEED,
 };
 use crate::error::CustomError;
@@ -33,7 +33,8 @@ use crate::state::{
     GovernanceProposalStatusV1, GovernanceProposalV1, GreenLabelCertificationExecutionRecordV1,
     GreenLabelCertificationExecutionTypeV1, GreenLabelCertificationStateV1,
     GreenLabelCertificationStatusV1, GreenLabelConfigV1, GreenLabelDisputeV1,
-    GreenLabelEscrowStatusV1, GreenLabelProjectV1, GreenLabelRefundableEscrowV1, GreenLabelStatus,
+    GreenLabelEscrowExecutionTypeV1, GreenLabelEscrowStatusV1, GreenLabelProjectV1,
+    GreenLabelRefundExecutionRecordV1, GreenLabelRefundableEscrowV1, GreenLabelStatus,
     ProposalDecision, ProposalDecisionV1, ProposalType, ProtocolModuleIdV1,
     ProtocolModuleRegistryV1, RevenueRoutingStatsV1, RevenueType, RugReasonCode, TreasuryConfigV2,
     TreasuryUsdcStateV2, UniversalGovernanceDecisionAdapterV1,
@@ -43,6 +44,9 @@ pub const MAX_GREEN_LABEL_WINDOW_SECONDS: i64 = 30 * 24 * 60 * 60;
 pub const GREEN_LABEL_CERTIFICATION_SCHEMA_VERSION: u16 = 1;
 pub const GREEN_LABEL_CERTIFICATION_DECISION_PARAMETERS_V1_DOMAIN: &[u8] =
     b"alpha_green_label_certification_decision_v1";
+pub const GREEN_LABEL_REFUND_SCHEMA_VERSION: u16 = 1;
+pub const GREEN_LABEL_REFUND_PARAMETERS_V1_DOMAIN: &[u8] =
+    b"alpha_green_label_refund_parameters_v1";
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GreenLabelCertificationDecisionParametersV1 {
@@ -59,6 +63,23 @@ pub struct GreenLabelCertificationDecisionParametersV1 {
     pub expected_project_status: GreenLabelStatus,
     pub expected_certification_status: GreenLabelCertificationStatusV1,
     pub proposal_id: u64,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GreenLabelRefundParametersV1 {
+    pub schema_version: u16,
+    pub green_label_config: Pubkey,
+    pub green_label_project: Pubkey,
+    pub green_label_dispute: Pubkey,
+    pub refundable_escrow: Pubkey,
+    pub refundable_vault: Pubkey,
+    pub original_payer: Pubkey,
+    pub payer_destination_token_account: Pubkey,
+    pub refund_amount_usdc: u64,
+    pub usdc_mint: Pubkey,
+    pub expected_escrow_status: GreenLabelEscrowStatusV1,
+    pub proposal_id: u64,
+    pub action_type: GovernanceActionTypeV1,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1078,6 +1099,268 @@ pub struct ExecuteGreenLabelRevokeCertificationV1<'info> {
 }
 
 #[derive(Accounts)]
+pub struct ExecuteGreenLabelRefundNoDisputeGovernanceV1<'info> {
+    #[account(seeds = [GREEN_LABEL_CONFIG_SEED], bump = green_label_config.bump)]
+    pub green_label_config: Box<Account<'info, GreenLabelConfigV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            GREEN_LABEL_PROJECT_SEED,
+            &green_label_project.project_id.to_le_bytes()
+        ],
+        bump = green_label_project.bump
+    )]
+    pub green_label_project: Box<Account<'info, GreenLabelProjectV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            GREEN_LABEL_REFUNDABLE_ESCROW_SEED,
+            green_label_project.key().as_ref()
+        ],
+        bump = green_label_refundable_escrow.bump,
+        constraint = green_label_refundable_escrow.project == green_label_project.key() @ CustomError::GreenLabelRefundTargetMismatch,
+        constraint = green_label_refundable_escrow.usdc_mint == green_label_config.usdc_mint @ CustomError::GreenLabelRefundMintMismatch
+    )]
+    pub green_label_refundable_escrow: Box<Account<'info, GreenLabelRefundableEscrowV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            GREEN_LABEL_REFUNDABLE_VAULT_SEED,
+            green_label_refundable_escrow.key().as_ref()
+        ],
+        bump = green_label_refundable_escrow.vault_bump,
+        constraint = refundable_vault.mint == green_label_refundable_escrow.usdc_mint @ CustomError::GreenLabelRefundMintMismatch,
+        constraint = refundable_vault.owner == green_label_refundable_escrow.key() @ CustomError::GreenLabelRefundVaultMismatch
+    )]
+    pub refundable_vault: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        mut,
+        constraint = payer_refund_usdc_account.owner == green_label_refundable_escrow.payer @ CustomError::GreenLabelRefundWrongDestination,
+        constraint = payer_refund_usdc_account.mint == green_label_refundable_escrow.usdc_mint @ CustomError::GreenLabelRefundMintMismatch
+    )]
+    pub payer_refund_usdc_account: Box<Account<'info, TokenAccount>>,
+
+    #[account(constraint = usdc_mint.key() == green_label_refundable_escrow.usdc_mint @ CustomError::GreenLabelRefundMintMismatch)]
+    pub usdc_mint: Box<Account<'info, Mint>>,
+
+    #[account(seeds = [GOVERNANCE_CONFIG_V1_SEED], bump = security_governance_config.bump)]
+    pub security_governance_config: Box<Account<'info, GovernanceConfigV1>>,
+
+    #[account(
+        seeds = [
+            PROTOCOL_MODULE_REGISTRY_V1_SEED,
+            &[protocol_module_stable_code_v1(ProtocolModuleIdV1::GreenLabel)]
+        ],
+        bump = protocol_module_registry.bump
+    )]
+    pub protocol_module_registry: Box<Account<'info, ProtocolModuleRegistryV1>>,
+
+    #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_V1_SEED,
+            &governance_proposal.proposal_id.to_le_bytes()
+        ],
+        bump = governance_proposal.bump
+    )]
+    pub governance_proposal: Box<Account<'info, GovernanceProposalV1>>,
+
+    #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_proposal_action.bump
+    )]
+    pub governance_proposal_action: Box<Account<'info, GovernanceProposalActionV1>>,
+
+    #[account(
+        seeds = [
+            UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_decision_adapter.bump
+    )]
+    pub governance_decision_adapter: Box<Account<'info, UniversalGovernanceDecisionAdapterV1>>,
+
+    #[account(
+        seeds = [
+            PROPOSAL_DECISION_V1_SEED,
+            &governance_proposal.proposal_id.to_le_bytes()
+        ],
+        bump = proposal_decision.bump
+    )]
+    pub proposal_decision: Box<Account<'info, ProposalDecisionV1>>,
+
+    #[account(
+        seeds = [
+            EXECUTION_QUEUE_ITEM_V1_SEED,
+            &governance_proposal.proposal_id.to_le_bytes()
+        ],
+        bump = execution_queue_item.bump
+    )]
+    pub execution_queue_item: Box<Account<'info, ExecutionQueueItemV1>>,
+
+    #[account(
+        init,
+        payer = executor,
+        space = 8 + GreenLabelRefundExecutionRecordV1::INIT_SPACE,
+        seeds = [
+            GREEN_LABEL_REFUND_EXECUTION_RECORD_SEED,
+            execution_queue_item.key().as_ref()
+        ],
+        bump
+    )]
+    pub green_label_refund_execution_record: Box<Account<'info, GreenLabelRefundExecutionRecordV1>>,
+
+    #[account(mut)]
+    pub executor: Signer<'info>,
+
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ExecuteGreenLabelRefundDisputeGovernanceV1<'info> {
+    #[account(seeds = [GREEN_LABEL_CONFIG_SEED], bump = green_label_config.bump)]
+    pub green_label_config: Box<Account<'info, GreenLabelConfigV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            GREEN_LABEL_PROJECT_SEED,
+            &green_label_project.project_id.to_le_bytes()
+        ],
+        bump = green_label_project.bump
+    )]
+    pub green_label_project: Box<Account<'info, GreenLabelProjectV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            GREEN_LABEL_DISPUTE_SEED,
+            green_label_project.key().as_ref(),
+            &green_label_dispute.dispute_id.to_le_bytes()
+        ],
+        bump = green_label_dispute.bump,
+        constraint = green_label_dispute.project == green_label_project.key() @ CustomError::GreenLabelRefundTargetMismatch
+    )]
+    pub green_label_dispute: Box<Account<'info, GreenLabelDisputeV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            GREEN_LABEL_REFUNDABLE_ESCROW_SEED,
+            green_label_project.key().as_ref()
+        ],
+        bump = green_label_refundable_escrow.bump,
+        constraint = green_label_refundable_escrow.project == green_label_project.key() @ CustomError::GreenLabelRefundTargetMismatch,
+        constraint = green_label_refundable_escrow.usdc_mint == green_label_config.usdc_mint @ CustomError::GreenLabelRefundMintMismatch
+    )]
+    pub green_label_refundable_escrow: Box<Account<'info, GreenLabelRefundableEscrowV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            GREEN_LABEL_REFUNDABLE_VAULT_SEED,
+            green_label_refundable_escrow.key().as_ref()
+        ],
+        bump = green_label_refundable_escrow.vault_bump,
+        constraint = refundable_vault.mint == green_label_refundable_escrow.usdc_mint @ CustomError::GreenLabelRefundMintMismatch,
+        constraint = refundable_vault.owner == green_label_refundable_escrow.key() @ CustomError::GreenLabelRefundVaultMismatch
+    )]
+    pub refundable_vault: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        mut,
+        constraint = payer_refund_usdc_account.owner == green_label_refundable_escrow.payer @ CustomError::GreenLabelRefundWrongDestination,
+        constraint = payer_refund_usdc_account.mint == green_label_refundable_escrow.usdc_mint @ CustomError::GreenLabelRefundMintMismatch
+    )]
+    pub payer_refund_usdc_account: Box<Account<'info, TokenAccount>>,
+
+    #[account(constraint = usdc_mint.key() == green_label_refundable_escrow.usdc_mint @ CustomError::GreenLabelRefundMintMismatch)]
+    pub usdc_mint: Box<Account<'info, Mint>>,
+
+    #[account(seeds = [GOVERNANCE_CONFIG_V1_SEED], bump = security_governance_config.bump)]
+    pub security_governance_config: Box<Account<'info, GovernanceConfigV1>>,
+
+    #[account(
+        seeds = [
+            PROTOCOL_MODULE_REGISTRY_V1_SEED,
+            &[protocol_module_stable_code_v1(ProtocolModuleIdV1::GreenLabel)]
+        ],
+        bump = protocol_module_registry.bump
+    )]
+    pub protocol_module_registry: Box<Account<'info, ProtocolModuleRegistryV1>>,
+
+    #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_V1_SEED,
+            &governance_proposal.proposal_id.to_le_bytes()
+        ],
+        bump = governance_proposal.bump
+    )]
+    pub governance_proposal: Box<Account<'info, GovernanceProposalV1>>,
+
+    #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_proposal_action.bump
+    )]
+    pub governance_proposal_action: Box<Account<'info, GovernanceProposalActionV1>>,
+
+    #[account(
+        seeds = [
+            UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_decision_adapter.bump
+    )]
+    pub governance_decision_adapter: Box<Account<'info, UniversalGovernanceDecisionAdapterV1>>,
+
+    #[account(
+        seeds = [
+            PROPOSAL_DECISION_V1_SEED,
+            &governance_proposal.proposal_id.to_le_bytes()
+        ],
+        bump = proposal_decision.bump
+    )]
+    pub proposal_decision: Box<Account<'info, ProposalDecisionV1>>,
+
+    #[account(
+        seeds = [
+            EXECUTION_QUEUE_ITEM_V1_SEED,
+            &governance_proposal.proposal_id.to_le_bytes()
+        ],
+        bump = execution_queue_item.bump
+    )]
+    pub execution_queue_item: Box<Account<'info, ExecutionQueueItemV1>>,
+
+    #[account(
+        init,
+        payer = executor,
+        space = 8 + GreenLabelRefundExecutionRecordV1::INIT_SPACE,
+        seeds = [
+            GREEN_LABEL_REFUND_EXECUTION_RECORD_SEED,
+            execution_queue_item.key().as_ref()
+        ],
+        bump
+    )]
+    pub green_label_refund_execution_record: Box<Account<'info, GreenLabelRefundExecutionRecordV1>>,
+
+    #[account(mut)]
+    pub executor: Signer<'info>,
+
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 pub struct RefundGreenLabelEscrowV1<'info> {
     #[account(
         seeds = [
@@ -1648,7 +1931,7 @@ pub fn execute_green_label_refund_handler(ctx: Context<ExecuteGreenLabelRefund>)
 
     record_green_label_refunded(
         &mut ctx.accounts.green_label_project,
-        Some(&mut ctx.accounts.green_label_dispute),
+        Some(ctx.accounts.green_label_dispute.as_mut()),
         now,
     )
 }
@@ -2115,6 +2398,225 @@ pub fn execute_green_label_revoke_certification_v1_handler(
     )
 }
 
+pub fn execute_green_label_refund_no_dispute_governance_v1_handler(
+    ctx: Context<ExecuteGreenLabelRefundNoDisputeGovernanceV1>,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let project_key = ctx.accounts.green_label_project.key();
+    let config_key = ctx.accounts.green_label_config.key();
+    let escrow_key = ctx.accounts.green_label_refundable_escrow.key();
+    let refundable_vault_key = ctx.accounts.refundable_vault.key();
+    let destination_key = ctx.accounts.payer_refund_usdc_account.key();
+    let record_key = ctx.accounts.green_label_refund_execution_record.key();
+    let refund_amount =
+        derive_green_label_refund_amount_v1(&ctx.accounts.green_label_refundable_escrow)?;
+    let parameters = build_green_label_refund_parameters_v1(
+        config_key,
+        project_key,
+        Pubkey::default(),
+        escrow_key,
+        refundable_vault_key,
+        ctx.accounts.green_label_refundable_escrow.payer,
+        destination_key,
+        refund_amount,
+        ctx.accounts.green_label_refundable_escrow.usdc_mint,
+        ctx.accounts.green_label_refundable_escrow.status,
+        ctx.accounts.governance_proposal.proposal_id,
+    )?;
+
+    validate_green_label_refund_execution_context_v1(
+        &ctx.accounts.security_governance_config,
+        ctx.accounts.security_governance_config.key(),
+        &ctx.accounts.green_label_config,
+        config_key,
+        &ctx.accounts.green_label_project,
+        project_key,
+        None,
+        &ctx.accounts.green_label_refundable_escrow,
+        escrow_key,
+        &ctx.accounts.protocol_module_registry,
+        ctx.accounts.protocol_module_registry.key(),
+        &ctx.accounts.governance_proposal,
+        ctx.accounts.governance_proposal.key(),
+        &ctx.accounts.governance_proposal_action,
+        ctx.accounts.governance_proposal_action.key(),
+        &ctx.accounts.governance_decision_adapter,
+        ctx.accounts.governance_decision_adapter.key(),
+        &ctx.accounts.proposal_decision,
+        ctx.accounts.proposal_decision.key(),
+        &ctx.accounts.execution_queue_item,
+        ctx.accounts.execution_queue_item.key(),
+        refundable_vault_key,
+        ctx.accounts.refundable_vault.mint,
+        ctx.accounts.refundable_vault.owner,
+        destination_key,
+        ctx.accounts.payer_refund_usdc_account.owner,
+        ctx.accounts.payer_refund_usdc_account.mint,
+        ctx.accounts.usdc_mint.key(),
+        ctx.accounts.usdc_mint.decimals,
+        ctx.accounts.refundable_vault.amount,
+        false,
+        now,
+        &parameters,
+    )?;
+
+    let escrow_status_before = ctx.accounts.green_label_refundable_escrow.status;
+    let project_status_before = ctx.accounts.green_label_project.status;
+    let escrow_info = ctx.accounts.green_label_refundable_escrow.to_account_info();
+    let refundable_vault_info = ctx.accounts.refundable_vault.to_account_info();
+    let usdc_mint_info = ctx.accounts.usdc_mint.to_account_info();
+    let payer_refund_info = ctx.accounts.payer_refund_usdc_account.to_account_info();
+    execute_green_label_escrow_refund_internal_v1(
+        &mut ctx.accounts.green_label_refundable_escrow,
+        escrow_info,
+        refundable_vault_info,
+        usdc_mint_info,
+        payer_refund_info,
+        ctx.accounts.token_program.key(),
+        project_key,
+        refund_amount,
+    )?;
+    record_green_label_refund_governance_v1(
+        &mut ctx.accounts.green_label_project,
+        None,
+        &mut ctx.accounts.green_label_refund_execution_record,
+        ctx.accounts.execution_queue_item.key(),
+        ctx.accounts.proposal_decision.key(),
+        ctx.accounts.governance_proposal.key(),
+        ctx.accounts.governance_proposal_action.key(),
+        ctx.accounts.protocol_module_registry.key(),
+        config_key,
+        project_key,
+        Pubkey::default(),
+        escrow_key,
+        refundable_vault_key,
+        ctx.accounts.green_label_refundable_escrow.payer,
+        destination_key,
+        refund_amount,
+        ctx.accounts.green_label_refundable_escrow.usdc_mint,
+        parameters,
+        ctx.accounts
+            .governance_proposal_action
+            .canonical_payload_hash,
+        escrow_status_before,
+        project_status_before,
+        ctx.accounts.executor.key(),
+        now,
+        ctx.bumps.green_label_refund_execution_record,
+        record_key,
+    )
+}
+
+pub fn execute_green_label_refund_dispute_governance_v1_handler(
+    ctx: Context<ExecuteGreenLabelRefundDisputeGovernanceV1>,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let project_key = ctx.accounts.green_label_project.key();
+    let dispute_key = ctx.accounts.green_label_dispute.key();
+    let config_key = ctx.accounts.green_label_config.key();
+    let escrow_key = ctx.accounts.green_label_refundable_escrow.key();
+    let refundable_vault_key = ctx.accounts.refundable_vault.key();
+    let destination_key = ctx.accounts.payer_refund_usdc_account.key();
+    let record_key = ctx.accounts.green_label_refund_execution_record.key();
+    let refund_amount =
+        derive_green_label_refund_amount_v1(&ctx.accounts.green_label_refundable_escrow)?;
+    let parameters = build_green_label_refund_parameters_v1(
+        config_key,
+        project_key,
+        dispute_key,
+        escrow_key,
+        refundable_vault_key,
+        ctx.accounts.green_label_refundable_escrow.payer,
+        destination_key,
+        refund_amount,
+        ctx.accounts.green_label_refundable_escrow.usdc_mint,
+        ctx.accounts.green_label_refundable_escrow.status,
+        ctx.accounts.governance_proposal.proposal_id,
+    )?;
+
+    validate_green_label_refund_execution_context_v1(
+        &ctx.accounts.security_governance_config,
+        ctx.accounts.security_governance_config.key(),
+        &ctx.accounts.green_label_config,
+        config_key,
+        &ctx.accounts.green_label_project,
+        project_key,
+        Some(ctx.accounts.green_label_dispute.as_ref()),
+        &ctx.accounts.green_label_refundable_escrow,
+        escrow_key,
+        &ctx.accounts.protocol_module_registry,
+        ctx.accounts.protocol_module_registry.key(),
+        &ctx.accounts.governance_proposal,
+        ctx.accounts.governance_proposal.key(),
+        &ctx.accounts.governance_proposal_action,
+        ctx.accounts.governance_proposal_action.key(),
+        &ctx.accounts.governance_decision_adapter,
+        ctx.accounts.governance_decision_adapter.key(),
+        &ctx.accounts.proposal_decision,
+        ctx.accounts.proposal_decision.key(),
+        &ctx.accounts.execution_queue_item,
+        ctx.accounts.execution_queue_item.key(),
+        refundable_vault_key,
+        ctx.accounts.refundable_vault.mint,
+        ctx.accounts.refundable_vault.owner,
+        destination_key,
+        ctx.accounts.payer_refund_usdc_account.owner,
+        ctx.accounts.payer_refund_usdc_account.mint,
+        ctx.accounts.usdc_mint.key(),
+        ctx.accounts.usdc_mint.decimals,
+        ctx.accounts.refundable_vault.amount,
+        true,
+        now,
+        &parameters,
+    )?;
+
+    let escrow_status_before = ctx.accounts.green_label_refundable_escrow.status;
+    let project_status_before = ctx.accounts.green_label_project.status;
+    let escrow_info = ctx.accounts.green_label_refundable_escrow.to_account_info();
+    let refundable_vault_info = ctx.accounts.refundable_vault.to_account_info();
+    let usdc_mint_info = ctx.accounts.usdc_mint.to_account_info();
+    let payer_refund_info = ctx.accounts.payer_refund_usdc_account.to_account_info();
+    execute_green_label_escrow_refund_internal_v1(
+        &mut ctx.accounts.green_label_refundable_escrow,
+        escrow_info,
+        refundable_vault_info,
+        usdc_mint_info,
+        payer_refund_info,
+        ctx.accounts.token_program.key(),
+        project_key,
+        refund_amount,
+    )?;
+    record_green_label_refund_governance_v1(
+        &mut ctx.accounts.green_label_project,
+        Some(&mut ctx.accounts.green_label_dispute),
+        &mut ctx.accounts.green_label_refund_execution_record,
+        ctx.accounts.execution_queue_item.key(),
+        ctx.accounts.proposal_decision.key(),
+        ctx.accounts.governance_proposal.key(),
+        ctx.accounts.governance_proposal_action.key(),
+        ctx.accounts.protocol_module_registry.key(),
+        config_key,
+        project_key,
+        dispute_key,
+        escrow_key,
+        refundable_vault_key,
+        ctx.accounts.green_label_refundable_escrow.payer,
+        destination_key,
+        refund_amount,
+        ctx.accounts.green_label_refundable_escrow.usdc_mint,
+        parameters,
+        ctx.accounts
+            .governance_proposal_action
+            .canonical_payload_hash,
+        escrow_status_before,
+        project_status_before,
+        ctx.accounts.executor.key(),
+        now,
+        ctx.bumps.green_label_refund_execution_record,
+        record_key,
+    )
+}
+
 pub fn refund_green_label_escrow_v1_handler(ctx: Context<RefundGreenLabelEscrowV1>) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
     let refund_amount = validate_green_label_escrow_refund(
@@ -2143,25 +2645,18 @@ pub fn refund_green_label_escrow_v1_handler(ctx: Context<RefundGreenLabelEscrowV
     )?;
 
     let project_key = ctx.accounts.green_label_project.key();
-    let escrow_bump = ctx.accounts.green_label_refundable_escrow.bump;
-    let signer_seeds: &[&[&[u8]]] = &[&[
-        GREEN_LABEL_REFUNDABLE_ESCROW_SEED,
-        project_key.as_ref(),
-        &[escrow_bump],
-    ]];
-
-    let cpi_accounts = TransferChecked {
-        from: ctx.accounts.refundable_vault.to_account_info(),
-        mint: ctx.accounts.usdc_mint.to_account_info(),
-        to: ctx.accounts.payer_refund_usdc_account.to_account_info(),
-        authority: ctx.accounts.green_label_refundable_escrow.to_account_info(),
-    };
-    let cpi_ctx =
-        CpiContext::new_with_signer(ctx.accounts.token_program.key(), cpi_accounts, signer_seeds);
-    transfer_checked(cpi_ctx, refund_amount, GREEN_LABEL_USDC_DECIMALS)?;
-
-    record_green_label_escrow_refunded(
+    let escrow_info = ctx.accounts.green_label_refundable_escrow.to_account_info();
+    let refundable_vault_info = ctx.accounts.refundable_vault.to_account_info();
+    let usdc_mint_info = ctx.accounts.usdc_mint.to_account_info();
+    let payer_refund_info = ctx.accounts.payer_refund_usdc_account.to_account_info();
+    execute_green_label_escrow_refund_internal_v1(
         &mut ctx.accounts.green_label_refundable_escrow,
+        escrow_info,
+        refundable_vault_info,
+        usdc_mint_info,
+        payer_refund_info,
+        ctx.accounts.token_program.key(),
+        project_key,
         refund_amount,
     )
 }
@@ -2955,6 +3450,630 @@ pub fn validate_green_label_certification_status_transition(
         )
     );
     require!(valid, CustomError::GreenLabelCertificationAlreadyFinalized);
+    Ok(())
+}
+
+pub fn green_label_escrow_execution_type_stable_code_v1(
+    execution_type: GreenLabelEscrowExecutionTypeV1,
+) -> u8 {
+    match execution_type {
+        GreenLabelEscrowExecutionTypeV1::Refund => 1,
+    }
+}
+
+pub fn green_label_escrow_execution_type_from_stable_code_v1(
+    code: u8,
+) -> Result<GreenLabelEscrowExecutionTypeV1> {
+    match code {
+        1 => Ok(GreenLabelEscrowExecutionTypeV1::Refund),
+        _ => err!(CustomError::InvalidGreenLabelRefundSchema),
+    }
+}
+
+pub fn hash_green_label_refund_parameters_v1(
+    parameters: &GreenLabelRefundParametersV1,
+) -> Result<[u8; 32]> {
+    require!(
+        parameters.schema_version == GREEN_LABEL_REFUND_SCHEMA_VERSION,
+        CustomError::InvalidGreenLabelRefundSchema
+    );
+    require!(
+        parameters.action_type == GovernanceActionTypeV1::GreenLabelRefundBond,
+        CustomError::GreenLabelRefundActionMismatch
+    );
+    require_keys_neq!(
+        parameters.green_label_config,
+        Pubkey::default(),
+        CustomError::GreenLabelRefundTargetMismatch
+    );
+    require_keys_neq!(
+        parameters.green_label_project,
+        Pubkey::default(),
+        CustomError::GreenLabelRefundTargetMismatch
+    );
+    require_keys_neq!(
+        parameters.refundable_escrow,
+        Pubkey::default(),
+        CustomError::GreenLabelRefundTargetMismatch
+    );
+    require_keys_neq!(
+        parameters.refundable_vault,
+        Pubkey::default(),
+        CustomError::GreenLabelRefundVaultMismatch
+    );
+    require_keys_neq!(
+        parameters.original_payer,
+        Pubkey::default(),
+        CustomError::GreenLabelRefundWrongPayer
+    );
+    require_keys_neq!(
+        parameters.payer_destination_token_account,
+        Pubkey::default(),
+        CustomError::GreenLabelRefundWrongDestination
+    );
+    require!(
+        parameters.refund_amount_usdc > 0,
+        CustomError::GreenLabelRefundAmountMismatch
+    );
+    require_keys_neq!(
+        parameters.usdc_mint,
+        Pubkey::default(),
+        CustomError::GreenLabelRefundMintMismatch
+    );
+    require!(parameters.proposal_id > 0, CustomError::InvalidProposalId);
+
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(GREEN_LABEL_REFUND_PARAMETERS_V1_DOMAIN);
+    parameters
+        .serialize(&mut bytes)
+        .map_err(|_| error!(CustomError::GreenLabelRefundParametersMismatch))?;
+    hash_contributor_payload(&bytes)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn build_green_label_refund_parameters_v1(
+    green_label_config: Pubkey,
+    green_label_project: Pubkey,
+    green_label_dispute: Pubkey,
+    refundable_escrow: Pubkey,
+    refundable_vault: Pubkey,
+    original_payer: Pubkey,
+    payer_destination_token_account: Pubkey,
+    refund_amount_usdc: u64,
+    usdc_mint: Pubkey,
+    expected_escrow_status: GreenLabelEscrowStatusV1,
+    proposal_id: u64,
+) -> Result<GreenLabelRefundParametersV1> {
+    Ok(GreenLabelRefundParametersV1 {
+        schema_version: GREEN_LABEL_REFUND_SCHEMA_VERSION,
+        green_label_config,
+        green_label_project,
+        green_label_dispute,
+        refundable_escrow,
+        refundable_vault,
+        original_payer,
+        payer_destination_token_account,
+        refund_amount_usdc,
+        usdc_mint,
+        expected_escrow_status,
+        proposal_id,
+        action_type: GovernanceActionTypeV1::GreenLabelRefundBond,
+    })
+}
+
+pub fn derive_green_label_refund_amount_v1(escrow: &GreenLabelRefundableEscrowV1) -> Result<u64> {
+    if escrow.status == GreenLabelEscrowStatusV1::Refunded {
+        return err!(CustomError::GreenLabelEscrowAlreadyRefunded);
+    }
+    if escrow.status == GreenLabelEscrowStatusV1::Forfeited {
+        return err!(CustomError::GreenLabelEscrowAlreadyForfeited);
+    }
+    require!(
+        matches!(
+            escrow.status,
+            GreenLabelEscrowStatusV1::Locked | GreenLabelEscrowStatusV1::Refundable
+        ),
+        CustomError::GreenLabelRefundNotEligible
+    );
+    require!(
+        escrow.refundable_amount <= escrow.deposited_amount,
+        CustomError::InvalidGreenLabelEscrowAmount
+    );
+    let refund_amount = calculate_green_label_escrow_remaining_amount(
+        escrow.refundable_amount,
+        escrow.refunded_amount,
+        escrow.forfeited_amount,
+    )?;
+    require!(
+        refund_amount > 0,
+        CustomError::GreenLabelRefundAmountMismatch
+    );
+    Ok(refund_amount)
+}
+
+pub fn validate_green_label_refund_vault_balance_v1(
+    vault_balance: u64,
+    refund_amount: u64,
+) -> Result<()> {
+    require!(
+        vault_balance >= refund_amount,
+        CustomError::GreenLabelRefundInsufficientFunds
+    );
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn validate_green_label_refund_execution_context_v1(
+    security_governance_config: &GovernanceConfigV1,
+    security_governance_config_key: Pubkey,
+    green_label_config: &GreenLabelConfigV1,
+    green_label_config_key: Pubkey,
+    green_label_project: &GreenLabelProjectV1,
+    green_label_project_key: Pubkey,
+    green_label_dispute: Option<&GreenLabelDisputeV1>,
+    escrow: &GreenLabelRefundableEscrowV1,
+    escrow_key: Pubkey,
+    protocol_module_registry: &ProtocolModuleRegistryV1,
+    protocol_module_registry_key: Pubkey,
+    governance_proposal: &GovernanceProposalV1,
+    governance_proposal_key: Pubkey,
+    governance_proposal_action: &GovernanceProposalActionV1,
+    governance_proposal_action_key: Pubkey,
+    governance_decision_adapter: &UniversalGovernanceDecisionAdapterV1,
+    governance_decision_adapter_key: Pubkey,
+    proposal_decision: &ProposalDecisionV1,
+    proposal_decision_key: Pubkey,
+    execution_queue_item: &ExecutionQueueItemV1,
+    execution_queue_item_key: Pubkey,
+    refundable_vault_key: Pubkey,
+    refundable_vault_mint: Pubkey,
+    refundable_vault_owner: Pubkey,
+    payer_destination_token_account: Pubkey,
+    payer_destination_owner: Pubkey,
+    payer_destination_mint: Pubkey,
+    provided_usdc_mint: Pubkey,
+    usdc_decimals: u8,
+    vault_balance: u64,
+    requires_dispute: bool,
+    now: i64,
+    parameters: &GreenLabelRefundParametersV1,
+) -> Result<()> {
+    require!(
+        !green_label_config.is_paused,
+        CustomError::InvalidGreenLabelStatus
+    );
+    require!(
+        !security_governance_config.is_paused,
+        CustomError::SecurityLayerPaused
+    );
+    require_keys_eq!(
+        green_label_config.security_governance_config,
+        security_governance_config_key,
+        CustomError::ProtocolModuleGovernanceConfigMismatch
+    );
+    validate_protocol_module_registry_v1(
+        protocol_module_registry,
+        protocol_module_registry_key,
+        security_governance_config_key,
+        ProtocolModuleIdV1::GreenLabel,
+        crate::ID,
+    )?;
+    require!(
+        governance_proposal.status == GovernanceProposalStatusV1::Passed,
+        CustomError::InvalidGovernanceProposal
+    );
+    validate_governance_proposal_action_v1(
+        governance_proposal,
+        governance_proposal_action,
+        governance_proposal_key,
+    )?;
+    require!(
+        governance_proposal_action_key != Pubkey::default(),
+        CustomError::GovernanceProposalActionMissing
+    );
+    require!(
+        governance_proposal_action.action_type == GovernanceActionTypeV1::GreenLabelRefundBond,
+        CustomError::GreenLabelRefundActionMismatch
+    );
+    require!(
+        governance_proposal_action.module_id == ProtocolModuleIdV1::GreenLabel,
+        CustomError::GreenLabelRefundActionMismatch
+    );
+    require_keys_eq!(
+        governance_proposal_action.target_program,
+        crate::ID,
+        CustomError::GreenLabelRefundTargetMismatch
+    );
+    require_keys_eq!(
+        governance_proposal_action.target_account,
+        escrow_key,
+        CustomError::GreenLabelRefundTargetMismatch
+    );
+    require!(
+        map_governance_action_to_security_action(governance_proposal_action.action_type)?
+            == ActionType::GreenLabelRefund,
+        CustomError::GreenLabelRefundActionMismatch
+    );
+    require_keys_eq!(
+        escrow.project,
+        green_label_project_key,
+        CustomError::GreenLabelRefundTargetMismatch
+    );
+    require!(
+        escrow.project_id == green_label_project.project_id,
+        CustomError::GreenLabelRefundTargetMismatch
+    );
+    require_keys_eq!(
+        escrow.usdc_mint,
+        green_label_config.usdc_mint,
+        CustomError::GreenLabelRefundMintMismatch
+    );
+    require_keys_eq!(
+        escrow.refundable_vault,
+        refundable_vault_key,
+        CustomError::GreenLabelRefundVaultMismatch
+    );
+    require_keys_eq!(
+        refundable_vault_mint,
+        escrow.usdc_mint,
+        CustomError::GreenLabelRefundMintMismatch
+    );
+    require_keys_eq!(
+        refundable_vault_owner,
+        escrow_key,
+        CustomError::GreenLabelRefundVaultMismatch
+    );
+    require_keys_eq!(
+        payer_destination_owner,
+        escrow.payer,
+        CustomError::GreenLabelRefundWrongDestination
+    );
+    require_keys_eq!(
+        payer_destination_mint,
+        escrow.usdc_mint,
+        CustomError::GreenLabelRefundMintMismatch
+    );
+    require!(
+        payer_destination_token_account != refundable_vault_key,
+        CustomError::GreenLabelRefundWrongDestination
+    );
+    require_keys_eq!(
+        provided_usdc_mint,
+        escrow.usdc_mint,
+        CustomError::GreenLabelRefundMintMismatch
+    );
+    require!(
+        usdc_decimals == GREEN_LABEL_USDC_DECIMALS,
+        CustomError::GreenLabelRefundMintMismatch
+    );
+
+    let refund_amount = derive_green_label_refund_amount_v1(escrow)?;
+    validate_green_label_refund_vault_balance_v1(vault_balance, refund_amount)?;
+    require!(
+        parameters.schema_version == GREEN_LABEL_REFUND_SCHEMA_VERSION,
+        CustomError::InvalidGreenLabelRefundSchema
+    );
+    require_keys_eq!(
+        parameters.green_label_config,
+        green_label_config_key,
+        CustomError::GreenLabelRefundTargetMismatch
+    );
+    require_keys_eq!(
+        parameters.green_label_project,
+        green_label_project_key,
+        CustomError::GreenLabelRefundTargetMismatch
+    );
+    require_keys_eq!(
+        parameters.refundable_escrow,
+        escrow_key,
+        CustomError::GreenLabelRefundTargetMismatch
+    );
+    require_keys_eq!(
+        parameters.refundable_vault,
+        refundable_vault_key,
+        CustomError::GreenLabelRefundVaultMismatch
+    );
+    require_keys_eq!(
+        parameters.original_payer,
+        escrow.payer,
+        CustomError::GreenLabelRefundWrongPayer
+    );
+    require_keys_eq!(
+        parameters.payer_destination_token_account,
+        payer_destination_token_account,
+        CustomError::GreenLabelRefundWrongDestination
+    );
+    require!(
+        parameters.refund_amount_usdc == refund_amount,
+        CustomError::GreenLabelRefundAmountMismatch
+    );
+    require_keys_eq!(
+        parameters.usdc_mint,
+        escrow.usdc_mint,
+        CustomError::GreenLabelRefundMintMismatch
+    );
+    require!(
+        parameters.expected_escrow_status == escrow.status,
+        CustomError::GreenLabelRefundParametersMismatch
+    );
+    require!(
+        parameters.proposal_id == governance_proposal.proposal_id,
+        CustomError::InvalidProposalId
+    );
+    require!(
+        parameters.action_type == GovernanceActionTypeV1::GreenLabelRefundBond,
+        CustomError::GreenLabelRefundActionMismatch
+    );
+
+    if requires_dispute {
+        let dispute = green_label_dispute
+            .ok_or_else(|| error!(CustomError::GreenLabelRefundTargetMismatch))?;
+        require_keys_neq!(
+            parameters.green_label_dispute,
+            Pubkey::default(),
+            CustomError::GreenLabelRefundTargetMismatch
+        );
+        require_keys_eq!(
+            dispute.project,
+            green_label_project_key,
+            CustomError::GreenLabelRefundTargetMismatch
+        );
+        require_keys_eq!(
+            green_label_project.active_dispute,
+            parameters.green_label_dispute,
+            CustomError::InvalidGreenLabelActiveDispute
+        );
+        require!(
+            matches!(
+                green_label_project.status,
+                GreenLabelStatus::Disputed | GreenLabelStatus::RefundQueued
+            ),
+            CustomError::InvalidGreenLabelStatus
+        );
+        require!(
+            matches!(
+                dispute.status,
+                DisputeStatus::ReadyForDecision | DisputeStatus::DecisionQueued
+            ),
+            CustomError::InvalidGreenLabelDisputeStatus
+        );
+        require!(
+            dispute.action_type != ActionType::GreenLabelSlash,
+            CustomError::GreenLabelRefundActionMismatch
+        );
+    } else {
+        require_keys_eq!(
+            parameters.green_label_dispute,
+            Pubkey::default(),
+            CustomError::GreenLabelRefundTargetMismatch
+        );
+        require_keys_eq!(
+            green_label_project.active_dispute,
+            Pubkey::default(),
+            CustomError::GreenLabelUnresolvedDispute
+        );
+        require!(
+            now >= escrow.refund_available_after,
+            CustomError::GreenLabelRefundNotEligible
+        );
+        require!(
+            !matches!(
+                green_label_project.status,
+                GreenLabelStatus::Disputed
+                    | GreenLabelStatus::Refunded
+                    | GreenLabelStatus::Slashed
+                    | GreenLabelStatus::Cancelled
+            ),
+            CustomError::InvalidGreenLabelStatus
+        );
+    }
+
+    let parameters_hash = hash_green_label_refund_parameters_v1(parameters)?;
+    require!(
+        governance_proposal_action.parameters_hash == parameters_hash,
+        CustomError::GreenLabelRefundParametersMismatch
+    );
+    require_keys_eq!(
+        governance_decision_adapter.governance_proposal,
+        governance_proposal_key,
+        CustomError::InvalidGovernanceDecisionAdapter
+    );
+    require_keys_eq!(
+        governance_decision_adapter.proposal_decision,
+        proposal_decision_key,
+        CustomError::InvalidGovernanceDecisionAdapter
+    );
+    require!(
+        governance_decision_adapter.action_type == ActionType::GreenLabelRefund,
+        CustomError::GreenLabelRefundActionMismatch
+    );
+    require_keys_eq!(
+        governance_decision_adapter.target_program,
+        governance_proposal_action.target_program,
+        CustomError::GreenLabelRefundTargetMismatch
+    );
+    require_keys_eq!(
+        governance_decision_adapter.target_account,
+        escrow_key,
+        CustomError::GreenLabelRefundTargetMismatch
+    );
+    require!(
+        governance_decision_adapter.payload_hash
+            == governance_proposal_action.canonical_payload_hash,
+        CustomError::GreenLabelRefundParametersMismatch
+    );
+    require!(
+        governance_decision_adapter_key != Pubkey::default(),
+        CustomError::InvalidGovernanceDecisionAdapter
+    );
+    require!(
+        proposal_decision.proposal_id == governance_proposal.proposal_id,
+        CustomError::InvalidProposalId
+    );
+    require!(
+        proposal_decision.proposal_type == ProposalType::GreenLabelRefund,
+        CustomError::InvalidActionForProposalType
+    );
+    require!(
+        proposal_decision.decision == ProposalDecision::Approved,
+        CustomError::ProposalNotApproved
+    );
+    require!(
+        execution_queue_item.proposal_id == governance_proposal.proposal_id,
+        CustomError::InvalidProposalId
+    );
+    require!(
+        execution_queue_item.status == ExecutionStatus::Executed,
+        CustomError::InvalidExecutionStatus
+    );
+    require!(
+        execution_queue_item.executed_at > 0,
+        CustomError::InvalidExecutionStatus
+    );
+    require!(
+        execution_queue_item.decision == ProposalDecision::Approved,
+        CustomError::ProposalNotApproved
+    );
+    require!(
+        execution_queue_item.action_type == ActionType::GreenLabelRefund,
+        CustomError::GreenLabelRefundActionMismatch
+    );
+    require_keys_eq!(
+        execution_queue_item.target_program,
+        crate::ID,
+        CustomError::GreenLabelRefundTargetMismatch
+    );
+    require_keys_eq!(
+        execution_queue_item.target_account,
+        escrow_key,
+        CustomError::GreenLabelRefundTargetMismatch
+    );
+    require!(
+        execution_queue_item.payload_hash == governance_proposal_action.canonical_payload_hash,
+        CustomError::GreenLabelRefundParametersMismatch
+    );
+    require!(
+        execution_queue_item_key != Pubkey::default(),
+        CustomError::InvalidGreenLabelExecutionQueue
+    );
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn execute_green_label_escrow_refund_internal_v1<'info>(
+    escrow: &mut GreenLabelRefundableEscrowV1,
+    escrow_info: AccountInfo<'info>,
+    refundable_vault_info: AccountInfo<'info>,
+    usdc_mint_info: AccountInfo<'info>,
+    payer_refund_usdc_account_info: AccountInfo<'info>,
+    token_program: Pubkey,
+    project_key: Pubkey,
+    refund_amount: u64,
+) -> Result<()> {
+    let escrow_bump = escrow.bump;
+    let signer_seeds: &[&[&[u8]]] = &[&[
+        GREEN_LABEL_REFUNDABLE_ESCROW_SEED,
+        project_key.as_ref(),
+        &[escrow_bump],
+    ]];
+    let cpi_accounts = TransferChecked {
+        from: refundable_vault_info,
+        mint: usdc_mint_info,
+        to: payer_refund_usdc_account_info,
+        authority: escrow_info,
+    };
+    let cpi_ctx = CpiContext::new_with_signer(token_program, cpi_accounts, signer_seeds);
+    transfer_checked(cpi_ctx, refund_amount, GREEN_LABEL_USDC_DECIMALS)?;
+    record_green_label_escrow_refunded(escrow, refund_amount)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn record_green_label_refund_governance_v1(
+    project: &mut GreenLabelProjectV1,
+    dispute: Option<&mut GreenLabelDisputeV1>,
+    execution_record: &mut GreenLabelRefundExecutionRecordV1,
+    execution_queue_item: Pubkey,
+    proposal_decision: Pubkey,
+    governance_proposal: Pubkey,
+    governance_proposal_action: Pubkey,
+    module_registry: Pubkey,
+    green_label_config: Pubkey,
+    green_label_project: Pubkey,
+    green_label_dispute: Pubkey,
+    refundable_escrow: Pubkey,
+    refundable_vault: Pubkey,
+    original_payer: Pubkey,
+    payer_destination_token_account: Pubkey,
+    refund_amount_usdc: u64,
+    usdc_mint: Pubkey,
+    parameters: GreenLabelRefundParametersV1,
+    canonical_governance_payload_hash: [u8; 32],
+    escrow_status_before: GreenLabelEscrowStatusV1,
+    project_status_before: GreenLabelStatus,
+    executor: Pubkey,
+    executed_at: i64,
+    bump: u8,
+    execution_record_key: Pubkey,
+) -> Result<()> {
+    require!(
+        execution_record.execution_queue_item == Pubkey::default(),
+        CustomError::GreenLabelRefundExecutionAlreadyCompleted
+    );
+    let parameters_hash = hash_green_label_refund_parameters_v1(&parameters)?;
+
+    project.status = GreenLabelStatus::Refunded;
+    project.active_dispute = Pubkey::default();
+    project.refunded_at = executed_at;
+    project.terminal_proposal_id = parameters.proposal_id;
+    project.terminal_proposal_decision = proposal_decision;
+    project.terminal_execution_queue_item = execution_queue_item;
+    project.terminal_payload_hash = canonical_governance_payload_hash;
+    project.terminal_action_type = ActionType::GreenLabelRefund;
+
+    if let Some(dispute) = dispute {
+        dispute.status = DisputeStatus::ResolvedRefund;
+        dispute.resolved_at = executed_at;
+        dispute.proposal_id = parameters.proposal_id;
+        dispute.proposal_decision = proposal_decision;
+        dispute.execution_queue_item = execution_queue_item;
+        dispute.payload_hash = canonical_governance_payload_hash;
+        dispute.action_type = ActionType::GreenLabelRefund;
+    }
+
+    execution_record.execution_queue_item = execution_queue_item;
+    execution_record.proposal_decision = proposal_decision;
+    execution_record.governance_proposal = governance_proposal;
+    execution_record.governance_proposal_action = governance_proposal_action;
+    execution_record.module_registry = module_registry;
+    execution_record.green_label_config = green_label_config;
+    execution_record.green_label_project = green_label_project;
+    execution_record.green_label_dispute = green_label_dispute;
+    execution_record.refundable_escrow = refundable_escrow;
+    execution_record.refundable_vault = refundable_vault;
+    execution_record.original_payer = original_payer;
+    execution_record.payer_destination_token_account = payer_destination_token_account;
+    execution_record.refund_amount_usdc = refund_amount_usdc;
+    execution_record.usdc_mint = usdc_mint;
+    execution_record.execution_type = GreenLabelEscrowExecutionTypeV1::Refund;
+    execution_record.governance_action_type = GovernanceActionTypeV1::GreenLabelRefundBond;
+    execution_record.parameters_hash = parameters_hash;
+    execution_record.canonical_governance_payload_hash = canonical_governance_payload_hash;
+    execution_record.escrow_status_before = escrow_status_before;
+    execution_record.escrow_status_after = GreenLabelEscrowStatusV1::Refunded;
+    execution_record.project_status_before = project_status_before;
+    execution_record.project_status_after = GreenLabelStatus::Refunded;
+    execution_record.executor = executor;
+    execution_record.executed_at = executed_at;
+    execution_record.schema_version = GREEN_LABEL_REFUND_SCHEMA_VERSION;
+    execution_record.bump = bump;
+
+    require_keys_neq!(
+        execution_record_key,
+        Pubkey::default(),
+        CustomError::GreenLabelRefundExecutionAlreadyCompleted
+    );
+
     Ok(())
 }
 
@@ -5045,6 +6164,377 @@ mod tests {
         assert_eq!(
             err,
             CustomError::GreenLabelCertificationExecutionAlreadyCompleted.into()
+        );
+    }
+
+    #[test]
+    fn refund_execution_type_stable_code_roundtrips() {
+        let code = green_label_escrow_execution_type_stable_code_v1(
+            GreenLabelEscrowExecutionTypeV1::Refund,
+        );
+        assert_eq!(code, 1);
+        assert_eq!(
+            green_label_escrow_execution_type_from_stable_code_v1(code).unwrap(),
+            GreenLabelEscrowExecutionTypeV1::Refund
+        );
+    }
+
+    #[test]
+    fn refund_execution_type_unknown_code_fails() {
+        let err = green_label_escrow_execution_type_from_stable_code_v1(99).unwrap_err();
+        assert_eq!(err, CustomError::InvalidGreenLabelRefundSchema.into());
+    }
+
+    #[test]
+    fn refund_parameters_hash_is_deterministic_and_field_bound() {
+        let base = build_green_label_refund_parameters_v1(
+            Pubkey::new_from_array([1; 32]),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::new_from_array([3; 32]),
+            Pubkey::new_from_array([4; 32]),
+            Pubkey::new_from_array([5; 32]),
+            Pubkey::new_from_array([6; 32]),
+            Pubkey::new_from_array([7; 32]),
+            100,
+            Pubkey::new_from_array([8; 32]),
+            GreenLabelEscrowStatusV1::Locked,
+            9,
+        )
+        .unwrap();
+        let base_hash = hash_green_label_refund_parameters_v1(&base).unwrap();
+        assert_eq!(
+            base_hash,
+            hash_green_label_refund_parameters_v1(&base).unwrap()
+        );
+
+        let mut changed_project = base;
+        changed_project.green_label_project = Pubkey::new_from_array([9; 32]);
+        assert_ne!(
+            base_hash,
+            hash_green_label_refund_parameters_v1(&changed_project).unwrap()
+        );
+
+        let mut changed_dispute = base;
+        changed_dispute.green_label_dispute = Pubkey::new_from_array([10; 32]);
+        assert_ne!(
+            base_hash,
+            hash_green_label_refund_parameters_v1(&changed_dispute).unwrap()
+        );
+
+        let mut changed_escrow = base;
+        changed_escrow.refundable_escrow = Pubkey::new_from_array([11; 32]);
+        assert_ne!(
+            base_hash,
+            hash_green_label_refund_parameters_v1(&changed_escrow).unwrap()
+        );
+
+        let mut changed_vault = base;
+        changed_vault.refundable_vault = Pubkey::new_from_array([12; 32]);
+        assert_ne!(
+            base_hash,
+            hash_green_label_refund_parameters_v1(&changed_vault).unwrap()
+        );
+
+        let mut changed_payer = base;
+        changed_payer.original_payer = Pubkey::new_from_array([13; 32]);
+        assert_ne!(
+            base_hash,
+            hash_green_label_refund_parameters_v1(&changed_payer).unwrap()
+        );
+
+        let mut changed_destination = base;
+        changed_destination.payer_destination_token_account = Pubkey::new_from_array([14; 32]);
+        assert_ne!(
+            base_hash,
+            hash_green_label_refund_parameters_v1(&changed_destination).unwrap()
+        );
+
+        let mut changed_amount = base;
+        changed_amount.refund_amount_usdc += 1;
+        assert_ne!(
+            base_hash,
+            hash_green_label_refund_parameters_v1(&changed_amount).unwrap()
+        );
+
+        let mut changed_mint = base;
+        changed_mint.usdc_mint = Pubkey::new_from_array([15; 32]);
+        assert_ne!(
+            base_hash,
+            hash_green_label_refund_parameters_v1(&changed_mint).unwrap()
+        );
+
+        let mut changed_proposal = base;
+        changed_proposal.proposal_id += 1;
+        assert_ne!(
+            base_hash,
+            hash_green_label_refund_parameters_v1(&changed_proposal).unwrap()
+        );
+
+        let mut changed_action = base;
+        changed_action.action_type = GovernanceActionTypeV1::GreenLabelSlashBond;
+        assert!(hash_green_label_refund_parameters_v1(&changed_action).is_err());
+
+        let mut wrong_domain_bytes = Vec::new();
+        wrong_domain_bytes.extend_from_slice(b"wrong_green_label_refund_domain");
+        base.serialize(&mut wrong_domain_bytes).unwrap();
+        assert_ne!(
+            base_hash,
+            hash_contributor_payload(&wrong_domain_bytes).unwrap()
+        );
+    }
+
+    #[test]
+    fn strict_refund_amount_uses_recorded_amount_and_allows_vault_dust() {
+        let escrow = refundable_escrow(100, GreenLabelEscrowStatusV1::Locked);
+
+        assert_eq!(derive_green_label_refund_amount_v1(&escrow).unwrap(), 100);
+        validate_green_label_refund_vault_balance_v1(100, 100).unwrap();
+        validate_green_label_refund_vault_balance_v1(101, 100).unwrap();
+
+        let err = validate_green_label_refund_vault_balance_v1(99, 100).unwrap_err();
+        assert_eq!(err, CustomError::GreenLabelRefundInsufficientFunds.into());
+    }
+
+    #[test]
+    fn refund_parameters_hash_uses_recorded_amount_not_vault_balance() {
+        let escrow = refundable_escrow(100, GreenLabelEscrowStatusV1::Locked);
+        let recorded_amount = derive_green_label_refund_amount_v1(&escrow).unwrap();
+        validate_green_label_refund_vault_balance_v1(101, recorded_amount).unwrap();
+
+        let parameters = build_green_label_refund_parameters_v1(
+            Pubkey::new_from_array([1; 32]),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::default(),
+            Pubkey::new_from_array([4; 32]),
+            Pubkey::new_from_array([5; 32]),
+            Pubkey::new_from_array([6; 32]),
+            Pubkey::new_from_array([7; 32]),
+            recorded_amount,
+            Pubkey::new_from_array([8; 32]),
+            GreenLabelEscrowStatusV1::Locked,
+            9,
+        )
+        .unwrap();
+        let base_hash = hash_green_label_refund_parameters_v1(&parameters).unwrap();
+
+        let hash_after_dust = hash_green_label_refund_parameters_v1(&parameters).unwrap();
+        assert_eq!(base_hash, hash_after_dust);
+
+        let mut balance_as_amount = parameters;
+        balance_as_amount.refund_amount_usdc = 101;
+        assert_ne!(
+            base_hash,
+            hash_green_label_refund_parameters_v1(&balance_as_amount).unwrap()
+        );
+    }
+
+    #[test]
+    fn strict_refund_amount_rejects_refunded_and_forfeited() {
+        let refunded = refundable_escrow(100, GreenLabelEscrowStatusV1::Refunded);
+        let forfeited = refundable_escrow(100, GreenLabelEscrowStatusV1::Forfeited);
+
+        assert_eq!(
+            derive_green_label_refund_amount_v1(&refunded).unwrap_err(),
+            CustomError::GreenLabelEscrowAlreadyRefunded.into()
+        );
+        assert_eq!(
+            derive_green_label_refund_amount_v1(&forfeited).unwrap_err(),
+            CustomError::GreenLabelEscrowAlreadyForfeited.into()
+        );
+    }
+
+    #[test]
+    fn strict_refund_amount_rejects_overflow_and_over_recorded_liability() {
+        let mut overflow = refundable_escrow(u64::MAX, GreenLabelEscrowStatusV1::Locked);
+        overflow.refunded_amount = u64::MAX;
+        overflow.forfeited_amount = 1;
+        assert_eq!(
+            derive_green_label_refund_amount_v1(&overflow).unwrap_err(),
+            CustomError::GreenLabelMathOverflow.into()
+        );
+
+        let mut over_recorded = refundable_escrow(100, GreenLabelEscrowStatusV1::Locked);
+        over_recorded.deposited_amount = 99;
+        assert_eq!(
+            derive_green_label_refund_amount_v1(&over_recorded).unwrap_err(),
+            CustomError::InvalidGreenLabelEscrowAmount.into()
+        );
+    }
+
+    #[test]
+    fn refund_governance_record_sets_project_and_receipt_no_dispute() {
+        let mut project = green_label_project();
+        project.status = GreenLabelStatus::ActiveGreenLabel;
+        let mut record = blank_refund_execution_record();
+        let parameters = build_green_label_refund_parameters_v1(
+            Pubkey::new_from_array([1; 32]),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::default(),
+            Pubkey::new_from_array([4; 32]),
+            Pubkey::new_from_array([5; 32]),
+            Pubkey::new_from_array([6; 32]),
+            Pubkey::new_from_array([7; 32]),
+            100,
+            Pubkey::new_from_array([8; 32]),
+            GreenLabelEscrowStatusV1::Locked,
+            9,
+        )
+        .unwrap();
+
+        record_green_label_refund_governance_v1(
+            &mut project,
+            None,
+            &mut record,
+            Pubkey::new_from_array([20; 32]),
+            Pubkey::new_from_array([21; 32]),
+            Pubkey::new_from_array([22; 32]),
+            Pubkey::new_from_array([23; 32]),
+            Pubkey::new_from_array([24; 32]),
+            parameters.green_label_config,
+            parameters.green_label_project,
+            Pubkey::default(),
+            parameters.refundable_escrow,
+            parameters.refundable_vault,
+            parameters.original_payer,
+            parameters.payer_destination_token_account,
+            parameters.refund_amount_usdc,
+            parameters.usdc_mint,
+            parameters,
+            [55; 32],
+            GreenLabelEscrowStatusV1::Locked,
+            GreenLabelStatus::ActiveGreenLabel,
+            Pubkey::new_from_array([25; 32]),
+            200,
+            7,
+            Pubkey::new_from_array([26; 32]),
+        )
+        .unwrap();
+
+        assert_eq!(project.status, GreenLabelStatus::Refunded);
+        assert_eq!(project.refunded_at, 200);
+        assert_eq!(project.active_dispute, Pubkey::default());
+        assert_eq!(
+            record.execution_type,
+            GreenLabelEscrowExecutionTypeV1::Refund
+        );
+        assert_eq!(record.refund_amount_usdc, 100);
+        assert_eq!(
+            record.escrow_status_after,
+            GreenLabelEscrowStatusV1::Refunded
+        );
+        assert_eq!(record.project_status_after, GreenLabelStatus::Refunded);
+    }
+
+    #[test]
+    fn refund_governance_record_sets_dispute_resolved_refund() {
+        let mut project = green_label_project();
+        project.status = GreenLabelStatus::Disputed;
+        project.active_dispute = Pubkey::new_from_array([3; 32]);
+        let mut dispute = green_label_dispute();
+        dispute.status = DisputeStatus::ReadyForDecision;
+        let mut record = blank_refund_execution_record();
+        let parameters = build_green_label_refund_parameters_v1(
+            Pubkey::new_from_array([1; 32]),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::new_from_array([3; 32]),
+            Pubkey::new_from_array([4; 32]),
+            Pubkey::new_from_array([5; 32]),
+            Pubkey::new_from_array([6; 32]),
+            Pubkey::new_from_array([7; 32]),
+            100,
+            Pubkey::new_from_array([8; 32]),
+            GreenLabelEscrowStatusV1::Locked,
+            9,
+        )
+        .unwrap();
+
+        record_green_label_refund_governance_v1(
+            &mut project,
+            Some(&mut dispute),
+            &mut record,
+            Pubkey::new_from_array([20; 32]),
+            Pubkey::new_from_array([21; 32]),
+            Pubkey::new_from_array([22; 32]),
+            Pubkey::new_from_array([23; 32]),
+            Pubkey::new_from_array([24; 32]),
+            parameters.green_label_config,
+            parameters.green_label_project,
+            parameters.green_label_dispute,
+            parameters.refundable_escrow,
+            parameters.refundable_vault,
+            parameters.original_payer,
+            parameters.payer_destination_token_account,
+            parameters.refund_amount_usdc,
+            parameters.usdc_mint,
+            parameters,
+            [55; 32],
+            GreenLabelEscrowStatusV1::Locked,
+            GreenLabelStatus::Disputed,
+            Pubkey::new_from_array([25; 32]),
+            200,
+            7,
+            Pubkey::new_from_array([26; 32]),
+        )
+        .unwrap();
+
+        assert_eq!(project.status, GreenLabelStatus::Refunded);
+        assert_eq!(dispute.status, DisputeStatus::ResolvedRefund);
+        assert_eq!(dispute.action_type, ActionType::GreenLabelRefund);
+        assert_eq!(record.green_label_dispute, Pubkey::new_from_array([3; 32]));
+    }
+
+    #[test]
+    fn duplicate_refund_record_fails() {
+        let mut project = green_label_project();
+        let mut record = blank_refund_execution_record();
+        record.execution_queue_item = Pubkey::new_from_array([20; 32]);
+        let parameters = build_green_label_refund_parameters_v1(
+            Pubkey::new_from_array([1; 32]),
+            Pubkey::new_from_array([2; 32]),
+            Pubkey::default(),
+            Pubkey::new_from_array([4; 32]),
+            Pubkey::new_from_array([5; 32]),
+            Pubkey::new_from_array([6; 32]),
+            Pubkey::new_from_array([7; 32]),
+            100,
+            Pubkey::new_from_array([8; 32]),
+            GreenLabelEscrowStatusV1::Locked,
+            9,
+        )
+        .unwrap();
+
+        let err = record_green_label_refund_governance_v1(
+            &mut project,
+            None,
+            &mut record,
+            Pubkey::new_from_array([20; 32]),
+            Pubkey::new_from_array([21; 32]),
+            Pubkey::new_from_array([22; 32]),
+            Pubkey::new_from_array([23; 32]),
+            Pubkey::new_from_array([24; 32]),
+            parameters.green_label_config,
+            parameters.green_label_project,
+            Pubkey::default(),
+            parameters.refundable_escrow,
+            parameters.refundable_vault,
+            parameters.original_payer,
+            parameters.payer_destination_token_account,
+            parameters.refund_amount_usdc,
+            parameters.usdc_mint,
+            parameters,
+            [55; 32],
+            GreenLabelEscrowStatusV1::Locked,
+            GreenLabelStatus::ActiveGreenLabel,
+            Pubkey::new_from_array([25; 32]),
+            200,
+            7,
+            Pubkey::new_from_array([26; 32]),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            err,
+            CustomError::GreenLabelRefundExecutionAlreadyCompleted.into()
         );
     }
 
@@ -8020,6 +9510,60 @@ mod tests {
             project_status_after: GreenLabelStatus::PendingBondDeposit,
             certification_status_before: GreenLabelCertificationStatusV1::Pending,
             certification_status_after: GreenLabelCertificationStatusV1::Pending,
+            executor: Pubkey::default(),
+            executed_at: 0,
+            schema_version: 0,
+            bump: 0,
+        }
+    }
+
+    fn refundable_escrow(
+        amount: u64,
+        status: GreenLabelEscrowStatusV1,
+    ) -> GreenLabelRefundableEscrowV1 {
+        GreenLabelRefundableEscrowV1 {
+            authority: Pubkey::new_from_array([1; 32]),
+            project: Pubkey::new_from_array([2; 32]),
+            project_id: 1,
+            payer: Pubkey::new_from_array([3; 32]),
+            usdc_mint: Pubkey::new_from_array([4; 32]),
+            refundable_vault: Pubkey::new_from_array([5; 32]),
+            deposited_amount: amount,
+            refundable_amount: amount,
+            refunded_amount: 0,
+            forfeited_amount: 0,
+            deposit_ts: 100,
+            refund_available_after: 200,
+            status,
+            bump: 7,
+            vault_bump: 8,
+        }
+    }
+
+    fn blank_refund_execution_record() -> GreenLabelRefundExecutionRecordV1 {
+        GreenLabelRefundExecutionRecordV1 {
+            execution_queue_item: Pubkey::default(),
+            proposal_decision: Pubkey::default(),
+            governance_proposal: Pubkey::default(),
+            governance_proposal_action: Pubkey::default(),
+            module_registry: Pubkey::default(),
+            green_label_config: Pubkey::default(),
+            green_label_project: Pubkey::default(),
+            green_label_dispute: Pubkey::default(),
+            refundable_escrow: Pubkey::default(),
+            refundable_vault: Pubkey::default(),
+            original_payer: Pubkey::default(),
+            payer_destination_token_account: Pubkey::default(),
+            refund_amount_usdc: 0,
+            usdc_mint: Pubkey::default(),
+            execution_type: GreenLabelEscrowExecutionTypeV1::Refund,
+            governance_action_type: GovernanceActionTypeV1::GreenLabelRefundBond,
+            parameters_hash: [0; 32],
+            canonical_governance_payload_hash: [0; 32],
+            escrow_status_before: GreenLabelEscrowStatusV1::Locked,
+            escrow_status_after: GreenLabelEscrowStatusV1::Locked,
+            project_status_before: GreenLabelStatus::PendingBondDeposit,
+            project_status_after: GreenLabelStatus::PendingBondDeposit,
             executor: Pubkey::default(),
             executed_at: 0,
             schema_version: 0,

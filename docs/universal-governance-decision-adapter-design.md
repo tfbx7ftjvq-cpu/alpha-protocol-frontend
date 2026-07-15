@@ -238,3 +238,27 @@ recompute the certification parameters hash and reject any mismatch.
 
 The adapter remains a bridge only. It does not approve certification by itself,
 does not refund or slash bonds, and does not move tokens.
+
+## 12. Green Label Refund Consumer
+
+Phase 2E-FINAL Stage 5B-2 adds the strict refundable escrow refund consumer of
+adapter output:
+
+```text
+UniversalGovernanceDecisionAdapterV1
+-> ProposalDecisionV1 Approved
+-> ExecutionQueueItemV1 Executed
+-> Green Label refund wrapper
+-> GreenLabelRefundableEscrowV1 refundable vault
+-> original payer USDC token account
+-> GreenLabelRefundExecutionRecordV1
+```
+
+The refund wrappers read the typed action sidecar, adapter, decision, queue
+item, Green Label module registry, escrow, vault, mint, project, and optional
+dispute accounts. They recompute the refund parameters hash and reject any
+mismatch.
+
+The adapter remains a bridge only. It does not transfer refund funds. Queue item
+status `Executed` means the Security timelock path completed; the business
+refund is proven by `GreenLabelRefundExecutionRecordV1`.

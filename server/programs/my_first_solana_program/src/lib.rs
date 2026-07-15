@@ -573,6 +573,20 @@ pub mod my_first_solana_program {
         instructions::green_label_v1::execute_green_label_revoke_certification_v1_handler(ctx)
     }
 
+    pub fn execute_green_label_refund_no_dispute_governance_v1(
+        ctx: Context<ExecuteGreenLabelRefundNoDisputeGovernanceV1>,
+    ) -> Result<()> {
+        instructions::green_label_v1::execute_green_label_refund_no_dispute_governance_v1_handler(
+            ctx,
+        )
+    }
+
+    pub fn execute_green_label_refund_dispute_governance_v1(
+        ctx: Context<ExecuteGreenLabelRefundDisputeGovernanceV1>,
+    ) -> Result<()> {
+        instructions::green_label_v1::execute_green_label_refund_dispute_governance_v1_handler(ctx)
+    }
+
     pub fn refund_green_label_escrow_v1(ctx: Context<RefundGreenLabelEscrowV1>) -> Result<()> {
         instructions::green_label_v1::refund_green_label_escrow_v1_handler(ctx)
     }

@@ -712,6 +712,11 @@ pub enum GreenLabelCertificationExecutionTypeV1 {
     Revoke,
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GreenLabelEscrowExecutionTypeV1 {
+    Refund,
+}
+
 #[account]
 pub struct GreenLabelConfigV1 {
     pub authority: Pubkey,
@@ -869,6 +874,40 @@ pub struct GreenLabelCertificationExecutionRecordV1 {
 
 impl GreenLabelCertificationExecutionRecordV1 {
     pub const INIT_SPACE: usize = (32 * 8) + 1 + 1 + (32 * 2) + 1 + 1 + 1 + 1 + 32 + 8 + 2 + 1;
+}
+
+#[account]
+pub struct GreenLabelRefundExecutionRecordV1 {
+    pub execution_queue_item: Pubkey,
+    pub proposal_decision: Pubkey,
+    pub governance_proposal: Pubkey,
+    pub governance_proposal_action: Pubkey,
+    pub module_registry: Pubkey,
+    pub green_label_config: Pubkey,
+    pub green_label_project: Pubkey,
+    pub green_label_dispute: Pubkey,
+    pub refundable_escrow: Pubkey,
+    pub refundable_vault: Pubkey,
+    pub original_payer: Pubkey,
+    pub payer_destination_token_account: Pubkey,
+    pub refund_amount_usdc: u64,
+    pub usdc_mint: Pubkey,
+    pub execution_type: GreenLabelEscrowExecutionTypeV1,
+    pub governance_action_type: GovernanceActionTypeV1,
+    pub parameters_hash: [u8; 32],
+    pub canonical_governance_payload_hash: [u8; 32],
+    pub escrow_status_before: GreenLabelEscrowStatusV1,
+    pub escrow_status_after: GreenLabelEscrowStatusV1,
+    pub project_status_before: GreenLabelStatus,
+    pub project_status_after: GreenLabelStatus,
+    pub executor: Pubkey,
+    pub executed_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+}
+
+impl GreenLabelRefundExecutionRecordV1 {
+    pub const INIT_SPACE: usize = (32 * 14) + 8 + 1 + 1 + (32 * 2) + 1 + 1 + 1 + 1 + 8 + 2 + 1;
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -1127,6 +1166,13 @@ mod tests {
             minimum
         );
         assert_eq!(GreenLabelCertificationExecutionRecordV1::INIT_SPACE, 369);
+    }
+
+    #[test]
+    fn green_label_refund_execution_record_space_is_exact() {
+        let minimum = (32 * 14) + 8 + 1 + 1 + (32 * 2) + 1 + 1 + 1 + 1 + 8 + 2 + 1;
+        assert_eq!(GreenLabelRefundExecutionRecordV1::INIT_SPACE, minimum);
+        assert_eq!(GreenLabelRefundExecutionRecordV1::INIT_SPACE, 537);
     }
 
     #[test]

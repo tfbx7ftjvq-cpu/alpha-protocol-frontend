@@ -177,3 +177,20 @@ The strict Green Label wrappers validate:
 The registry is not mutated. Green Label refund, slash, Treasury routing,
 Victim Relief, Scam Registry, DAO Control Mode, and authority migration remain
 out of scope for this stage.
+
+## Stage 5B-2 Green Label Refund Usage
+
+Phase 2E-FINAL Stage 5B-2 also consumes the Green Label module registry before
+any strict refundable escrow refund wrapper can run.
+
+The strict refund wrappers validate:
+
+- registry PDA and stable module code
+- `module_id == GreenLabel`
+- registry enabled
+- registry bound to the current Alpha Protocol Program ID
+- registry tied to the expected Security `GovernanceConfigV1`
+
+The registry is not mutated. Refund execution reads the registry as a module
+allow-list only. The refund path does not route through Treasury and does not
+modify module registry state.

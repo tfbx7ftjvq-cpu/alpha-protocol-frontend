@@ -205,3 +205,23 @@ Phase 2E-FINAL Stage 3 adds `ProtocolModuleRegistryV1` as the module allow-list 
 - program upgrade governance execution
 - frontend
 - Mainnet deployment
+
+## Stage 5B-2 Refund Governance Consumption
+
+The voting engine still only produces a `Passed` or `Rejected` governance
+proposal. For Green Label refund, the voted action must be
+`GovernanceActionTypeV1::GreenLabelRefundBond` with the refundable escrow as the
+target account.
+
+After a proposal passes, the Universal Governance Decision Adapter and Security
+queue release the action. The module-specific refund wrapper then revalidates
+the same sidecar and the refund parameters hash before moving funds.
+
+This preserves the voting invariant:
+
+```text
+DAO-voted refund parameters == Security queue payload == refund execution parameters
+```
+
+The voting engine does not refund funds, route Treasury revenue, or create
+business execution records.

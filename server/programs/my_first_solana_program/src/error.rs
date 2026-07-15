@@ -394,4 +394,46 @@ pub enum CustomError {
 
     #[msg("Invalid Green Label certification schema")]
     InvalidGreenLabelCertificationSchema,
+
+    #[msg("Green Label refund action mismatch")]
+    GreenLabelRefundActionMismatch,
+
+    #[msg("Green Label refund target mismatch")]
+    GreenLabelRefundTargetMismatch,
+
+    #[msg("Green Label refund parameters mismatch")]
+    GreenLabelRefundParametersMismatch,
+
+    #[msg("Green Label refund execution already completed")]
+    GreenLabelRefundExecutionAlreadyCompleted,
+
+    #[msg("Green Label refund is not eligible")]
+    GreenLabelRefundNotEligible,
+
+    #[msg("Green Label refund payer mismatch")]
+    GreenLabelRefundWrongPayer,
+
+    #[msg("Green Label refund destination mismatch")]
+    GreenLabelRefundWrongDestination,
+
+    #[msg("Green Label refund vault mismatch")]
+    GreenLabelRefundVaultMismatch,
+
+    #[msg("Green Label refund mint mismatch")]
+    GreenLabelRefundMintMismatch,
+
+    #[msg("Green Label refund amount mismatch")]
+    GreenLabelRefundAmountMismatch,
+
+    #[msg("Green Label refund has insufficient funds")]
+    GreenLabelRefundInsufficientFunds,
+
+    #[msg("Green Label escrow is already refunded")]
+    GreenLabelEscrowAlreadyRefunded,
+
+    #[msg("Green Label escrow is already forfeited")]
+    GreenLabelEscrowAlreadyForfeited,
+
+    #[msg("Invalid Green Label refund schema")]
+    InvalidGreenLabelRefundSchema,
 }
