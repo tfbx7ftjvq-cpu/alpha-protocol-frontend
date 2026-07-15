@@ -120,7 +120,7 @@ Refundable escrow funds are not Treasury revenue while they remain refundable. T
 - Green Label forfeited escrow routing is implemented as `RevenueType::GreenLabelForfeitedBond`.
 - Strict Green Label forfeit now requires governance sidecar, module registry, adapter, approved Security decision, executed queue item, and immutable forfeit execution record.
 - Existing Green Label legacy slash / forfeit public entry points are disabled in Stage 5B-3. Legacy refund compatibility remains separate from strict governance refund.
-- Receipt gates for bond lock / PendingObservation and approve certification are still pending Stage 5B-4B-2.
+- Stage 5B-4B-2 adds receipt gates for bond lock / `PendingObservation` and approve certification. The strict bond lock path is `lock_green_label_bond_with_fee_receipt_v1`; the legacy no-receipt bond lock path now fails closed.
 - Builders payout governance is not implemented in this phase.
 - DAO voting is not implemented in this phase.
 - Token launch remains NO-GO.

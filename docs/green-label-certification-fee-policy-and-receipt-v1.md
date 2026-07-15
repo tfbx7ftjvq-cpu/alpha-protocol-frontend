@@ -4,7 +4,7 @@ Date: 2026-07-15
 
 ## Purpose
 
-Phase 2E-FINAL Stage 5B-4B-1 closes the unsafe legacy Green Label certification fee route.
+Phase 2E-FINAL Stage 5B-4B-1 closes the unsafe legacy Green Label certification fee route. Stage 5B-4B-2 closes the remaining receipt bypasses for bond lock / `PendingObservation` and approve certification.
 
 The previous public route accepted a caller-supplied `amount` and did not bind payment to a Green Label project or immutable receipt. The Mainnet-intended path is now a strict one-time route:
 
@@ -250,12 +250,18 @@ Certification fee and refundable bond are separate.
 - `ForfeitBond` does not route the fee again.
 - A forfeited bond becomes protocol revenue only after strict slash / forfeit governance and routes as `RevenueType::GreenLabelForfeitedBond`.
 
-## Remaining Gates
+## Receipt Gates
 
-This phase intentionally does not add:
+Stage 5B-4B-2 adds a shared receipt validator and gates the downstream certification lifecycle:
 
-- approve-certification receipt gate
-- bond lock / PendingObservation receipt gate
+- `lock_green_label_bond_with_fee_receipt_v1` requires `GreenLabelCertificationFeeReceiptV1` before moving a project into `PendingObservation`.
+- the legacy `lock_green_label_bond` entry point now fails closed with `LegacyGreenLabelBondLockWithoutFeeReceiptDisabled`.
+- `execute_green_label_approve_certification_v1` requires the same receipt before approving certification.
+- the validator rebuilds the canonical fee parameters hash and rejects receipt/project/policy/amount/Treasury/revenue-type mismatches.
+- old Devnet projects are not granted forged receipts.
+
+This phase still does not add:
+
 - fee policy update
 - third-party sponsor payer
 - fee refund
@@ -267,17 +273,16 @@ This phase intentionally does not add:
 - frontend changes
 - deployment or chain transactions
 
-Stage 5B-4B-2 still needs to add receipt gates before claiming the full Green Label certification-fee lifecycle is closed.
+Current boundaries:
 
-Until then:
-
-- local backend compatibility paths may still allow later lifecycle steps without a fee receipt
-- old Devnet projects do not automatically receive forged receipts
+- legacy no-receipt bond lock is disabled
+- approve certification requires a fee receipt
+- reject and revoke certification do not require a receipt and do not refund fees
 - Mainnet production remains NO-GO
 - token launch remains NO-GO
 
 ## Verification Status
 
-Local tests cover policy size, receipt size, PDA seeds, policy initialization, wrong authority, zero amount, deterministic parameters hash, strict route validation, payer/status/decimals mismatch, Treasury/vault mismatch, receipt immutability, economic isolation from refundable escrow, and legacy route fail-closed behavior.
+Local tests cover policy size, receipt size, PDA seeds, policy initialization, wrong authority, zero amount, deterministic parameters hash, strict route validation, payer/status/decimals mismatch, Treasury/vault mismatch, receipt immutability, receipt gate acceptance/rejection, economic isolation from refundable escrow, legacy fee route fail-closed behavior, and legacy bond lock fail-closed behavior.
 
 Local tests are not Devnet verification and are not Mainnet verification.

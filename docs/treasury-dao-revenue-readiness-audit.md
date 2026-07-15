@@ -390,7 +390,7 @@ Green Label refundable escrow and Treasury routing are now implemented at the co
 - `refund_green_label_escrow_v1` returns refundable escrow only to the original payer's USDC token account and does not pass through Treasury split.
 - `execute_green_label_forfeit_governance_v1` is the current strict DAO/Security-governed path that routes forfeited escrow as `RevenueType::GreenLabelForfeitedBond` through the Treasury router and 50 / 20 / 20 / 10 split.
 
-### Phase 2E-FINAL Stage 5B-4B-1 Implementation Update
+### Phase 2E-FINAL Stage 5B-4B-1 / 5B-4B-2 Implementation Update
 
 Green Label certification fee routing is now strict and receipt-based:
 
@@ -399,7 +399,9 @@ Green Label certification fee routing is now strict and receipt-based:
 - `GreenLabelCertificationFeeParametersV1` binds project, payer, token account, exact amount, Treasury accounts, four vaults, mint, and `RevenueType::GreenLabelCertificationFee`.
 - `route_green_label_certification_fee_once_v1` routes the exact policy amount through the shared Treasury router and writes the receipt atomically.
 - The legacy caller-amount `route_green_label_certification_fee_v1(ctx, amount)` fails closed with `LegacyGreenLabelCertificationFeeRouteDisabled`.
-- Receipt gates for bond lock / PendingObservation and approve certification are still pending.
+- `lock_green_label_bond_with_fee_receipt_v1` requires a valid receipt before moving a project into `PendingObservation`.
+- The legacy no-receipt `lock_green_label_bond` path fails closed with `LegacyGreenLabelBondLockWithoutFeeReceiptDisabled`.
+- `execute_green_label_approve_certification_v1` requires the same receipt before approval.
 
 Important boundaries:
 

@@ -520,4 +520,28 @@ pub enum CustomError {
 
     #[msg("Green Label certification fee has insufficient funds")]
     GreenLabelCertificationFeeInsufficientFunds,
+
+    #[msg("Green Label certification fee receipt is missing")]
+    GreenLabelCertificationFeeReceiptMissing,
+
+    #[msg("Green Label certification fee receipt mismatch")]
+    GreenLabelCertificationFeeReceiptMismatch,
+
+    #[msg("Green Label certification fee receipt project mismatch")]
+    GreenLabelCertificationFeeReceiptProjectMismatch,
+
+    #[msg("Green Label certification fee receipt policy mismatch")]
+    GreenLabelCertificationFeeReceiptPolicyMismatch,
+
+    #[msg("Green Label certification fee receipt amount mismatch")]
+    GreenLabelCertificationFeeReceiptAmountMismatch,
+
+    #[msg("Green Label certification fee receipt hash mismatch")]
+    GreenLabelCertificationFeeReceiptHashMismatch,
+
+    #[msg("Green Label certification fee receipt revenue type mismatch")]
+    GreenLabelCertificationFeeReceiptRevenueTypeMismatch,
+
+    #[msg("Legacy Green Label bond lock without certification fee receipt is disabled")]
+    LegacyGreenLabelBondLockWithoutFeeReceiptDisabled,
 }

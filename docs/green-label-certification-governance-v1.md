@@ -243,7 +243,7 @@ Stage 5B-3 closes the legacy slash / non-strict forfeit value-moving paths while
 
 ## Certification Fee Policy and Receipt
 
-Phase 2E-FINAL Stage 5B-4B-1 adds a strict certification fee route documented in `docs/green-label-certification-fee-policy-and-receipt-v1.md`.
+Phase 2E-FINAL Stage 5B-4B-1 adds a strict certification fee route documented in `docs/green-label-certification-fee-policy-and-receipt-v1.md`. Stage 5B-4B-2 adds receipt gates documented in `docs/green-label-certification-fee-receipt-gates-v1.md`.
 
 The fee layer is intentionally separate from certification approval:
 
@@ -251,9 +251,12 @@ The fee layer is intentionally separate from certification approval:
 - `route_green_label_certification_fee_once_v1` reads the amount from policy and routes it through Treasury 50 / 20 / 20 / 10 as `RevenueType::GreenLabelCertificationFee`.
 - `GreenLabelCertificationFeeReceiptV1` is one immutable payment fact per project.
 - The legacy caller-amount `route_green_label_certification_fee_v1(ctx, amount)` fails closed with `LegacyGreenLabelCertificationFeeRouteDisabled`.
+- The legacy no-receipt `lock_green_label_bond` path fails closed with `LegacyGreenLabelBondLockWithoutFeeReceiptDisabled`.
+- `lock_green_label_bond_with_fee_receipt_v1` is the strict path into `PendingObservation`.
+- `execute_green_label_approve_certification_v1` requires a valid fee receipt before approval.
 - Fee receipts do not modify refundable escrow balances and are not refunded by reject, revoke, or refund-bond flows.
 
-This stage does not yet gate approve certification or bond lock / PendingObservation on receipt existence. Stage 5B-4B-2 must add those gates before the certification fee lifecycle can be treated as fully closed.
+Reject and revoke remain separate governance actions. They do not require a fee receipt, do not refund the fee, and do not route additional Treasury revenue.
 
 ## Mainnet Status
 

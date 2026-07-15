@@ -483,6 +483,12 @@ pub mod my_first_solana_program {
         instructions::green_label_v1::lock_green_label_bond_handler(ctx)
     }
 
+    pub fn lock_green_label_bond_with_fee_receipt_v1(
+        ctx: Context<LockGreenLabelBondWithFeeReceiptV1>,
+    ) -> Result<()> {
+        instructions::green_label_v1::lock_green_label_bond_with_fee_receipt_v1_handler(ctx)
+    }
+
     pub fn open_green_label_dispute(
         ctx: Context<OpenGreenLabelDispute>,
         expected_dispute_id: u64,

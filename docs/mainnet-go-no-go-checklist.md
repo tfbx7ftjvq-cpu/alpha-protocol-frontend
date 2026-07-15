@@ -259,12 +259,14 @@ Manual review notes:
 - `GreenLabelCertificationFeePolicyV1` is the authoritative fee amount source.
 - `GreenLabelCertificationFeeReceiptV1` records one immutable receipt per project.
 - The legacy caller-amount Green Label fee route is disabled with `LegacyGreenLabelCertificationFeeRouteDisabled`.
+- `lock_green_label_bond_with_fee_receipt_v1` is the strict receipt-gated bond lock path.
+- The legacy no-receipt `lock_green_label_bond` path is disabled with `LegacyGreenLabelBondLockWithoutFeeReceiptDisabled`.
+- `execute_green_label_approve_certification_v1` requires a valid fee receipt before approval.
 - Refundable Green Label escrow is implemented as `GreenLabelRefundableEscrowV1`.
 - Refundable escrow refunds only to the original payer and does not pass through Treasury split.
 - Green Label forfeited escrow routes to Treasury as `RevenueType::GreenLabelForfeitedBond`.
 - Green Label forfeits must require a valid dispute, dispute-ready / decision-queued state, linked Security Layer / Green Label slash decision, and non-terminal escrow state.
 - No time-only forfeit path is allowed.
-- Bond lock / PendingObservation receipt gate and approve certification receipt gate are still pending Stage 5B-4B-2.
 - SOL revenue split is not supported.
 - Builders payout governance is not implemented.
 - Token launch remains NO-GO until real revenue integrations, builders payout governance, Mainnet authorities, and final launch checks are completed.
