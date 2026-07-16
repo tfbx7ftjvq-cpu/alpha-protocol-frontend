@@ -37,6 +37,7 @@ The Devnet report only records Devnet health. It is not Mainnet approval. Before
 - Security config must not be paused.
 - Green Label config must not be paused.
 - Mainnet `STAKING_POOL` must be explicitly provided to the sanity check.
+- Victim Relief approve/reject may create decision records and payout requests, but Mainnet must not present `PayoutQueued` as paid until the relief-vault payout execution and receipt path is complete.
 
 ## 5. Go/No-Go Decision Table
 
@@ -73,6 +74,7 @@ Any one of the following means NO-GO:
 - Frontend cannot clearly display cluster.
 - Frontend presents Devnet test parameters as Mainnet production rules.
 - Final `cargo test`, `anchor build --ignore-keys`, and `npm run build` are not complete.
+- Victim Relief relief-vault payout transfer / receipt path is missing while public messaging claims paid relief is live.
 
 ## 7. Manual Review Required
 

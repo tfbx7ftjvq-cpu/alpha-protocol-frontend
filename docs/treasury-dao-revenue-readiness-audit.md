@@ -18,6 +18,17 @@ After this original audit, Phase 2E-FINAL Stage 5B-3 implements the strict Green
 
 This narrows the previous Green Label forfeited bond revenue-routing gap. It does not solve SOL revenue routing, builders payout transfer, full DAO Control Mode, Victim Relief, Scam Registry, Mainnet authority migration, or token launch readiness.
 
+## Phase 2E-6B-2 Addendum
+
+Victim Relief now has an evidence freeze and DAO approve/reject decision layer:
+
+- `VictimReliefEvidenceSnapshotV1` freezes case evidence commitments before DAO review.
+- `VictimReliefDecisionParametersV1` binds the decision to the frozen case, policy, Treasury config, relief vault, action, and proposal id.
+- Approve creates `ReliefPayoutRequestV1` and an immutable decision execution record.
+- Reject creates an immutable decision execution record and closes the active case count.
+
+This improves governance readiness for relief cases, but it still does not move USDC from the relief vault. `PayoutQueued` is not `Paid`, and Stage 6B-4 must implement the final relief-vault transfer and payout receipt before Victim Relief can be described as end-to-end paid on-chain.
+
 ## 1. Executive Summary
 
 Alpha Protocol has a credible Devnet foundation for Treasury V2 accounting, USDC four-pool revenue routing, staking reward funding, Green Label refund / slash E2E, and Security Layer execution gating.

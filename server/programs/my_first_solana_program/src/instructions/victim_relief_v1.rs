@@ -2,15 +2,45 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, TokenAccount};
 
 use crate::constants::{
-    GOVERNANCE_CONFIG_V1_SEED, TREASURY_CONFIG_V2_SEED, VICTIM_RELIEF_CASE_V1_SEED,
-    VICTIM_RELIEF_CLAIMANT_STATE_V1_SEED, VICTIM_RELIEF_CONFIG_V1_SEED,
+    EXECUTION_QUEUE_ITEM_V1_SEED, GOVERNANCE_CONFIG_V1_SEED, GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+    GOVERNANCE_PROPOSAL_V1_SEED, PROPOSAL_DECISION_V1_SEED, PROTOCOL_MODULE_REGISTRY_V1_SEED,
+    RELIEF_PAYOUT_REQUEST_V1_SEED, RELIEF_USDC_VAULT_SEED, TREASURY_CONFIG_V2_SEED,
+    UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED, VAULT_AUTHORITY_V2_SEED,
+    VICTIM_RELIEF_CASE_V1_SEED, VICTIM_RELIEF_CLAIMANT_STATE_V1_SEED, VICTIM_RELIEF_CONFIG_V1_SEED,
+    VICTIM_RELIEF_DECISION_EXECUTION_RECORD_V1_SEED, VICTIM_RELIEF_EVIDENCE_SNAPSHOT_V1_SEED,
     VICTIM_RELIEF_POLICY_V1_SEED, VICTIM_RELIEF_POLICY_VERSION_V1, VICTIM_RELIEF_SCHEMA_VERSION_V1,
 };
 use crate::error::CustomError;
-use crate::state::{
-    GovernanceConfigV1, TreasuryConfigV2, VictimReliefCaseStatusV1, VictimReliefCaseV1,
-    VictimReliefClaimantStateV1, VictimReliefConfigV1, VictimReliefPolicyV1,
+use crate::instructions::contributor_v1::hash_contributor_payload;
+use crate::instructions::governance_action_v1::{
+    hash_governance_payload_v1, map_governance_action_to_security_action,
+    GOVERNANCE_PAYLOAD_V1_SCHEMA_VERSION,
 };
+use crate::instructions::governance_adapter_v1::security_proposal_type_for_action;
+use crate::instructions::governance_v1::validate_governance_proposal_action_v1;
+use crate::instructions::protocol_module_registry_v1::{
+    protocol_module_stable_code_v1, validate_protocol_module_registry_v1,
+};
+use crate::state::{
+    ExecutionQueueItemV1, ExecutionStatus, GovernanceActionTypeV1, GovernanceConfigV1,
+    GovernancePayloadV1, GovernanceProposalActionV1, GovernanceProposalStatusV1,
+    GovernanceProposalV1, ProposalDecision, ProposalDecisionV1, ProtocolModuleIdV1,
+    ProtocolModuleRegistryV1, ReliefPayoutRequestV1, TreasuryConfigV2,
+    UniversalGovernanceDecisionAdapterV1, VictimReliefCaseStatusV1, VictimReliefCaseV1,
+    VictimReliefClaimantStateV1, VictimReliefConfigV1, VictimReliefDecisionExecutionRecordV1,
+    VictimReliefDecisionExecutionTypeV1, VictimReliefDecisionParametersV1,
+    VictimReliefEvidenceSnapshotV1, VictimReliefPayoutStatusV1, VictimReliefPolicyV1,
+};
+
+pub const VICTIM_RELIEF_DECISION_SCHEMA_VERSION: u16 = 1;
+pub const VICTIM_RELIEF_DECISION_PARAMETERS_V1_DOMAIN_BYTES: [u8; 42] =
+    *b"alpha_victim_relief_decision_parameters_v1";
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VictimReliefDecisionParametersHashEnvelopeV1 {
+    pub domain_separator: [u8; 42],
+    pub parameters: VictimReliefDecisionParametersV1,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct VictimReliefPolicyParametersV1 {
@@ -160,7 +190,7 @@ pub struct UpdateVictimReliefEvidenceRootV1<'info> {
         seeds = [VICTIM_RELIEF_CONFIG_V1_SEED],
         bump = victim_relief_config.bump
     )]
-    pub victim_relief_config: Account<'info, VictimReliefConfigV1>,
+    pub victim_relief_config: Box<Account<'info, VictimReliefConfigV1>>,
 
     #[account(
         seeds = [
@@ -181,7 +211,7 @@ pub struct UpdateVictimReliefEvidenceRootV1<'info> {
         ],
         bump = victim_relief_case.bump
     )]
-    pub victim_relief_case: Account<'info, VictimReliefCaseV1>,
+    pub victim_relief_case: Box<Account<'info, VictimReliefCaseV1>>,
 
     pub claimant: Signer<'info>,
 }
@@ -250,6 +280,328 @@ pub struct ExpireVictimReliefCaseV1<'info> {
     pub victim_relief_case: Account<'info, VictimReliefCaseV1>,
 
     pub executor: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct FreezeVictimReliefEvidenceV1<'info> {
+    #[account(
+        seeds = [VICTIM_RELIEF_CONFIG_V1_SEED],
+        bump = victim_relief_config.bump
+    )]
+    pub victim_relief_config: Account<'info, VictimReliefConfigV1>,
+
+    #[account(
+        mut,
+        seeds = [
+            VICTIM_RELIEF_CASE_V1_SEED,
+            victim_relief_config.key().as_ref(),
+            &victim_relief_case.case_id.to_le_bytes()
+        ],
+        bump = victim_relief_case.bump
+    )]
+    pub victim_relief_case: Account<'info, VictimReliefCaseV1>,
+
+    #[account(
+        seeds = [
+            VICTIM_RELIEF_POLICY_V1_SEED,
+            victim_relief_config.key().as_ref(),
+            &victim_relief_case.policy_version.to_le_bytes()
+        ],
+        bump = victim_relief_policy.bump
+    )]
+    pub victim_relief_policy: Box<Account<'info, VictimReliefPolicyV1>>,
+
+    #[account(
+        init,
+        payer = claimant,
+        space = 8 + VictimReliefEvidenceSnapshotV1::INIT_SPACE,
+        seeds = [
+            VICTIM_RELIEF_EVIDENCE_SNAPSHOT_V1_SEED,
+            victim_relief_case.key().as_ref()
+        ],
+        bump
+    )]
+    pub evidence_snapshot: Box<Account<'info, VictimReliefEvidenceSnapshotV1>>,
+
+    #[account(mut)]
+    pub claimant: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ExecuteApproveVictimReliefCaseV1<'info> {
+    #[account(seeds = [GOVERNANCE_CONFIG_V1_SEED], bump = security_governance_config.bump)]
+    pub security_governance_config: Box<Account<'info, GovernanceConfigV1>>,
+
+    #[account(
+        seeds = [
+            PROTOCOL_MODULE_REGISTRY_V1_SEED,
+            &[protocol_module_stable_code_v1(ProtocolModuleIdV1::VictimRelief)]
+        ],
+        bump = protocol_module_registry.bump
+    )]
+    pub protocol_module_registry: Box<Account<'info, ProtocolModuleRegistryV1>>,
+
+    #[account(
+        seeds = [GOVERNANCE_PROPOSAL_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
+        bump = governance_proposal.bump
+    )]
+    pub governance_proposal: Box<Account<'info, GovernanceProposalV1>>,
+
+    #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_proposal_action.bump
+    )]
+    pub governance_proposal_action: Box<Account<'info, GovernanceProposalActionV1>>,
+
+    #[account(
+        seeds = [
+            UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_decision_adapter.bump
+    )]
+    pub governance_decision_adapter: Box<Account<'info, UniversalGovernanceDecisionAdapterV1>>,
+
+    #[account(
+        seeds = [PROPOSAL_DECISION_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
+        bump = proposal_decision.bump
+    )]
+    pub proposal_decision: Box<Account<'info, ProposalDecisionV1>>,
+
+    #[account(
+        seeds = [EXECUTION_QUEUE_ITEM_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
+        bump = execution_queue_item.bump
+    )]
+    pub execution_queue_item: Box<Account<'info, ExecutionQueueItemV1>>,
+
+    #[account(seeds = [VICTIM_RELIEF_CONFIG_V1_SEED], bump = victim_relief_config.bump)]
+    pub victim_relief_config: Box<Account<'info, VictimReliefConfigV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            VICTIM_RELIEF_CASE_V1_SEED,
+            victim_relief_config.key().as_ref(),
+            &victim_relief_case.case_id.to_le_bytes()
+        ],
+        bump = victim_relief_case.bump
+    )]
+    pub victim_relief_case: Box<Account<'info, VictimReliefCaseV1>>,
+
+    #[account(
+        seeds = [
+            VICTIM_RELIEF_POLICY_V1_SEED,
+            victim_relief_config.key().as_ref(),
+            &victim_relief_case.policy_version.to_le_bytes()
+        ],
+        bump = victim_relief_policy.bump
+    )]
+    pub victim_relief_policy: Box<Account<'info, VictimReliefPolicyV1>>,
+
+    #[account(
+        seeds = [
+            VICTIM_RELIEF_CLAIMANT_STATE_V1_SEED,
+            victim_relief_config.key().as_ref(),
+            victim_relief_case.claimant.as_ref()
+        ],
+        bump = claimant_state.bump
+    )]
+    pub claimant_state: Box<Account<'info, VictimReliefClaimantStateV1>>,
+
+    #[account(
+        seeds = [
+            VICTIM_RELIEF_EVIDENCE_SNAPSHOT_V1_SEED,
+            victim_relief_case.key().as_ref()
+        ],
+        bump = evidence_snapshot.bump
+    )]
+    pub evidence_snapshot: Box<Account<'info, VictimReliefEvidenceSnapshotV1>>,
+
+    #[account(seeds = [TREASURY_CONFIG_V2_SEED], bump = treasury_config.bump)]
+    pub treasury_config: Box<Account<'info, TreasuryConfigV2>>,
+
+    #[account(seeds = [VAULT_AUTHORITY_V2_SEED], bump)]
+    /// CHECK: PDA-only vault authority.
+    pub vault_authority: UncheckedAccount<'info>,
+
+    #[account(
+        seeds = [RELIEF_USDC_VAULT_SEED],
+        bump,
+        constraint = relief_usdc_vault.mint == treasury_config.usdc_mint @ CustomError::InvalidMint,
+        constraint = relief_usdc_vault.owner == vault_authority.key() @ CustomError::VictimReliefReliefVaultMismatch
+    )]
+    pub relief_usdc_vault: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        constraint = usdc_mint.key() == treasury_config.usdc_mint @ CustomError::InvalidMint
+    )]
+    pub usdc_mint: Box<Account<'info, Mint>>,
+
+    #[account(
+        init,
+        payer = executor,
+        space = 8 + ReliefPayoutRequestV1::INIT_SPACE,
+        seeds = [
+            RELIEF_PAYOUT_REQUEST_V1_SEED,
+            victim_relief_case.key().as_ref()
+        ],
+        bump
+    )]
+    pub relief_payout_request: Box<Account<'info, ReliefPayoutRequestV1>>,
+
+    #[account(
+        init,
+        payer = executor,
+        space = 8 + VictimReliefDecisionExecutionRecordV1::INIT_SPACE,
+        seeds = [
+            VICTIM_RELIEF_DECISION_EXECUTION_RECORD_V1_SEED,
+            execution_queue_item.key().as_ref()
+        ],
+        bump
+    )]
+    pub decision_execution_record: Box<Account<'info, VictimReliefDecisionExecutionRecordV1>>,
+
+    #[account(mut)]
+    pub executor: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ExecuteRejectVictimReliefCaseV1<'info> {
+    #[account(seeds = [GOVERNANCE_CONFIG_V1_SEED], bump = security_governance_config.bump)]
+    pub security_governance_config: Box<Account<'info, GovernanceConfigV1>>,
+
+    #[account(
+        seeds = [
+            PROTOCOL_MODULE_REGISTRY_V1_SEED,
+            &[protocol_module_stable_code_v1(ProtocolModuleIdV1::VictimRelief)]
+        ],
+        bump = protocol_module_registry.bump
+    )]
+    pub protocol_module_registry: Box<Account<'info, ProtocolModuleRegistryV1>>,
+
+    #[account(
+        seeds = [GOVERNANCE_PROPOSAL_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
+        bump = governance_proposal.bump
+    )]
+    pub governance_proposal: Box<Account<'info, GovernanceProposalV1>>,
+
+    #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_proposal_action.bump
+    )]
+    pub governance_proposal_action: Box<Account<'info, GovernanceProposalActionV1>>,
+
+    #[account(
+        seeds = [
+            UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_decision_adapter.bump
+    )]
+    pub governance_decision_adapter: Box<Account<'info, UniversalGovernanceDecisionAdapterV1>>,
+
+    #[account(
+        seeds = [PROPOSAL_DECISION_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
+        bump = proposal_decision.bump
+    )]
+    pub proposal_decision: Box<Account<'info, ProposalDecisionV1>>,
+
+    #[account(
+        seeds = [EXECUTION_QUEUE_ITEM_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
+        bump = execution_queue_item.bump
+    )]
+    pub execution_queue_item: Box<Account<'info, ExecutionQueueItemV1>>,
+
+    #[account(seeds = [VICTIM_RELIEF_CONFIG_V1_SEED], bump = victim_relief_config.bump)]
+    pub victim_relief_config: Box<Account<'info, VictimReliefConfigV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            VICTIM_RELIEF_CASE_V1_SEED,
+            victim_relief_config.key().as_ref(),
+            &victim_relief_case.case_id.to_le_bytes()
+        ],
+        bump = victim_relief_case.bump
+    )]
+    pub victim_relief_case: Box<Account<'info, VictimReliefCaseV1>>,
+
+    #[account(
+        seeds = [
+            VICTIM_RELIEF_POLICY_V1_SEED,
+            victim_relief_config.key().as_ref(),
+            &victim_relief_case.policy_version.to_le_bytes()
+        ],
+        bump = victim_relief_policy.bump
+    )]
+    pub victim_relief_policy: Box<Account<'info, VictimReliefPolicyV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            VICTIM_RELIEF_CLAIMANT_STATE_V1_SEED,
+            victim_relief_config.key().as_ref(),
+            victim_relief_case.claimant.as_ref()
+        ],
+        bump = claimant_state.bump
+    )]
+    pub claimant_state: Box<Account<'info, VictimReliefClaimantStateV1>>,
+
+    #[account(
+        seeds = [
+            VICTIM_RELIEF_EVIDENCE_SNAPSHOT_V1_SEED,
+            victim_relief_case.key().as_ref()
+        ],
+        bump = evidence_snapshot.bump
+    )]
+    pub evidence_snapshot: Box<Account<'info, VictimReliefEvidenceSnapshotV1>>,
+
+    #[account(seeds = [TREASURY_CONFIG_V2_SEED], bump = treasury_config.bump)]
+    pub treasury_config: Box<Account<'info, TreasuryConfigV2>>,
+
+    #[account(seeds = [VAULT_AUTHORITY_V2_SEED], bump)]
+    /// CHECK: PDA-only vault authority.
+    pub vault_authority: UncheckedAccount<'info>,
+
+    #[account(
+        seeds = [RELIEF_USDC_VAULT_SEED],
+        bump,
+        constraint = relief_usdc_vault.mint == treasury_config.usdc_mint @ CustomError::InvalidMint,
+        constraint = relief_usdc_vault.owner == vault_authority.key() @ CustomError::VictimReliefReliefVaultMismatch
+    )]
+    pub relief_usdc_vault: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        constraint = usdc_mint.key() == treasury_config.usdc_mint @ CustomError::InvalidMint
+    )]
+    pub usdc_mint: Box<Account<'info, Mint>>,
+
+    #[account(
+        init,
+        payer = executor,
+        space = 8 + VictimReliefDecisionExecutionRecordV1::INIT_SPACE,
+        seeds = [
+            VICTIM_RELIEF_DECISION_EXECUTION_RECORD_V1_SEED,
+            execution_queue_item.key().as_ref()
+        ],
+        bump
+    )]
+    pub decision_execution_record: Box<Account<'info, VictimReliefDecisionExecutionRecordV1>>,
+
+    #[account(mut)]
+    pub executor: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
 }
 
 pub fn initialize_victim_relief_config_v1_handler(
@@ -444,6 +796,180 @@ pub fn expire_victim_relief_case_v1_handler(ctx: Context<ExpireVictimReliefCaseV
         &mut ctx.accounts.victim_relief_case,
         VictimReliefCaseStatusV1::Expired,
         now,
+    )
+}
+
+pub fn freeze_victim_relief_evidence_v1_handler(
+    ctx: Context<FreezeVictimReliefEvidenceV1>,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let config_key = ctx.accounts.victim_relief_config.key();
+    let policy_key = ctx.accounts.victim_relief_policy.key();
+    let case_key = ctx.accounts.victim_relief_case.key();
+    let claimant_key = ctx.accounts.claimant.key();
+    let review_deadline = validate_victim_relief_evidence_freeze_v1(
+        &ctx.accounts.victim_relief_config,
+        &ctx.accounts.victim_relief_policy,
+        &ctx.accounts.victim_relief_case,
+        config_key,
+        policy_key,
+        claimant_key,
+        now,
+    )?;
+
+    record_victim_relief_evidence_snapshot_v1(
+        &mut ctx.accounts.evidence_snapshot,
+        &mut ctx.accounts.victim_relief_case,
+        case_key,
+        config_key,
+        policy_key,
+        now,
+        review_deadline,
+        ctx.bumps.evidence_snapshot,
+    )
+}
+
+pub fn execute_approve_victim_relief_case_v1_handler(
+    ctx: Context<ExecuteApproveVictimReliefCaseV1>,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let case_key = ctx.accounts.victim_relief_case.key();
+    let config_key = ctx.accounts.victim_relief_config.key();
+    let policy_key = ctx.accounts.victim_relief_policy.key();
+    let snapshot_key = ctx.accounts.evidence_snapshot.key();
+    let proposal_key = ctx.accounts.governance_proposal.key();
+    let proposal_action_key = ctx.accounts.governance_proposal_action.key();
+    let proposal_decision_key = ctx.accounts.proposal_decision.key();
+    let queue_key = ctx.accounts.execution_queue_item.key();
+    let module_registry_key = ctx.accounts.protocol_module_registry.key();
+    let security_governance_config_key = ctx.accounts.security_governance_config.key();
+    let treasury_config_key = ctx.accounts.treasury_config.key();
+    let relief_vault_key = ctx.accounts.relief_usdc_vault.key();
+    let executor_key = ctx.accounts.executor.key();
+
+    let validation = validate_victim_relief_decision_execution_context_v1(
+        &ctx.accounts.security_governance_config,
+        security_governance_config_key,
+        &ctx.accounts.protocol_module_registry,
+        module_registry_key,
+        &ctx.accounts.governance_proposal,
+        proposal_key,
+        &ctx.accounts.governance_proposal_action,
+        proposal_action_key,
+        &ctx.accounts.governance_decision_adapter,
+        &ctx.accounts.proposal_decision,
+        proposal_decision_key,
+        &ctx.accounts.execution_queue_item,
+        queue_key,
+        &ctx.accounts.victim_relief_config,
+        config_key,
+        &ctx.accounts.victim_relief_policy,
+        policy_key,
+        &ctx.accounts.victim_relief_case,
+        case_key,
+        &ctx.accounts.claimant_state,
+        &ctx.accounts.evidence_snapshot,
+        snapshot_key,
+        &ctx.accounts.treasury_config,
+        treasury_config_key,
+        relief_vault_key,
+        &ctx.accounts.relief_usdc_vault,
+        ctx.accounts.vault_authority.key(),
+        ctx.accounts.usdc_mint.key(),
+        GovernanceActionTypeV1::VictimReliefApproveCompensation,
+    )?;
+
+    record_approve_victim_relief_decision_v1(
+        &mut ctx.accounts.victim_relief_case,
+        &mut ctx.accounts.relief_payout_request,
+        &mut ctx.accounts.decision_execution_record,
+        case_key,
+        config_key,
+        policy_key,
+        proposal_key,
+        proposal_action_key,
+        proposal_decision_key,
+        queue_key,
+        module_registry_key,
+        snapshot_key,
+        treasury_config_key,
+        relief_vault_key,
+        executor_key,
+        validation,
+        now,
+        ctx.bumps.relief_payout_request,
+        ctx.bumps.decision_execution_record,
+    )
+}
+
+pub fn execute_reject_victim_relief_case_v1_handler(
+    ctx: Context<ExecuteRejectVictimReliefCaseV1>,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let case_key = ctx.accounts.victim_relief_case.key();
+    let config_key = ctx.accounts.victim_relief_config.key();
+    let policy_key = ctx.accounts.victim_relief_policy.key();
+    let snapshot_key = ctx.accounts.evidence_snapshot.key();
+    let proposal_key = ctx.accounts.governance_proposal.key();
+    let proposal_action_key = ctx.accounts.governance_proposal_action.key();
+    let proposal_decision_key = ctx.accounts.proposal_decision.key();
+    let queue_key = ctx.accounts.execution_queue_item.key();
+    let module_registry_key = ctx.accounts.protocol_module_registry.key();
+    let security_governance_config_key = ctx.accounts.security_governance_config.key();
+    let treasury_config_key = ctx.accounts.treasury_config.key();
+    let relief_vault_key = ctx.accounts.relief_usdc_vault.key();
+    let executor_key = ctx.accounts.executor.key();
+
+    let validation = validate_victim_relief_decision_execution_context_v1(
+        &ctx.accounts.security_governance_config,
+        security_governance_config_key,
+        &ctx.accounts.protocol_module_registry,
+        module_registry_key,
+        &ctx.accounts.governance_proposal,
+        proposal_key,
+        &ctx.accounts.governance_proposal_action,
+        proposal_action_key,
+        &ctx.accounts.governance_decision_adapter,
+        &ctx.accounts.proposal_decision,
+        proposal_decision_key,
+        &ctx.accounts.execution_queue_item,
+        queue_key,
+        &ctx.accounts.victim_relief_config,
+        config_key,
+        &ctx.accounts.victim_relief_policy,
+        policy_key,
+        &ctx.accounts.victim_relief_case,
+        case_key,
+        &ctx.accounts.claimant_state,
+        &ctx.accounts.evidence_snapshot,
+        snapshot_key,
+        &ctx.accounts.treasury_config,
+        treasury_config_key,
+        relief_vault_key,
+        &ctx.accounts.relief_usdc_vault,
+        ctx.accounts.vault_authority.key(),
+        ctx.accounts.usdc_mint.key(),
+        GovernanceActionTypeV1::VictimReliefRejectClaim,
+    )?;
+
+    record_reject_victim_relief_decision_v1(
+        &mut ctx.accounts.claimant_state,
+        &mut ctx.accounts.victim_relief_case,
+        &mut ctx.accounts.decision_execution_record,
+        config_key,
+        policy_key,
+        proposal_key,
+        proposal_action_key,
+        proposal_decision_key,
+        queue_key,
+        module_registry_key,
+        case_key,
+        snapshot_key,
+        executor_key,
+        ctx.accounts.victim_relief_policy.appeal_window_seconds,
+        validation,
+        now,
+        ctx.bumps.decision_execution_record,
     )
 }
 
@@ -866,6 +1392,776 @@ pub fn record_victim_relief_case_terminal_status_v1(
     Ok(())
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VictimReliefDecisionValidationResultV1 {
+    pub approved_amount_usdc: u64,
+    pub parameters_hash: [u8; 32],
+    pub canonical_governance_payload_hash: [u8; 32],
+    pub action_type: GovernanceActionTypeV1,
+    pub execution_type: VictimReliefDecisionExecutionTypeV1,
+}
+
+pub fn validate_victim_relief_evidence_freeze_v1(
+    config: &VictimReliefConfigV1,
+    policy: &VictimReliefPolicyV1,
+    victim_relief_case: &VictimReliefCaseV1,
+    config_key: Pubkey,
+    policy_key: Pubkey,
+    claimant: Pubkey,
+    now: i64,
+) -> Result<i64> {
+    require!(!config.paused, CustomError::VictimReliefPaused);
+    require!(
+        config.schema_version == VICTIM_RELIEF_SCHEMA_VERSION_V1,
+        CustomError::InvalidVictimReliefConfig
+    );
+    require!(
+        policy.schema_version == VICTIM_RELIEF_SCHEMA_VERSION_V1 && policy.active,
+        CustomError::InvalidVictimReliefPolicy
+    );
+    require_keys_eq!(
+        policy.config,
+        config_key,
+        CustomError::InvalidVictimReliefPolicy
+    );
+    require!(
+        victim_relief_case.schema_version == VICTIM_RELIEF_SCHEMA_VERSION_V1,
+        CustomError::InvalidVictimReliefConfig
+    );
+    require_keys_eq!(
+        victim_relief_case.config,
+        config_key,
+        CustomError::InvalidVictimReliefConfig
+    );
+    require_keys_eq!(
+        victim_relief_case.policy,
+        policy_key,
+        CustomError::InvalidVictimReliefPolicyVersion
+    );
+    require!(
+        victim_relief_case.policy_version == policy.policy_version,
+        CustomError::InvalidVictimReliefPolicyVersion
+    );
+    require!(
+        victim_relief_case.claimant == claimant,
+        CustomError::VictimReliefClaimantMismatch
+    );
+    require!(
+        victim_relief_case.recipient_owner == claimant,
+        CustomError::VictimReliefRecipientMismatch
+    );
+    require!(
+        victim_relief_case.status == VictimReliefCaseStatusV1::EvidencePeriod,
+        CustomError::VictimReliefCaseStatusMismatch
+    );
+    require!(
+        now <= victim_relief_case.evidence_deadline,
+        CustomError::VictimReliefEvidenceFreezeTooLate
+    );
+    require!(
+        !is_zero_32(&victim_relief_case.evidence_root),
+        CustomError::InvalidVictimReliefEvidenceRoot
+    );
+    validate_victim_relief_evidence_count_v1(
+        victim_relief_case.evidence_count,
+        policy.max_evidence_items,
+    )?;
+    require!(
+        victim_relief_case.claimed_amount_usdc >= policy.min_claim_amount_usdc
+            && victim_relief_case.claimed_amount_usdc <= policy.max_claim_amount_usdc,
+        CustomError::InvalidVictimReliefClaimAmount
+    );
+    require!(
+        victim_relief_case.usdc_mint == config.usdc_mint,
+        CustomError::InvalidMint
+    );
+    let review_deadline = now
+        .checked_add(policy.review_window_seconds)
+        .ok_or(CustomError::MathOverflow)?;
+    Ok(review_deadline)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn record_victim_relief_evidence_snapshot_v1(
+    snapshot: &mut VictimReliefEvidenceSnapshotV1,
+    victim_relief_case: &mut VictimReliefCaseV1,
+    case_key: Pubkey,
+    config_key: Pubkey,
+    policy_key: Pubkey,
+    now: i64,
+    review_deadline: i64,
+    bump: u8,
+) -> Result<()> {
+    require!(
+        snapshot.victim_relief_case == Pubkey::default(),
+        CustomError::VictimReliefEvidenceAlreadyFrozen
+    );
+
+    snapshot.victim_relief_case = case_key;
+    snapshot.config = config_key;
+    snapshot.policy = policy_key;
+    snapshot.policy_version = victim_relief_case.policy_version;
+    snapshot.claimant = victim_relief_case.claimant;
+    snapshot.subject_commitment = victim_relief_case.subject_commitment;
+    snapshot.evidence_root = victim_relief_case.evidence_root;
+    snapshot.evidence_count = victim_relief_case.evidence_count;
+    snapshot.evidence_revision = victim_relief_case.evidence_revision;
+    snapshot.claimed_amount_usdc = victim_relief_case.claimed_amount_usdc;
+    snapshot.recipient_owner = victim_relief_case.recipient_owner;
+    snapshot.recipient_token_account = victim_relief_case.recipient_token_account;
+    snapshot.usdc_mint = victim_relief_case.usdc_mint;
+    snapshot.frozen_at = now;
+    snapshot.review_deadline = review_deadline;
+    snapshot.schema_version = VICTIM_RELIEF_SCHEMA_VERSION_V1;
+    snapshot.bump = bump;
+    snapshot.reserved = [0; 32];
+
+    victim_relief_case.status = VictimReliefCaseStatusV1::UnderReview;
+    victim_relief_case.review_deadline = review_deadline;
+    victim_relief_case.updated_at = now;
+    Ok(())
+}
+
+pub fn derive_victim_relief_approved_amount_v1(
+    victim_relief_case: &VictimReliefCaseV1,
+    policy: &VictimReliefPolicyV1,
+    policy_key: Pubkey,
+) -> Result<u64> {
+    require_keys_eq!(
+        victim_relief_case.policy,
+        policy_key,
+        CustomError::InvalidVictimReliefPolicyVersion
+    );
+    require!(
+        victim_relief_case.policy_version == policy.policy_version,
+        CustomError::InvalidVictimReliefPolicyVersion
+    );
+    require!(
+        victim_relief_case.claimed_amount_usdc > 0 && policy.max_payout_per_case_usdc > 0,
+        CustomError::InvalidVictimReliefClaimAmount
+    );
+    let approved_amount = core::cmp::min(
+        victim_relief_case.claimed_amount_usdc,
+        policy.max_payout_per_case_usdc,
+    );
+    require!(
+        approved_amount > 0
+            && approved_amount <= victim_relief_case.claimed_amount_usdc
+            && approved_amount <= policy.max_payout_per_case_usdc,
+        CustomError::VictimReliefApprovedAmountMismatch
+    );
+    Ok(approved_amount)
+}
+
+pub fn hash_victim_relief_decision_parameters_v1(
+    parameters: &VictimReliefDecisionParametersV1,
+) -> Result<[u8; 32]> {
+    require!(
+        parameters.schema_version == VICTIM_RELIEF_DECISION_SCHEMA_VERSION,
+        CustomError::InvalidVictimReliefDecisionSchema
+    );
+    let envelope = VictimReliefDecisionParametersHashEnvelopeV1 {
+        domain_separator: VICTIM_RELIEF_DECISION_PARAMETERS_V1_DOMAIN_BYTES,
+        parameters: *parameters,
+    };
+    hash_contributor_payload(&envelope)
+        .map_err(|_| error!(CustomError::VictimReliefDecisionParametersMismatch))
+}
+
+pub fn victim_relief_decision_execution_type_stable_code_v1(
+    execution_type: VictimReliefDecisionExecutionTypeV1,
+) -> u8 {
+    match execution_type {
+        VictimReliefDecisionExecutionTypeV1::Approve => 1,
+        VictimReliefDecisionExecutionTypeV1::Reject => 2,
+    }
+}
+
+pub fn victim_relief_decision_execution_type_from_stable_code_v1(
+    code: u8,
+) -> Result<VictimReliefDecisionExecutionTypeV1> {
+    match code {
+        1 => Ok(VictimReliefDecisionExecutionTypeV1::Approve),
+        2 => Ok(VictimReliefDecisionExecutionTypeV1::Reject),
+        _ => err!(CustomError::InvalidVictimReliefDecisionSchema),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn build_victim_relief_decision_parameters_v1(
+    config_key: Pubkey,
+    policy_key: Pubkey,
+    victim_relief_case_key: Pubkey,
+    evidence_snapshot_key: Pubkey,
+    victim_relief_case: &VictimReliefCaseV1,
+    evidence_snapshot: &VictimReliefEvidenceSnapshotV1,
+    treasury_config: Pubkey,
+    relief_usdc_vault: Pubkey,
+    action_type: GovernanceActionTypeV1,
+    approved_amount_usdc: u64,
+    proposal_id: u64,
+) -> VictimReliefDecisionParametersV1 {
+    VictimReliefDecisionParametersV1 {
+        schema_version: VICTIM_RELIEF_DECISION_SCHEMA_VERSION,
+        config: config_key,
+        policy: policy_key,
+        policy_version: victim_relief_case.policy_version,
+        victim_relief_case: victim_relief_case_key,
+        evidence_snapshot: evidence_snapshot_key,
+        case_id: victim_relief_case.case_id,
+        claimant: victim_relief_case.claimant,
+        subject_commitment: evidence_snapshot.subject_commitment,
+        evidence_root: evidence_snapshot.evidence_root,
+        evidence_count: evidence_snapshot.evidence_count,
+        evidence_revision: evidence_snapshot.evidence_revision,
+        claimed_amount_usdc: victim_relief_case.claimed_amount_usdc,
+        approved_amount_usdc,
+        recipient_owner: victim_relief_case.recipient_owner,
+        recipient_token_account: victim_relief_case.recipient_token_account,
+        usdc_mint: victim_relief_case.usdc_mint,
+        treasury_config,
+        relief_usdc_vault,
+        action_type,
+        expected_case_status: VictimReliefCaseStatusV1::UnderReview,
+        proposal_id,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn validate_victim_relief_snapshot_matches_case_v1(
+    snapshot: &VictimReliefEvidenceSnapshotV1,
+    snapshot_key: Pubkey,
+    victim_relief_case: &VictimReliefCaseV1,
+    victim_relief_case_key: Pubkey,
+    config_key: Pubkey,
+    policy_key: Pubkey,
+) -> Result<()> {
+    require!(
+        snapshot_key != Pubkey::default(),
+        CustomError::VictimReliefEvidenceSnapshotMismatch
+    );
+    require_keys_eq!(
+        snapshot.victim_relief_case,
+        victim_relief_case_key,
+        CustomError::VictimReliefEvidenceSnapshotMismatch
+    );
+    require_keys_eq!(
+        snapshot.config,
+        config_key,
+        CustomError::VictimReliefEvidenceSnapshotMismatch
+    );
+    require_keys_eq!(
+        snapshot.policy,
+        policy_key,
+        CustomError::VictimReliefEvidenceSnapshotMismatch
+    );
+    require!(
+        snapshot.policy_version == victim_relief_case.policy_version
+            && snapshot.claimant == victim_relief_case.claimant
+            && snapshot.subject_commitment == victim_relief_case.subject_commitment
+            && snapshot.evidence_root == victim_relief_case.evidence_root
+            && snapshot.evidence_count == victim_relief_case.evidence_count
+            && snapshot.evidence_revision == victim_relief_case.evidence_revision
+            && snapshot.claimed_amount_usdc == victim_relief_case.claimed_amount_usdc
+            && snapshot.recipient_owner == victim_relief_case.recipient_owner
+            && snapshot.recipient_token_account == victim_relief_case.recipient_token_account
+            && snapshot.usdc_mint == victim_relief_case.usdc_mint
+            && snapshot.schema_version == VICTIM_RELIEF_SCHEMA_VERSION_V1,
+        CustomError::VictimReliefEvidenceSnapshotMismatch
+    );
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn validate_victim_relief_decision_execution_context_v1(
+    security_governance_config: &GovernanceConfigV1,
+    security_governance_config_key: Pubkey,
+    protocol_module_registry: &ProtocolModuleRegistryV1,
+    protocol_module_registry_key: Pubkey,
+    governance_proposal: &GovernanceProposalV1,
+    governance_proposal_key: Pubkey,
+    governance_proposal_action: &GovernanceProposalActionV1,
+    governance_proposal_action_key: Pubkey,
+    governance_decision_adapter: &UniversalGovernanceDecisionAdapterV1,
+    proposal_decision: &ProposalDecisionV1,
+    proposal_decision_key: Pubkey,
+    execution_queue_item: &ExecutionQueueItemV1,
+    execution_queue_item_key: Pubkey,
+    config: &VictimReliefConfigV1,
+    config_key: Pubkey,
+    policy: &VictimReliefPolicyV1,
+    policy_key: Pubkey,
+    victim_relief_case: &VictimReliefCaseV1,
+    victim_relief_case_key: Pubkey,
+    claimant_state: &VictimReliefClaimantStateV1,
+    evidence_snapshot: &VictimReliefEvidenceSnapshotV1,
+    evidence_snapshot_key: Pubkey,
+    treasury_config: &TreasuryConfigV2,
+    treasury_config_key: Pubkey,
+    relief_usdc_vault_key: Pubkey,
+    relief_usdc_vault: &TokenAccount,
+    vault_authority: Pubkey,
+    usdc_mint: Pubkey,
+    expected_action: GovernanceActionTypeV1,
+) -> Result<VictimReliefDecisionValidationResultV1> {
+    require!(
+        expected_action == GovernanceActionTypeV1::VictimReliefApproveCompensation
+            || expected_action == GovernanceActionTypeV1::VictimReliefRejectClaim,
+        CustomError::VictimReliefDecisionActionMismatch
+    );
+    require!(
+        governance_proposal.status == GovernanceProposalStatusV1::Passed,
+        CustomError::InvalidGovernanceProposal
+    );
+    validate_governance_proposal_action_v1(
+        governance_proposal,
+        governance_proposal_action,
+        governance_proposal_key,
+    )?;
+    require!(
+        governance_proposal_action_key != Pubkey::default(),
+        CustomError::GovernanceProposalActionMissing
+    );
+    require!(
+        governance_proposal_action.action_type == expected_action,
+        CustomError::VictimReliefDecisionActionMismatch
+    );
+    require!(
+        governance_proposal_action.module_id == ProtocolModuleIdV1::VictimRelief,
+        CustomError::VictimReliefDecisionActionMismatch
+    );
+    require_keys_eq!(
+        governance_proposal_action.target_program,
+        crate::ID,
+        CustomError::VictimReliefDecisionTargetMismatch
+    );
+    require_keys_eq!(
+        governance_proposal_action.target_account,
+        victim_relief_case_key,
+        CustomError::VictimReliefDecisionTargetMismatch
+    );
+    validate_protocol_module_registry_v1(
+        protocol_module_registry,
+        protocol_module_registry_key,
+        security_governance_config_key,
+        ProtocolModuleIdV1::VictimRelief,
+        crate::ID,
+    )?;
+    require_keys_eq!(
+        config.security_governance_config,
+        security_governance_config_key,
+        CustomError::ProtocolModuleGovernanceConfigMismatch
+    );
+    require!(
+        !security_governance_config.is_paused,
+        CustomError::SecurityLayerPaused
+    );
+    require!(!config.paused, CustomError::VictimReliefPaused);
+
+    require!(
+        victim_relief_case.status == VictimReliefCaseStatusV1::UnderReview,
+        CustomError::VictimReliefDecisionNotEligible
+    );
+    require_keys_eq!(
+        victim_relief_case.config,
+        config_key,
+        CustomError::InvalidVictimReliefConfig
+    );
+    require_keys_eq!(
+        victim_relief_case.policy,
+        policy_key,
+        CustomError::InvalidVictimReliefPolicyVersion
+    );
+    require!(
+        victim_relief_case.policy_version == policy.policy_version
+            && policy.schema_version == VICTIM_RELIEF_SCHEMA_VERSION_V1
+            && policy.config == config_key,
+        CustomError::InvalidVictimReliefPolicyVersion
+    );
+    require!(
+        claimant_state.config == config_key
+            && claimant_state.claimant == victim_relief_case.claimant,
+        CustomError::VictimReliefClaimantMismatch
+    );
+    validate_victim_relief_snapshot_matches_case_v1(
+        evidence_snapshot,
+        evidence_snapshot_key,
+        victim_relief_case,
+        victim_relief_case_key,
+        config_key,
+        policy_key,
+    )?;
+    require_keys_eq!(
+        config.treasury_config,
+        treasury_config_key,
+        CustomError::InvalidVictimReliefConfig
+    );
+    require!(
+        config.usdc_mint == treasury_config.usdc_mint
+            && config.usdc_mint == victim_relief_case.usdc_mint
+            && usdc_mint == treasury_config.usdc_mint,
+        CustomError::InvalidMint
+    );
+    let (expected_relief_vault, _) =
+        Pubkey::find_program_address(&[RELIEF_USDC_VAULT_SEED], &crate::ID);
+    require_keys_eq!(
+        relief_usdc_vault_key,
+        expected_relief_vault,
+        CustomError::VictimReliefReliefVaultMismatch
+    );
+    let (expected_vault_authority, _) =
+        Pubkey::find_program_address(&[VAULT_AUTHORITY_V2_SEED], &crate::ID);
+    require_keys_eq!(
+        vault_authority,
+        expected_vault_authority,
+        CustomError::VictimReliefReliefVaultMismatch
+    );
+    require!(
+        relief_usdc_vault.mint == treasury_config.usdc_mint
+            && relief_usdc_vault.owner == expected_vault_authority,
+        CustomError::VictimReliefReliefVaultMismatch
+    );
+
+    let approved_amount_usdc = match expected_action {
+        GovernanceActionTypeV1::VictimReliefApproveCompensation => {
+            derive_victim_relief_approved_amount_v1(victim_relief_case, policy, policy_key)?
+        }
+        GovernanceActionTypeV1::VictimReliefRejectClaim => 0,
+        _ => return err!(CustomError::VictimReliefDecisionActionMismatch),
+    };
+    let execution_type = match expected_action {
+        GovernanceActionTypeV1::VictimReliefApproveCompensation => {
+            VictimReliefDecisionExecutionTypeV1::Approve
+        }
+        GovernanceActionTypeV1::VictimReliefRejectClaim => {
+            VictimReliefDecisionExecutionTypeV1::Reject
+        }
+        _ => return err!(CustomError::VictimReliefDecisionActionMismatch),
+    };
+    let parameters = build_victim_relief_decision_parameters_v1(
+        config_key,
+        policy_key,
+        victim_relief_case_key,
+        evidence_snapshot_key,
+        victim_relief_case,
+        evidence_snapshot,
+        treasury_config_key,
+        relief_usdc_vault_key,
+        expected_action,
+        approved_amount_usdc,
+        governance_proposal.proposal_id,
+    );
+    require!(
+        parameters.expected_case_status == VictimReliefCaseStatusV1::UnderReview,
+        CustomError::InvalidVictimReliefDecisionSchema
+    );
+    let parameters_hash = hash_victim_relief_decision_parameters_v1(&parameters)?;
+    require!(
+        governance_proposal_action.parameters_hash == parameters_hash,
+        CustomError::VictimReliefDecisionParametersMismatch
+    );
+
+    let governance_payload = GovernancePayloadV1 {
+        schema_version: GOVERNANCE_PAYLOAD_V1_SCHEMA_VERSION,
+        action_type: governance_proposal_action.action_type,
+        module_id: governance_proposal_action.module_id,
+        target_program: governance_proposal_action.target_program,
+        target_account: governance_proposal_action.target_account,
+        parameters_hash: governance_proposal_action.parameters_hash,
+        evidence_hash: governance_proposal_action.evidence_hash,
+        created_at: governance_proposal_action.created_at,
+    };
+    let canonical_governance_payload_hash = hash_governance_payload_v1(&governance_payload)?;
+    require!(
+        canonical_governance_payload_hash == governance_proposal_action.canonical_payload_hash,
+        CustomError::VictimReliefDecisionParametersMismatch
+    );
+    require!(
+        governance_proposal.payload_hash == canonical_governance_payload_hash,
+        CustomError::VictimReliefDecisionParametersMismatch
+    );
+
+    let expected_security_action = map_governance_action_to_security_action(expected_action)?;
+    require!(
+        governance_decision_adapter.governance_proposal == governance_proposal_key
+            && governance_decision_adapter.proposal_decision == proposal_decision_key
+            && governance_decision_adapter.action_type == expected_security_action
+            && governance_decision_adapter.target_program == crate::ID
+            && governance_decision_adapter.target_account == victim_relief_case_key
+            && governance_decision_adapter.payload_hash == canonical_governance_payload_hash
+            && governance_decision_adapter.executed,
+        CustomError::InvalidGovernanceDecisionAdapter
+    );
+    require!(
+        proposal_decision.proposal_id == governance_proposal.proposal_id
+            && proposal_decision.proposer == governance_proposal.proposer
+            && proposal_decision.proposal_type
+                == security_proposal_type_for_action(expected_security_action)?
+            && proposal_decision.decision == ProposalDecision::Approved,
+        CustomError::ProposalNotApproved
+    );
+    require!(
+        execution_queue_item.proposal_id == governance_proposal.proposal_id
+            && execution_queue_item.action_type == expected_security_action
+            && execution_queue_item.target_program == crate::ID
+            && execution_queue_item.target_account == victim_relief_case_key
+            && execution_queue_item.decision == ProposalDecision::Approved
+            && execution_queue_item.status == ExecutionStatus::Executed
+            && execution_queue_item.payload_hash == canonical_governance_payload_hash
+            && execution_queue_item_key != Pubkey::default(),
+        CustomError::InvalidExecutionStatus
+    );
+
+    Ok(VictimReliefDecisionValidationResultV1 {
+        approved_amount_usdc,
+        parameters_hash,
+        canonical_governance_payload_hash,
+        action_type: expected_action,
+        execution_type,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn record_victim_relief_decision_execution_record_v1(
+    record: &mut VictimReliefDecisionExecutionRecordV1,
+    queue_key: Pubkey,
+    proposal_decision_key: Pubkey,
+    governance_proposal_key: Pubkey,
+    governance_proposal_action_key: Pubkey,
+    module_registry_key: Pubkey,
+    config_key: Pubkey,
+    policy_key: Pubkey,
+    case_key: Pubkey,
+    snapshot_key: Pubkey,
+    case_status_before: VictimReliefCaseStatusV1,
+    case_status_after: VictimReliefCaseStatusV1,
+    victim_relief_case: &VictimReliefCaseV1,
+    validation: VictimReliefDecisionValidationResultV1,
+    executor: Pubkey,
+    now: i64,
+    bump: u8,
+) -> Result<()> {
+    require!(
+        record.execution_queue_item == Pubkey::default(),
+        CustomError::VictimReliefDecisionExecutionAlreadyCompleted
+    );
+    record.execution_queue_item = queue_key;
+    record.proposal_decision = proposal_decision_key;
+    record.governance_proposal = governance_proposal_key;
+    record.governance_proposal_action = governance_proposal_action_key;
+    record.module_registry = module_registry_key;
+    record.config = config_key;
+    record.policy = policy_key;
+    record.victim_relief_case = case_key;
+    record.evidence_snapshot = snapshot_key;
+    record.execution_type = validation.execution_type;
+    record.governance_action_type = validation.action_type;
+    record.case_status_before = case_status_before;
+    record.case_status_after = case_status_after;
+    record.claimed_amount_usdc = victim_relief_case.claimed_amount_usdc;
+    record.approved_amount_usdc = validation.approved_amount_usdc;
+    record.recipient_owner = victim_relief_case.recipient_owner;
+    record.recipient_token_account = victim_relief_case.recipient_token_account;
+    record.parameters_hash = validation.parameters_hash;
+    record.canonical_governance_payload_hash = validation.canonical_governance_payload_hash;
+    record.executor = executor;
+    record.executed_at = now;
+    record.schema_version = VICTIM_RELIEF_DECISION_SCHEMA_VERSION;
+    record.bump = bump;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn record_relief_payout_request_v1(
+    payout_request: &mut ReliefPayoutRequestV1,
+    case_key: Pubkey,
+    config_key: Pubkey,
+    policy_key: Pubkey,
+    victim_relief_case: &VictimReliefCaseV1,
+    governance_proposal_key: Pubkey,
+    proposal_decision_key: Pubkey,
+    queue_key: Pubkey,
+    snapshot_key: Pubkey,
+    treasury_config_key: Pubkey,
+    relief_vault_key: Pubkey,
+    parameters_hash: [u8; 32],
+    now: i64,
+    bump: u8,
+) -> Result<()> {
+    require!(
+        payout_request.victim_relief_case == Pubkey::default(),
+        CustomError::VictimReliefPayoutRequestAlreadyExists
+    );
+    payout_request.victim_relief_case = case_key;
+    payout_request.config = config_key;
+    payout_request.policy = policy_key;
+    payout_request.policy_version = victim_relief_case.policy_version;
+    payout_request.governance_proposal = governance_proposal_key;
+    payout_request.proposal_decision = proposal_decision_key;
+    payout_request.execution_queue_item = queue_key;
+    payout_request.evidence_snapshot = snapshot_key;
+    payout_request.approved_amount_usdc = victim_relief_case.approved_amount_usdc;
+    payout_request.recipient_owner = victim_relief_case.recipient_owner;
+    payout_request.recipient_token_account = victim_relief_case.recipient_token_account;
+    payout_request.treasury_config = treasury_config_key;
+    payout_request.relief_usdc_vault = relief_vault_key;
+    payout_request.usdc_mint = victim_relief_case.usdc_mint;
+    payout_request.status = VictimReliefPayoutStatusV1::Approved;
+    payout_request.parameters_hash = parameters_hash;
+    payout_request.created_at = now;
+    payout_request.executed_at = 0;
+    payout_request.schema_version = VICTIM_RELIEF_DECISION_SCHEMA_VERSION;
+    payout_request.bump = bump;
+    payout_request.reserved = [0; 32];
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn record_approve_victim_relief_decision_v1(
+    victim_relief_case: &mut VictimReliefCaseV1,
+    payout_request: &mut ReliefPayoutRequestV1,
+    record: &mut VictimReliefDecisionExecutionRecordV1,
+    case_key: Pubkey,
+    config_key: Pubkey,
+    policy_key: Pubkey,
+    governance_proposal_key: Pubkey,
+    governance_proposal_action_key: Pubkey,
+    proposal_decision_key: Pubkey,
+    queue_key: Pubkey,
+    module_registry_key: Pubkey,
+    snapshot_key: Pubkey,
+    treasury_config_key: Pubkey,
+    relief_vault_key: Pubkey,
+    executor: Pubkey,
+    validation: VictimReliefDecisionValidationResultV1,
+    now: i64,
+    payout_bump: u8,
+    record_bump: u8,
+) -> Result<()> {
+    require!(
+        validation.execution_type == VictimReliefDecisionExecutionTypeV1::Approve,
+        CustomError::VictimReliefDecisionActionMismatch
+    );
+    require!(
+        validation.approved_amount_usdc > 0,
+        CustomError::VictimReliefApprovedAmountMismatch
+    );
+    let case_status_before = victim_relief_case.status;
+    require!(
+        case_status_before == VictimReliefCaseStatusV1::UnderReview,
+        CustomError::VictimReliefDecisionNotEligible
+    );
+
+    victim_relief_case.approved_amount_usdc = validation.approved_amount_usdc;
+    victim_relief_case.status = VictimReliefCaseStatusV1::PayoutQueued;
+    victim_relief_case.decision_proposal = governance_proposal_key;
+    victim_relief_case.decision_queue = queue_key;
+    victim_relief_case.updated_at = now;
+
+    record_relief_payout_request_v1(
+        payout_request,
+        case_key,
+        config_key,
+        policy_key,
+        victim_relief_case,
+        governance_proposal_key,
+        proposal_decision_key,
+        queue_key,
+        snapshot_key,
+        treasury_config_key,
+        relief_vault_key,
+        validation.parameters_hash,
+        now,
+        payout_bump,
+    )?;
+    record_victim_relief_decision_execution_record_v1(
+        record,
+        queue_key,
+        proposal_decision_key,
+        governance_proposal_key,
+        governance_proposal_action_key,
+        module_registry_key,
+        config_key,
+        policy_key,
+        case_key,
+        snapshot_key,
+        case_status_before,
+        VictimReliefCaseStatusV1::PayoutQueued,
+        victim_relief_case,
+        validation,
+        executor,
+        now,
+        record_bump,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn record_reject_victim_relief_decision_v1(
+    claimant_state: &mut VictimReliefClaimantStateV1,
+    victim_relief_case: &mut VictimReliefCaseV1,
+    record: &mut VictimReliefDecisionExecutionRecordV1,
+    config_key: Pubkey,
+    policy_key: Pubkey,
+    governance_proposal_key: Pubkey,
+    governance_proposal_action_key: Pubkey,
+    proposal_decision_key: Pubkey,
+    queue_key: Pubkey,
+    module_registry_key: Pubkey,
+    case_key: Pubkey,
+    snapshot_key: Pubkey,
+    executor: Pubkey,
+    appeal_window_seconds: i64,
+    validation: VictimReliefDecisionValidationResultV1,
+    now: i64,
+    record_bump: u8,
+) -> Result<()> {
+    require!(
+        validation.execution_type == VictimReliefDecisionExecutionTypeV1::Reject,
+        CustomError::VictimReliefDecisionActionMismatch
+    );
+    require!(
+        validation.approved_amount_usdc == 0,
+        CustomError::VictimReliefApprovedAmountMismatch
+    );
+    let case_status_before = victim_relief_case.status;
+    require!(
+        case_status_before == VictimReliefCaseStatusV1::UnderReview,
+        CustomError::VictimReliefDecisionNotEligible
+    );
+
+    let appeal_deadline = now
+        .checked_add(appeal_window_seconds)
+        .ok_or(CustomError::MathOverflow)?;
+    close_victim_relief_active_case_count_v1(claimant_state, now)?;
+
+    victim_relief_case.approved_amount_usdc = 0;
+    victim_relief_case.status = VictimReliefCaseStatusV1::Rejected;
+    victim_relief_case.decision_proposal = governance_proposal_key;
+    victim_relief_case.decision_queue = queue_key;
+    victim_relief_case.appeal_deadline = appeal_deadline;
+    victim_relief_case.updated_at = now;
+
+    record_victim_relief_decision_execution_record_v1(
+        record,
+        queue_key,
+        proposal_decision_key,
+        governance_proposal_key,
+        governance_proposal_action_key,
+        module_registry_key,
+        config_key,
+        policy_key,
+        case_key,
+        snapshot_key,
+        case_status_before,
+        VictimReliefCaseStatusV1::Rejected,
+        victim_relief_case,
+        validation,
+        executor,
+        now,
+        record_bump,
+    )
+}
+
 fn validate_victim_relief_evidence_count_v1(
     evidence_count: u32,
     max_evidence_items: u32,
@@ -987,6 +2283,125 @@ mod tests {
             schema_version: VICTIM_RELIEF_SCHEMA_VERSION_V1,
             bump: 4,
             reserved: [0; 64],
+        }
+    }
+
+    fn empty_snapshot() -> VictimReliefEvidenceSnapshotV1 {
+        VictimReliefEvidenceSnapshotV1 {
+            victim_relief_case: Pubkey::default(),
+            config: Pubkey::default(),
+            policy: Pubkey::default(),
+            policy_version: 0,
+            claimant: Pubkey::default(),
+            subject_commitment: [0; 32],
+            evidence_root: [0; 32],
+            evidence_count: 0,
+            evidence_revision: 0,
+            claimed_amount_usdc: 0,
+            recipient_owner: Pubkey::default(),
+            recipient_token_account: Pubkey::default(),
+            usdc_mint: Pubkey::default(),
+            frozen_at: 0,
+            review_deadline: 0,
+            schema_version: 0,
+            bump: 0,
+            reserved: [0; 32],
+        }
+    }
+
+    fn snapshot_from_case(
+        case_key: Pubkey,
+        config_key: Pubkey,
+        policy_key: Pubkey,
+        case: &VictimReliefCaseV1,
+    ) -> VictimReliefEvidenceSnapshotV1 {
+        VictimReliefEvidenceSnapshotV1 {
+            victim_relief_case: case_key,
+            config: config_key,
+            policy: policy_key,
+            policy_version: case.policy_version,
+            claimant: case.claimant,
+            subject_commitment: case.subject_commitment,
+            evidence_root: case.evidence_root,
+            evidence_count: case.evidence_count,
+            evidence_revision: case.evidence_revision,
+            claimed_amount_usdc: case.claimed_amount_usdc,
+            recipient_owner: case.recipient_owner,
+            recipient_token_account: case.recipient_token_account,
+            usdc_mint: case.usdc_mint,
+            frozen_at: 1_999,
+            review_deadline: 3_000,
+            schema_version: VICTIM_RELIEF_SCHEMA_VERSION_V1,
+            bump: 8,
+            reserved: [0; 32],
+        }
+    }
+
+    fn empty_decision_record() -> VictimReliefDecisionExecutionRecordV1 {
+        VictimReliefDecisionExecutionRecordV1 {
+            execution_queue_item: Pubkey::default(),
+            proposal_decision: Pubkey::default(),
+            governance_proposal: Pubkey::default(),
+            governance_proposal_action: Pubkey::default(),
+            module_registry: Pubkey::default(),
+            config: Pubkey::default(),
+            policy: Pubkey::default(),
+            victim_relief_case: Pubkey::default(),
+            evidence_snapshot: Pubkey::default(),
+            execution_type: VictimReliefDecisionExecutionTypeV1::Reject,
+            governance_action_type: GovernanceActionTypeV1::VictimReliefRejectClaim,
+            case_status_before: VictimReliefCaseStatusV1::EvidencePeriod,
+            case_status_after: VictimReliefCaseStatusV1::EvidencePeriod,
+            claimed_amount_usdc: 0,
+            approved_amount_usdc: 0,
+            recipient_owner: Pubkey::default(),
+            recipient_token_account: Pubkey::default(),
+            parameters_hash: [0; 32],
+            canonical_governance_payload_hash: [0; 32],
+            executor: Pubkey::default(),
+            executed_at: 0,
+            schema_version: 0,
+            bump: 0,
+        }
+    }
+
+    fn empty_payout_request() -> ReliefPayoutRequestV1 {
+        ReliefPayoutRequestV1 {
+            victim_relief_case: Pubkey::default(),
+            config: Pubkey::default(),
+            policy: Pubkey::default(),
+            policy_version: 0,
+            governance_proposal: Pubkey::default(),
+            proposal_decision: Pubkey::default(),
+            execution_queue_item: Pubkey::default(),
+            evidence_snapshot: Pubkey::default(),
+            approved_amount_usdc: 0,
+            recipient_owner: Pubkey::default(),
+            recipient_token_account: Pubkey::default(),
+            treasury_config: Pubkey::default(),
+            relief_usdc_vault: Pubkey::default(),
+            usdc_mint: Pubkey::default(),
+            status: VictimReliefPayoutStatusV1::Cancelled,
+            parameters_hash: [0; 32],
+            created_at: 0,
+            executed_at: 0,
+            schema_version: 0,
+            bump: 0,
+            reserved: [0; 32],
+        }
+    }
+
+    fn validation_result(
+        action: GovernanceActionTypeV1,
+        execution_type: VictimReliefDecisionExecutionTypeV1,
+        approved_amount_usdc: u64,
+    ) -> VictimReliefDecisionValidationResultV1 {
+        VictimReliefDecisionValidationResultV1 {
+            approved_amount_usdc,
+            parameters_hash: [7; 32],
+            canonical_governance_payload_hash: [8; 32],
+            action_type: action,
+            execution_type,
         }
     }
 
@@ -1495,6 +2910,411 @@ mod tests {
     }
 
     #[test]
+    fn freeze_evidence_records_snapshot_and_sets_under_review() {
+        let config_key = Pubkey::new_unique();
+        let policy_key = Pubkey::new_unique();
+        let case_key = Pubkey::new_unique();
+        let claimant = Pubkey::new_unique();
+        let usdc_mint = Pubkey::new_unique();
+        let mut config = config_fixture(policy_key);
+        config.usdc_mint = usdc_mint;
+        let policy = policy_fixture(config_key);
+        let mut case = case_fixture(config_key, policy_key, claimant, usdc_mint);
+        let mut snapshot = empty_snapshot();
+
+        let review_deadline = validate_victim_relief_evidence_freeze_v1(
+            &config,
+            &policy,
+            &case,
+            config_key,
+            policy_key,
+            claimant,
+            case.evidence_deadline,
+        )
+        .unwrap();
+        assert_eq!(
+            review_deadline,
+            case.evidence_deadline + policy.review_window_seconds
+        );
+        let evidence_deadline = case.evidence_deadline;
+
+        record_victim_relief_evidence_snapshot_v1(
+            &mut snapshot,
+            &mut case,
+            case_key,
+            config_key,
+            policy_key,
+            evidence_deadline,
+            review_deadline,
+            9,
+        )
+        .unwrap();
+
+        assert_eq!(case.status, VictimReliefCaseStatusV1::UnderReview);
+        assert_eq!(case.review_deadline, review_deadline);
+        assert_eq!(snapshot.victim_relief_case, case_key);
+        assert_eq!(snapshot.evidence_root, case.evidence_root);
+        assert_eq!(snapshot.evidence_count, case.evidence_count);
+        assert_eq!(snapshot.recipient_owner, claimant);
+        assert_eq!(snapshot.bump, 9);
+    }
+
+    #[test]
+    fn freeze_evidence_rejects_after_deadline_and_wrong_status() {
+        let config_key = Pubkey::new_unique();
+        let policy_key = Pubkey::new_unique();
+        let claimant = Pubkey::new_unique();
+        let usdc_mint = Pubkey::new_unique();
+        let config = config_fixture(policy_key);
+        let policy = policy_fixture(config_key);
+        let mut case = case_fixture(config_key, policy_key, claimant, usdc_mint);
+
+        assert_eq!(
+            validate_victim_relief_evidence_freeze_v1(
+                &config,
+                &policy,
+                &case,
+                config_key,
+                policy_key,
+                claimant,
+                case.evidence_deadline + 1,
+            )
+            .unwrap_err(),
+            CustomError::VictimReliefEvidenceFreezeTooLate.into()
+        );
+
+        case.status = VictimReliefCaseStatusV1::UnderReview;
+        assert_eq!(
+            validate_victim_relief_evidence_freeze_v1(
+                &config,
+                &policy,
+                &case,
+                config_key,
+                policy_key,
+                claimant,
+                case.evidence_deadline,
+            )
+            .unwrap_err(),
+            CustomError::VictimReliefCaseStatusMismatch.into()
+        );
+    }
+
+    #[test]
+    fn snapshot_validation_rejects_mutated_case_fields() {
+        let config_key = Pubkey::new_unique();
+        let policy_key = Pubkey::new_unique();
+        let claimant = Pubkey::new_unique();
+        let usdc_mint = Pubkey::new_unique();
+        let case_key = Pubkey::new_unique();
+        let mut case = case_fixture(config_key, policy_key, claimant, usdc_mint);
+        let snapshot = snapshot_from_case(case_key, config_key, policy_key, &case);
+
+        validate_victim_relief_snapshot_matches_case_v1(
+            &snapshot,
+            Pubkey::new_unique(),
+            &case,
+            case_key,
+            config_key,
+            policy_key,
+        )
+        .unwrap();
+
+        case.evidence_count = case.evidence_count.checked_add(1).unwrap();
+        assert_eq!(
+            validate_victim_relief_snapshot_matches_case_v1(
+                &snapshot,
+                Pubkey::new_unique(),
+                &case,
+                case_key,
+                config_key,
+                policy_key,
+            )
+            .unwrap_err(),
+            CustomError::VictimReliefEvidenceSnapshotMismatch.into()
+        );
+    }
+
+    #[test]
+    fn approved_amount_is_policy_capped_and_rejects_invalid_inputs() {
+        let config_key = Pubkey::new_unique();
+        let policy_key = Pubkey::new_unique();
+        let claimant = Pubkey::new_unique();
+        let usdc_mint = Pubkey::new_unique();
+        let mut policy = policy_fixture(config_key);
+        let mut case = case_fixture(config_key, policy_key, claimant, usdc_mint);
+
+        case.claimed_amount_usdc = policy.max_payout_per_case_usdc - 1;
+        assert_eq!(
+            derive_victim_relief_approved_amount_v1(&case, &policy, policy_key).unwrap(),
+            case.claimed_amount_usdc
+        );
+
+        case.claimed_amount_usdc = policy.max_payout_per_case_usdc;
+        assert_eq!(
+            derive_victim_relief_approved_amount_v1(&case, &policy, policy_key).unwrap(),
+            policy.max_payout_per_case_usdc
+        );
+
+        case.claimed_amount_usdc = policy.max_payout_per_case_usdc + 1;
+        assert_eq!(
+            derive_victim_relief_approved_amount_v1(&case, &policy, policy_key).unwrap(),
+            policy.max_payout_per_case_usdc
+        );
+
+        case.claimed_amount_usdc = 0;
+        assert_eq!(
+            derive_victim_relief_approved_amount_v1(&case, &policy, policy_key).unwrap_err(),
+            CustomError::InvalidVictimReliefClaimAmount.into()
+        );
+
+        case.claimed_amount_usdc = 1;
+        policy.max_payout_per_case_usdc = 0;
+        assert_eq!(
+            derive_victim_relief_approved_amount_v1(&case, &policy, policy_key).unwrap_err(),
+            CustomError::InvalidVictimReliefClaimAmount.into()
+        );
+    }
+
+    #[test]
+    fn victim_relief_decision_execution_type_stable_codes_roundtrip() {
+        assert_eq!(
+            victim_relief_decision_execution_type_stable_code_v1(
+                VictimReliefDecisionExecutionTypeV1::Approve
+            ),
+            1
+        );
+        assert_eq!(
+            victim_relief_decision_execution_type_stable_code_v1(
+                VictimReliefDecisionExecutionTypeV1::Reject
+            ),
+            2
+        );
+        assert_eq!(
+            victim_relief_decision_execution_type_from_stable_code_v1(1).unwrap(),
+            VictimReliefDecisionExecutionTypeV1::Approve
+        );
+        assert_eq!(
+            victim_relief_decision_execution_type_from_stable_code_v1(2).unwrap(),
+            VictimReliefDecisionExecutionTypeV1::Reject
+        );
+        assert_eq!(
+            victim_relief_decision_execution_type_from_stable_code_v1(99).unwrap_err(),
+            CustomError::InvalidVictimReliefDecisionSchema.into()
+        );
+    }
+
+    #[test]
+    fn decision_parameters_hash_is_deterministic_and_field_bound() {
+        let config_key = Pubkey::new_unique();
+        let policy_key = Pubkey::new_unique();
+        let case_key = Pubkey::new_unique();
+        let snapshot_key = Pubkey::new_unique();
+        let treasury_key = Pubkey::new_unique();
+        let relief_vault_key = Pubkey::new_unique();
+        let claimant = Pubkey::new_unique();
+        let usdc_mint = Pubkey::new_unique();
+        let policy = policy_fixture(config_key);
+        let case = case_fixture(config_key, policy_key, claimant, usdc_mint);
+        let snapshot = snapshot_from_case(case_key, config_key, policy_key, &case);
+        let approved_amount =
+            derive_victim_relief_approved_amount_v1(&case, &policy, policy_key).unwrap();
+        let params = build_victim_relief_decision_parameters_v1(
+            config_key,
+            policy_key,
+            case_key,
+            snapshot_key,
+            &case,
+            &snapshot,
+            treasury_key,
+            relief_vault_key,
+            GovernanceActionTypeV1::VictimReliefApproveCompensation,
+            approved_amount,
+            77,
+        );
+        let hash_a = hash_victim_relief_decision_parameters_v1(&params).unwrap();
+        let hash_b = hash_victim_relief_decision_parameters_v1(&params).unwrap();
+        assert_eq!(hash_a, hash_b);
+
+        let mut changed = params;
+        changed.evidence_revision = changed.evidence_revision.checked_add(1).unwrap();
+        assert_ne!(
+            hash_a,
+            hash_victim_relief_decision_parameters_v1(&changed).unwrap()
+        );
+
+        let mut changed = params;
+        changed.approved_amount_usdc = changed.approved_amount_usdc.checked_add(1).unwrap();
+        assert_ne!(
+            hash_a,
+            hash_victim_relief_decision_parameters_v1(&changed).unwrap()
+        );
+
+        let mut changed = params;
+        changed.relief_usdc_vault = Pubkey::new_unique();
+        assert_ne!(
+            hash_a,
+            hash_victim_relief_decision_parameters_v1(&changed).unwrap()
+        );
+
+        let mut changed = params;
+        changed.action_type = GovernanceActionTypeV1::VictimReliefRejectClaim;
+        assert_ne!(
+            hash_a,
+            hash_victim_relief_decision_parameters_v1(&changed).unwrap()
+        );
+    }
+
+    #[test]
+    fn approve_decision_records_payout_request_and_receipt_without_closing_case() {
+        let config_key = Pubkey::new_unique();
+        let policy_key = Pubkey::new_unique();
+        let case_key = Pubkey::new_unique();
+        let proposal_key = Pubkey::new_unique();
+        let action_key = Pubkey::new_unique();
+        let decision_key = Pubkey::new_unique();
+        let queue_key = Pubkey::new_unique();
+        let registry_key = Pubkey::new_unique();
+        let snapshot_key = Pubkey::new_unique();
+        let treasury_key = Pubkey::new_unique();
+        let relief_vault_key = Pubkey::new_unique();
+        let executor = Pubkey::new_unique();
+        let claimant = Pubkey::new_unique();
+        let usdc_mint = Pubkey::new_unique();
+        let mut case = case_fixture(config_key, policy_key, claimant, usdc_mint);
+        case.status = VictimReliefCaseStatusV1::UnderReview;
+        let approved_amount = 5_000_000;
+        let validation = validation_result(
+            GovernanceActionTypeV1::VictimReliefApproveCompensation,
+            VictimReliefDecisionExecutionTypeV1::Approve,
+            approved_amount,
+        );
+        let mut payout_request = empty_payout_request();
+        let mut record = empty_decision_record();
+
+        record_approve_victim_relief_decision_v1(
+            &mut case,
+            &mut payout_request,
+            &mut record,
+            case_key,
+            config_key,
+            policy_key,
+            proposal_key,
+            action_key,
+            decision_key,
+            queue_key,
+            registry_key,
+            snapshot_key,
+            treasury_key,
+            relief_vault_key,
+            executor,
+            validation,
+            3_000,
+            4,
+            5,
+        )
+        .unwrap();
+
+        assert_eq!(case.status, VictimReliefCaseStatusV1::PayoutQueued);
+        assert_eq!(case.approved_amount_usdc, approved_amount);
+        assert_eq!(payout_request.status, VictimReliefPayoutStatusV1::Approved);
+        assert_eq!(payout_request.executed_at, 0);
+        assert_eq!(payout_request.relief_usdc_vault, relief_vault_key);
+        assert_eq!(
+            record.execution_type,
+            VictimReliefDecisionExecutionTypeV1::Approve
+        );
+        assert_eq!(
+            record.case_status_before,
+            VictimReliefCaseStatusV1::UnderReview
+        );
+        assert_eq!(
+            record.case_status_after,
+            VictimReliefCaseStatusV1::PayoutQueued
+        );
+    }
+
+    #[test]
+    fn reject_decision_records_receipt_and_decrements_active_count_once() {
+        let config_key = Pubkey::new_unique();
+        let policy_key = Pubkey::new_unique();
+        let case_key = Pubkey::new_unique();
+        let proposal_key = Pubkey::new_unique();
+        let action_key = Pubkey::new_unique();
+        let decision_key = Pubkey::new_unique();
+        let queue_key = Pubkey::new_unique();
+        let registry_key = Pubkey::new_unique();
+        let snapshot_key = Pubkey::new_unique();
+        let executor = Pubkey::new_unique();
+        let claimant = Pubkey::new_unique();
+        let usdc_mint = Pubkey::new_unique();
+        let mut claimant_state = claimant_state_fixture(config_key, claimant);
+        claimant_state.active_case_count = 1;
+        let mut case = case_fixture(config_key, policy_key, claimant, usdc_mint);
+        case.status = VictimReliefCaseStatusV1::UnderReview;
+        let validation = validation_result(
+            GovernanceActionTypeV1::VictimReliefRejectClaim,
+            VictimReliefDecisionExecutionTypeV1::Reject,
+            0,
+        );
+        let mut record = empty_decision_record();
+
+        record_reject_victim_relief_decision_v1(
+            &mut claimant_state,
+            &mut case,
+            &mut record,
+            config_key,
+            policy_key,
+            proposal_key,
+            action_key,
+            decision_key,
+            queue_key,
+            registry_key,
+            case_key,
+            snapshot_key,
+            executor,
+            123,
+            validation,
+            3_000,
+            5,
+        )
+        .unwrap();
+
+        assert_eq!(case.status, VictimReliefCaseStatusV1::Rejected);
+        assert_eq!(case.approved_amount_usdc, 0);
+        assert_eq!(case.appeal_deadline, 3_123);
+        assert_eq!(claimant_state.active_case_count, 0);
+        assert_eq!(
+            record.execution_type,
+            VictimReliefDecisionExecutionTypeV1::Reject
+        );
+        assert_eq!(record.case_status_after, VictimReliefCaseStatusV1::Rejected);
+
+        assert_eq!(
+            record_reject_victim_relief_decision_v1(
+                &mut claimant_state,
+                &mut case,
+                &mut record,
+                config_key,
+                policy_key,
+                proposal_key,
+                action_key,
+                decision_key,
+                queue_key,
+                registry_key,
+                case_key,
+                snapshot_key,
+                executor,
+                123,
+                validation,
+                3_001,
+                5,
+            )
+            .unwrap_err(),
+            CustomError::VictimReliefDecisionNotEligible.into()
+        );
+    }
+
+    #[test]
     fn victim_relief_pdas_are_stable() {
         let (config_pda, _) =
             Pubkey::find_program_address(&[VICTIM_RELIEF_CONFIG_V1_SEED], &crate::ID);
@@ -1523,10 +3343,29 @@ mod tests {
             ],
             &crate::ID,
         );
+        let (snapshot_pda, _) = Pubkey::find_program_address(
+            &[VICTIM_RELIEF_EVIDENCE_SNAPSHOT_V1_SEED, case_pda.as_ref()],
+            &crate::ID,
+        );
+        let (payout_request_pda, _) = Pubkey::find_program_address(
+            &[RELIEF_PAYOUT_REQUEST_V1_SEED, case_pda.as_ref()],
+            &crate::ID,
+        );
+        let queue = Pubkey::new_unique();
+        let (receipt_pda, _) = Pubkey::find_program_address(
+            &[
+                VICTIM_RELIEF_DECISION_EXECUTION_RECORD_V1_SEED,
+                queue.as_ref(),
+            ],
+            &crate::ID,
+        );
 
         assert_ne!(config_pda, Pubkey::default());
         assert_ne!(policy_pda, Pubkey::default());
         assert_ne!(claimant_state_pda, Pubkey::default());
         assert_ne!(case_pda, Pubkey::default());
+        assert_ne!(snapshot_pda, Pubkey::default());
+        assert_ne!(payout_request_pda, Pubkey::default());
+        assert_ne!(receipt_pda, Pubkey::default());
     }
 }

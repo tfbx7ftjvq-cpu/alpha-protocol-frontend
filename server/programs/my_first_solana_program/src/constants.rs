@@ -62,6 +62,10 @@ pub const VICTIM_RELIEF_CONFIG_V1_SEED: &[u8] = b"victim_relief_config_v1";
 pub const VICTIM_RELIEF_POLICY_V1_SEED: &[u8] = b"victim_relief_policy_v1";
 pub const VICTIM_RELIEF_CLAIMANT_STATE_V1_SEED: &[u8] = b"victim_relief_claimant_state_v1";
 pub const VICTIM_RELIEF_CASE_V1_SEED: &[u8] = b"victim_relief_case_v1";
+pub const VICTIM_RELIEF_EVIDENCE_SNAPSHOT_V1_SEED: &[u8] = b"victim_relief_evidence_snap_v1";
+pub const VICTIM_RELIEF_DECISION_EXECUTION_RECORD_V1_SEED: &[u8] =
+    b"victim_relief_decision_rcpt_v1";
+pub const RELIEF_PAYOUT_REQUEST_V1_SEED: &[u8] = b"relief_payout_request_v1";
 
 pub const BPS_DENOMINATOR: u64 = 10_000;
 pub const RELIEF_BPS: u64 = 5_000;

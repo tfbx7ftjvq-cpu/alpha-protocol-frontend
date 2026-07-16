@@ -88,6 +88,15 @@ There is no update, enable, disable, or external program registration instructio
 - expected Security `GovernanceConfigV1`
 - `enabled == true`
 - `schema_version == 1`
+
+## Victim Relief Decision Usage
+
+Phase 2E-6B-2 uses the registry to gate the first Victim Relief decision execution paths:
+
+- `VictimReliefApproveCompensation`
+- `VictimReliefRejectClaim`
+
+Both paths require the `VictimRelief` registry entry to be enabled and bound to the current Alpha Protocol program id. The registry does not execute payouts; it only proves the module is an approved governance target for the Universal Governance Decision Adapter and Security Layer flow.
 - `program_id == expected target program`
 - `program_id == crate::ID`
 

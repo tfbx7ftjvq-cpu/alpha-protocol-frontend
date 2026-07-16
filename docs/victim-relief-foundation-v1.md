@@ -14,6 +14,20 @@ Victim Relief Foundation V1 establishes the first on-chain account layer for rel
 
 This is a foundation layer only. It does not approve claims, reject claims, pay claims, transfer USDC, or execute any DAO-controlled relief payout.
 
+## Phase 2E-6B-2 Evidence and Decision Layer
+
+The next Victim Relief layer is documented in [victim-relief-evidence-and-decision-v1.md](victim-relief-evidence-and-decision-v1.md).
+
+It adds immutable evidence snapshots, DAO approve/reject execution records, and `ReliefPayoutRequestV1`. It still does not transfer USDC. `PayoutQueued` is not `Paid`, and queue execution is not proof that funds were paid. Stage 6B-4 must add the actual relief-vault payout receipt.
+
+V1 approval uses the deterministic policy-capped amount:
+
+```text
+min(case.claimed_amount_usdc, policy.max_payout_per_case_usdc)
+```
+
+V1 does not support arbitrary partial compensation. Review deadline is recorded for audit only and does not create permissionless `UnderReview` expiry in this phase.
+
 ## Privacy Boundary
 
 Victim Relief V1 stores only fixed-length commitments and public accounting fields on-chain.

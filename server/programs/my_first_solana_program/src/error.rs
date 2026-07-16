@@ -601,4 +601,40 @@ pub enum CustomError {
 
     #[msg("Victim Relief active case count underflow")]
     VictimReliefActiveCaseCountUnderflow,
+
+    #[msg("Victim Relief evidence is already frozen")]
+    VictimReliefEvidenceAlreadyFrozen,
+
+    #[msg("Victim Relief evidence snapshot mismatch")]
+    VictimReliefEvidenceSnapshotMismatch,
+
+    #[msg("Victim Relief evidence freeze is too late")]
+    VictimReliefEvidenceFreezeTooLate,
+
+    #[msg("Victim Relief decision action mismatch")]
+    VictimReliefDecisionActionMismatch,
+
+    #[msg("Victim Relief decision target mismatch")]
+    VictimReliefDecisionTargetMismatch,
+
+    #[msg("Victim Relief decision parameters mismatch")]
+    VictimReliefDecisionParametersMismatch,
+
+    #[msg("Victim Relief decision execution already completed")]
+    VictimReliefDecisionExecutionAlreadyCompleted,
+
+    #[msg("Victim Relief approved amount mismatch")]
+    VictimReliefApprovedAmountMismatch,
+
+    #[msg("Victim Relief payout request already exists")]
+    VictimReliefPayoutRequestAlreadyExists,
+
+    #[msg("Victim Relief relief vault mismatch")]
+    VictimReliefReliefVaultMismatch,
+
+    #[msg("Victim Relief decision is not eligible")]
+    VictimReliefDecisionNotEligible,
+
+    #[msg("Invalid Victim Relief decision schema")]
+    InvalidVictimReliefDecisionSchema,
 }

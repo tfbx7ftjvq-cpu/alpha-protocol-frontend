@@ -766,6 +766,131 @@ impl VictimReliefCaseV1 {
         + 64;
 }
 
+#[account]
+pub struct VictimReliefEvidenceSnapshotV1 {
+    pub victim_relief_case: Pubkey,
+    pub config: Pubkey,
+    pub policy: Pubkey,
+    pub policy_version: u64,
+    pub claimant: Pubkey,
+    pub subject_commitment: [u8; 32],
+    pub evidence_root: [u8; 32],
+    pub evidence_count: u32,
+    pub evidence_revision: u32,
+    pub claimed_amount_usdc: u64,
+    pub recipient_owner: Pubkey,
+    pub recipient_token_account: Pubkey,
+    pub usdc_mint: Pubkey,
+    pub frozen_at: i64,
+    pub review_deadline: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+    pub reserved: [u8; 32],
+}
+
+impl VictimReliefEvidenceSnapshotV1 {
+    pub const INIT_SPACE: usize = (32 * 9) + (8 * 4) + (4 * 2) + 2 + 1 + 32;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VictimReliefDecisionParametersV1 {
+    pub schema_version: u16,
+    pub config: Pubkey,
+    pub policy: Pubkey,
+    pub policy_version: u64,
+    pub victim_relief_case: Pubkey,
+    pub evidence_snapshot: Pubkey,
+    pub case_id: u64,
+    pub claimant: Pubkey,
+    pub subject_commitment: [u8; 32],
+    pub evidence_root: [u8; 32],
+    pub evidence_count: u32,
+    pub evidence_revision: u32,
+    pub claimed_amount_usdc: u64,
+    pub approved_amount_usdc: u64,
+    pub recipient_owner: Pubkey,
+    pub recipient_token_account: Pubkey,
+    pub usdc_mint: Pubkey,
+    pub treasury_config: Pubkey,
+    pub relief_usdc_vault: Pubkey,
+    pub action_type: GovernanceActionTypeV1,
+    pub expected_case_status: VictimReliefCaseStatusV1,
+    pub proposal_id: u64,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VictimReliefDecisionExecutionTypeV1 {
+    Approve,
+    Reject,
+}
+
+#[account]
+pub struct VictimReliefDecisionExecutionRecordV1 {
+    pub execution_queue_item: Pubkey,
+    pub proposal_decision: Pubkey,
+    pub governance_proposal: Pubkey,
+    pub governance_proposal_action: Pubkey,
+    pub module_registry: Pubkey,
+    pub config: Pubkey,
+    pub policy: Pubkey,
+    pub victim_relief_case: Pubkey,
+    pub evidence_snapshot: Pubkey,
+    pub execution_type: VictimReliefDecisionExecutionTypeV1,
+    pub governance_action_type: GovernanceActionTypeV1,
+    pub case_status_before: VictimReliefCaseStatusV1,
+    pub case_status_after: VictimReliefCaseStatusV1,
+    pub claimed_amount_usdc: u64,
+    pub approved_amount_usdc: u64,
+    pub recipient_owner: Pubkey,
+    pub recipient_token_account: Pubkey,
+    pub parameters_hash: [u8; 32],
+    pub canonical_governance_payload_hash: [u8; 32],
+    pub executor: Pubkey,
+    pub executed_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+}
+
+impl VictimReliefDecisionExecutionRecordV1 {
+    pub const INIT_SPACE: usize = (32 * 14) + 4 + (8 * 3) + 2 + 1;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VictimReliefPayoutStatusV1 {
+    Approved,
+    Executed,
+    Cancelled,
+}
+
+#[account]
+pub struct ReliefPayoutRequestV1 {
+    pub victim_relief_case: Pubkey,
+    pub config: Pubkey,
+    pub policy: Pubkey,
+    pub policy_version: u64,
+    pub governance_proposal: Pubkey,
+    pub proposal_decision: Pubkey,
+    pub execution_queue_item: Pubkey,
+    pub evidence_snapshot: Pubkey,
+    pub approved_amount_usdc: u64,
+    pub recipient_owner: Pubkey,
+    pub recipient_token_account: Pubkey,
+    pub treasury_config: Pubkey,
+    pub relief_usdc_vault: Pubkey,
+    pub usdc_mint: Pubkey,
+    pub status: VictimReliefPayoutStatusV1,
+    pub parameters_hash: [u8; 32],
+    pub created_at: i64,
+    pub executed_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+    pub reserved: [u8; 32],
+}
+
+impl ReliefPayoutRequestV1 {
+    pub const INIT_SPACE: usize = (32 * 13) + (8 * 4) + 1 + 2 + 1 + 32;
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GreenLabelStatus {
     PendingBondDeposit,
@@ -1380,6 +1505,27 @@ mod tests {
             + 64;
         assert_eq!(VictimReliefCaseV1::INIT_SPACE, minimum);
         assert_eq!(VictimReliefCaseV1::INIT_SPACE, 500);
+    }
+
+    #[test]
+    fn victim_relief_evidence_snapshot_space_is_exact() {
+        let minimum = (32 * 9) + (8 * 4) + (4 * 2) + 2 + 1 + 32;
+        assert_eq!(VictimReliefEvidenceSnapshotV1::INIT_SPACE, minimum);
+        assert_eq!(VictimReliefEvidenceSnapshotV1::INIT_SPACE, 363);
+    }
+
+    #[test]
+    fn victim_relief_decision_execution_record_space_is_exact() {
+        let minimum = (32 * 14) + 4 + (8 * 3) + 2 + 1;
+        assert_eq!(VictimReliefDecisionExecutionRecordV1::INIT_SPACE, minimum);
+        assert_eq!(VictimReliefDecisionExecutionRecordV1::INIT_SPACE, 479);
+    }
+
+    #[test]
+    fn relief_payout_request_space_is_exact() {
+        let minimum = (32 * 13) + (8 * 4) + 1 + 2 + 1 + 32;
+        assert_eq!(ReliefPayoutRequestV1::INIT_SPACE, minimum);
+        assert_eq!(ReliefPayoutRequestV1::INIT_SPACE, 484);
     }
 
     #[test]

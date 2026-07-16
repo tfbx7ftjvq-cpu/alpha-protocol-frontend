@@ -30,6 +30,8 @@ Every governance action maps to a Security action.
 
 Some mappings are currently executable by existing modules, such as Green Label refund / slash and Contributor governance actions. Other mappings are placeholders for future modules, such as Victim Relief and Scam Registry. Placeholder mappings do not mean the business execution path is implemented.
 
+Phase 2E-6B-2 activates the first Victim Relief business decision paths for `VictimReliefApproveCompensation` and `VictimReliefRejectClaim`. These paths still do not transfer USDC; approve creates a frozen `ReliefPayoutRequestV1`, and reject creates an immutable decision record.
+
 ## 3. Mapping Model
 
 The mapping is intentionally centralized:
@@ -47,6 +49,8 @@ GovernanceActionTypeV1
 The mapping uses exhaustive `match` branches and has no default fallback.
 
 The goal is to prevent callers from bypassing DAO semantics by directly choosing a low-level Security `ActionType`.
+
+For Victim Relief, the canonical governance target is the `VictimReliefCaseV1` account. The program recomputes the Victim Relief decision parameters hash from the frozen evidence snapshot, policy, case, Treasury config, relief vault, action, and proposal id. Callers do not choose the approved amount or recipient at execution time.
 
 ## 4. ProtocolModuleIdV1
 

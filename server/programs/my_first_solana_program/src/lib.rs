@@ -192,6 +192,24 @@ pub mod my_first_solana_program {
         instructions::victim_relief_v1::expire_victim_relief_case_v1_handler(ctx)
     }
 
+    pub fn freeze_victim_relief_evidence_v1(
+        ctx: Context<FreezeVictimReliefEvidenceV1>,
+    ) -> Result<()> {
+        instructions::victim_relief_v1::freeze_victim_relief_evidence_v1_handler(ctx)
+    }
+
+    pub fn execute_approve_victim_relief_case_v1(
+        ctx: Context<ExecuteApproveVictimReliefCaseV1>,
+    ) -> Result<()> {
+        instructions::victim_relief_v1::execute_approve_victim_relief_case_v1_handler(ctx)
+    }
+
+    pub fn execute_reject_victim_relief_case_v1(
+        ctx: Context<ExecuteRejectVictimReliefCaseV1>,
+    ) -> Result<()> {
+        instructions::victim_relief_v1::execute_reject_victim_relief_case_v1_handler(ctx)
+    }
+
     pub fn initialize_governance_config_v1(
         ctx: Context<InitializeGovernanceConfigV1>,
     ) -> Result<()> {
