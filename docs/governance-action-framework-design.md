@@ -153,6 +153,15 @@ Stage 5B adds Green Label module consumers for strict refund and strict forfeit:
 - `GreenLabelSlashBond` routes recorded forfeited escrow funds through the USDC Treasury router as `RevenueType::GreenLabelForfeitedBond`.
 - legacy public Green Label slash / forfeit entry points are disabled.
 
+Stage 6B-1 adds Victim Relief foundation accounts:
+
+- `VictimReliefConfigV1`
+- immutable `VictimReliefPolicyV1`
+- `VictimReliefClaimantStateV1`
+- `VictimReliefCaseV1`
+
+The Victim Relief governance actions remain future execution actions. Stage 6B-1 does not approve claims, reject claims, transfer relief USDC, create payout requests, or connect cases to DAO decisions.
+
 ## 8. Typed Proposal Action Binding
 
 Phase 2E-FINAL Stage 2 adds `GovernanceProposalActionV1` as the immutable trusted source for new governance proposals.
@@ -171,7 +180,7 @@ The original action framework phase did not implement:
 
 - Treasury transfer
 - Builder payout
-- Victim Relief execution
+- Victim Relief claim approval / rejection / payout execution
 - Scam Registry execution
 - frontend
 - deployment

@@ -271,6 +271,16 @@ Manual review notes:
 - Builders payout governance is not implemented.
 - Token launch remains NO-GO until real revenue integrations, builders payout governance, Mainnet authorities, and final launch checks are completed.
 
-## 22. Current Conclusion
+## 22. Victim Relief Foundation V1
+
+- Review `docs/victim-relief-foundation-v1.md` before making any public claim about relief readiness.
+- Victim Relief foundation accounts are implemented for config, immutable policy, claimant anti-spam state, case submission, evidence root updates, cancellation, and expiry.
+- On-chain case data is limited to salted commitments, Merkle roots, public keys, amounts, counts, timestamps, and status fields.
+- PII, evidence plaintext, complaint text, and plaintext evidence URLs must remain off-chain.
+- Current Victim Relief does not approve claims, reject claims, create payout requests, transfer relief vault USDC, or execute DAO decisions.
+- DAO decisions are not legal judgments, insurance determinations, credit ratings, or investment advice.
+- Token launch and Mainnet production remain NO-GO until Victim Relief governance closure, payout policy, authority migration, sanity checks, and final build/test are complete.
+
+## 23. Current Conclusion
 
 NO-GO for Mainnet production until Mainnet parameters, authorities, vaults, staking pool, and mainnet sanity check are completed and reviewed.

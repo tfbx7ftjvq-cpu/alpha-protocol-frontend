@@ -12,6 +12,7 @@ pub mod security_v1;
 pub mod staking_v1;
 pub mod treasury_execution_v1;
 pub mod treasury_governance_v1;
+pub mod victim_relief_v1;
 
 pub use contributor_v1::*;
 pub use deposit::*;
@@ -27,3 +28,4 @@ pub use security_v1::*;
 pub use staking_v1::*;
 pub use treasury_execution_v1::*;
 pub use treasury_governance_v1::*;
+pub use victim_relief_v1::*;

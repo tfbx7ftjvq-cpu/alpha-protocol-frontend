@@ -122,6 +122,76 @@ pub mod my_first_solana_program {
         instructions::treasury_execution_v1::execute_treasury_spending_v1_handler(ctx)
     }
 
+    pub fn initialize_victim_relief_config_v1(
+        ctx: Context<InitializeVictimReliefConfigV1>,
+    ) -> Result<()> {
+        instructions::victim_relief_v1::initialize_victim_relief_config_v1_handler(ctx)
+    }
+
+    pub fn initialize_victim_relief_policy_v1(
+        ctx: Context<InitializeVictimReliefPolicyV1>,
+        min_claim_amount_usdc: u64,
+        max_claim_amount_usdc: u64,
+        max_payout_per_case_usdc: u64,
+        evidence_window_seconds: i64,
+        review_window_seconds: i64,
+        appeal_window_seconds: i64,
+        submission_cooldown_seconds: i64,
+        max_evidence_items: u32,
+        max_active_cases_per_claimant: u16,
+    ) -> Result<()> {
+        instructions::victim_relief_v1::initialize_victim_relief_policy_v1_handler(
+            ctx,
+            min_claim_amount_usdc,
+            max_claim_amount_usdc,
+            max_payout_per_case_usdc,
+            evidence_window_seconds,
+            review_window_seconds,
+            appeal_window_seconds,
+            submission_cooldown_seconds,
+            max_evidence_items,
+            max_active_cases_per_claimant,
+        )
+    }
+
+    pub fn submit_victim_relief_case_v1(
+        ctx: Context<SubmitVictimReliefCaseV1>,
+        case_id: u64,
+        subject_commitment: [u8; 32],
+        evidence_root: [u8; 32],
+        evidence_count: u32,
+        claimed_amount_usdc: u64,
+    ) -> Result<()> {
+        instructions::victim_relief_v1::submit_victim_relief_case_v1_handler(
+            ctx,
+            case_id,
+            subject_commitment,
+            evidence_root,
+            evidence_count,
+            claimed_amount_usdc,
+        )
+    }
+
+    pub fn update_victim_relief_evidence_root_v1(
+        ctx: Context<UpdateVictimReliefEvidenceRootV1>,
+        new_evidence_root: [u8; 32],
+        new_evidence_count: u32,
+    ) -> Result<()> {
+        instructions::victim_relief_v1::update_victim_relief_evidence_root_v1_handler(
+            ctx,
+            new_evidence_root,
+            new_evidence_count,
+        )
+    }
+
+    pub fn cancel_victim_relief_case_v1(ctx: Context<CancelVictimReliefCaseV1>) -> Result<()> {
+        instructions::victim_relief_v1::cancel_victim_relief_case_v1_handler(ctx)
+    }
+
+    pub fn expire_victim_relief_case_v1(ctx: Context<ExpireVictimReliefCaseV1>) -> Result<()> {
+        instructions::victim_relief_v1::expire_victim_relief_case_v1_handler(ctx)
+    }
+
     pub fn initialize_governance_config_v1(
         ctx: Context<InitializeGovernanceConfigV1>,
     ) -> Result<()> {

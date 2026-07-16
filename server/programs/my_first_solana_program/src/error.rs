@@ -544,4 +544,61 @@ pub enum CustomError {
 
     #[msg("Legacy Green Label bond lock without certification fee receipt is disabled")]
     LegacyGreenLabelBondLockWithoutFeeReceiptDisabled,
+
+    #[msg("Victim Relief is paused")]
+    VictimReliefPaused,
+
+    #[msg("Invalid Victim Relief config")]
+    InvalidVictimReliefConfig,
+
+    #[msg("Invalid Victim Relief policy")]
+    InvalidVictimReliefPolicy,
+
+    #[msg("Victim Relief policy is already initialized")]
+    VictimReliefPolicyAlreadyInitialized,
+
+    #[msg("Invalid Victim Relief policy version")]
+    InvalidVictimReliefPolicyVersion,
+
+    #[msg("Invalid Victim Relief claim amount")]
+    InvalidVictimReliefClaimAmount,
+
+    #[msg("Invalid Victim Relief subject commitment")]
+    InvalidVictimReliefSubjectCommitment,
+
+    #[msg("Invalid Victim Relief evidence root")]
+    InvalidVictimReliefEvidenceRoot,
+
+    #[msg("Invalid Victim Relief evidence count")]
+    InvalidVictimReliefEvidenceCount,
+
+    #[msg("Victim Relief active case limit reached")]
+    VictimReliefActiveCaseLimitReached,
+
+    #[msg("Victim Relief submission cooldown is active")]
+    VictimReliefSubmissionCooldownActive,
+
+    #[msg("Invalid Victim Relief case id")]
+    InvalidVictimReliefCaseId,
+
+    #[msg("Victim Relief case status mismatch")]
+    VictimReliefCaseStatusMismatch,
+
+    #[msg("Victim Relief claimant mismatch")]
+    VictimReliefClaimantMismatch,
+
+    #[msg("Victim Relief recipient mismatch")]
+    VictimReliefRecipientMismatch,
+
+    #[msg("Victim Relief evidence window is closed")]
+    VictimReliefEvidenceWindowClosed,
+
+    #[msg("Victim Relief evidence is unchanged")]
+    VictimReliefEvidenceUnchanged,
+
+    #[msg("Victim Relief case is not expired")]
+    VictimReliefCaseNotExpired,
+
+    #[msg("Victim Relief active case count underflow")]
+    VictimReliefActiveCaseCountUnderflow,
 }

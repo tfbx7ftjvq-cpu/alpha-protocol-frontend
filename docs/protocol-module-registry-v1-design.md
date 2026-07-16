@@ -194,3 +194,23 @@ The strict refund wrappers validate:
 The registry is not mutated. Refund execution reads the registry as a module
 allow-list only. The refund path does not route through Treasury and does not
 modify module registry state.
+
+## Stage 6B-1 Victim Relief Foundation Usage
+
+Phase 2E-6B-1 adds Victim Relief foundation accounts, but it does not consume
+`ProtocolModuleRegistryV1` for execution yet.
+
+The existing `VictimRelief` module id and stable code remain reserved for the
+future DAO decision path:
+
+- `VictimReliefApproveCompensation`
+- `VictimReliefRejectClaim`
+- `VictimReliefUpdatePolicy`
+
+Current Victim Relief instructions only initialize config / immutable policy,
+submit cases, update evidence roots during the evidence window, cancel cases,
+and expire stale cases. They do not approve compensation, reject claims, create
+payout requests, or transfer relief vault USDC.
+
+The registry is expected to become the allow-list for future Victim Relief DAO
+execution, but that closure is intentionally deferred.

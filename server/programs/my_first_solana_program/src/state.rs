@@ -642,6 +642,131 @@ impl UniversalGovernanceDecisionAdapterV1 {
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VictimReliefCaseStatusV1 {
+    EvidencePeriod,
+    UnderReview,
+    Approved,
+    Rejected,
+    AppealPending,
+    AppealUpheld,
+    AppealOverturned,
+    PayoutQueued,
+    Paid,
+    Cancelled,
+    Expired,
+}
+
+#[account]
+pub struct VictimReliefConfigV1 {
+    pub authority: Pubkey,
+    pub treasury_config: Pubkey,
+    pub security_governance_config: Pubkey,
+    pub usdc_mint: Pubkey,
+    pub current_policy: Pubkey,
+    pub current_policy_version: u64,
+    pub next_case_id: u64,
+    pub paused: bool,
+    pub created_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+    pub reserved: [u8; 32],
+}
+
+impl VictimReliefConfigV1 {
+    pub const INIT_SPACE: usize = (32 * 5) + (8 * 2) + 1 + 8 + 2 + 1 + 32;
+}
+
+#[account]
+pub struct VictimReliefPolicyV1 {
+    pub config: Pubkey,
+    pub policy_version: u64,
+    pub min_claim_amount_usdc: u64,
+    pub max_claim_amount_usdc: u64,
+    pub max_payout_per_case_usdc: u64,
+    pub evidence_window_seconds: i64,
+    pub review_window_seconds: i64,
+    pub appeal_window_seconds: i64,
+    pub submission_cooldown_seconds: i64,
+    pub max_evidence_items: u32,
+    pub max_active_cases_per_claimant: u16,
+    pub active: bool,
+    pub initialized_by: Pubkey,
+    pub created_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+    pub reserved: [u8; 32],
+}
+
+impl VictimReliefPolicyV1 {
+    pub const INIT_SPACE: usize = 32 + (8 * 8) + 4 + 2 + 1 + 32 + 8 + 2 + 1 + 32;
+}
+
+#[account]
+pub struct VictimReliefClaimantStateV1 {
+    pub config: Pubkey,
+    pub claimant: Pubkey,
+    pub active_case_count: u16,
+    pub total_case_count: u64,
+    pub last_case_id: u64,
+    pub last_submitted_at: i64,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+}
+
+impl VictimReliefClaimantStateV1 {
+    pub const INIT_SPACE: usize = (32 * 2) + 2 + (8 * 5) + 2 + 1;
+}
+
+#[account]
+pub struct VictimReliefCaseV1 {
+    pub case_id: u64,
+    pub config: Pubkey,
+    pub policy: Pubkey,
+    pub policy_version: u64,
+    pub claimant: Pubkey,
+    pub subject_commitment: [u8; 32],
+    pub evidence_root: [u8; 32],
+    pub evidence_count: u32,
+    pub evidence_revision: u32,
+    pub claimed_amount_usdc: u64,
+    pub approved_amount_usdc: u64,
+    pub recipient_owner: Pubkey,
+    pub recipient_token_account: Pubkey,
+    pub usdc_mint: Pubkey,
+    pub status: VictimReliefCaseStatusV1,
+    pub active_appeal: Pubkey,
+    pub decision_proposal: Pubkey,
+    pub decision_queue: Pubkey,
+    pub submitted_at: i64,
+    pub evidence_deadline: i64,
+    pub review_deadline: i64,
+    pub appeal_deadline: i64,
+    pub updated_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+    pub reserved: [u8; 64],
+}
+
+impl VictimReliefCaseV1 {
+    pub const INIT_SPACE: usize = 8
+        + (32 * 2)
+        + 8
+        + 32
+        + (32 * 2)
+        + (4 * 2)
+        + (8 * 2)
+        + (32 * 3)
+        + 1
+        + (32 * 3)
+        + (8 * 5)
+        + 2
+        + 1
+        + 64;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GreenLabelStatus {
     PendingBondDeposit,
     PendingObservation,
@@ -1214,6 +1339,47 @@ mod tests {
     fn universal_governance_decision_adapter_space_covers_fields() {
         let minimum = (32 * 5) + 1 + 8 + 1 + 1;
         assert!(UniversalGovernanceDecisionAdapterV1::INIT_SPACE >= minimum);
+    }
+
+    #[test]
+    fn victim_relief_config_space_is_exact() {
+        let minimum = (32 * 5) + (8 * 2) + 1 + 8 + 2 + 1 + 32;
+        assert_eq!(VictimReliefConfigV1::INIT_SPACE, minimum);
+        assert_eq!(VictimReliefConfigV1::INIT_SPACE, 220);
+    }
+
+    #[test]
+    fn victim_relief_policy_space_is_exact() {
+        let minimum = 32 + (8 * 8) + 4 + 2 + 1 + 32 + 8 + 2 + 1 + 32;
+        assert_eq!(VictimReliefPolicyV1::INIT_SPACE, minimum);
+        assert_eq!(VictimReliefPolicyV1::INIT_SPACE, 178);
+    }
+
+    #[test]
+    fn victim_relief_claimant_state_space_is_exact() {
+        let minimum = (32 * 2) + 2 + (8 * 5) + 2 + 1;
+        assert_eq!(VictimReliefClaimantStateV1::INIT_SPACE, minimum);
+        assert_eq!(VictimReliefClaimantStateV1::INIT_SPACE, 109);
+    }
+
+    #[test]
+    fn victim_relief_case_space_is_exact() {
+        let minimum = 8
+            + (32 * 2)
+            + 8
+            + 32
+            + (32 * 2)
+            + (4 * 2)
+            + (8 * 2)
+            + (32 * 3)
+            + 1
+            + (32 * 3)
+            + (8 * 5)
+            + 2
+            + 1
+            + 64;
+        assert_eq!(VictimReliefCaseV1::INIT_SPACE, minimum);
+        assert_eq!(VictimReliefCaseV1::INIT_SPACE, 500);
     }
 
     #[test]

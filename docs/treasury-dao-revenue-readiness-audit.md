@@ -416,6 +416,35 @@ Important boundaries:
 - Full DAO voting remains missing.
 - Token launch remains NO-GO.
 
+## Victim Relief Foundation Update
+
+Phase 2E-6B-1 adds the first Victim Relief on-chain foundation:
+
+- `VictimReliefConfigV1`
+- immutable `VictimReliefPolicyV1`
+- claimant anti-spam state
+- case submission
+- evidence-root update during the evidence window
+- claimant cancellation
+- permissionless expiry
+
+This improves the data foundation for future relief governance, but it does not
+make Victim Relief payout-ready.
+
+Still missing:
+
+- evidence freeze / snapshot binding
+- DAO approve / reject decision receipt
+- appeal flow
+- payout request
+- relief vault transfer
+- Treasury execution integration
+- frontend review surface
+
+Victim Relief cases store only salted commitments and Merkle roots. Raw evidence
+and PII must remain off-chain. DAO decisions are not court judgments, insurance
+determinations, or investment advice.
+
 ### Phase 2E-2: Revenue Routing Design
 
 Document and implement how real project revenue enters Treasury:

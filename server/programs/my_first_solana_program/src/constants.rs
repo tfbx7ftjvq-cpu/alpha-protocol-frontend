@@ -58,6 +58,10 @@ pub const GREEN_LABEL_FORFEIT_EXECUTION_RECORD_SEED: &[u8] =
 pub const CONTRIBUTOR_REGISTRY_V1_SEED: &[u8] = b"contributor_registry_v1";
 pub const CONTRIBUTOR_MILESTONE_V1_SEED: &[u8] = b"contributor_milestone_v1";
 pub const BUILDER_PAYOUT_REQUEST_V1_SEED: &[u8] = b"builder_payout_request_v1";
+pub const VICTIM_RELIEF_CONFIG_V1_SEED: &[u8] = b"victim_relief_config_v1";
+pub const VICTIM_RELIEF_POLICY_V1_SEED: &[u8] = b"victim_relief_policy_v1";
+pub const VICTIM_RELIEF_CLAIMANT_STATE_V1_SEED: &[u8] = b"victim_relief_claimant_state_v1";
+pub const VICTIM_RELIEF_CASE_V1_SEED: &[u8] = b"victim_relief_case_v1";
 
 pub const BPS_DENOMINATOR: u64 = 10_000;
 pub const RELIEF_BPS: u64 = 5_000;
@@ -150,3 +154,6 @@ pub const GREEN_LABEL_DISPUTE_SPACE: usize = ANCHOR_ACCOUNT_DISCRIMINATOR_BYTES
 
 pub const CONTRIBUTOR_MILESTONE_TITLE_MAX_BYTES: usize = 96;
 pub const CONTRIBUTOR_MILESTONE_DESCRIPTION_MAX_BYTES: usize = 512;
+
+pub const VICTIM_RELIEF_SCHEMA_VERSION_V1: u16 = 1;
+pub const VICTIM_RELIEF_POLICY_VERSION_V1: u64 = 1;
