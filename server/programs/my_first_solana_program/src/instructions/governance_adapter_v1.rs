@@ -309,6 +309,8 @@ pub fn security_action_type_from_u8(action_type: u8) -> Result<ActionType> {
         24 => Ok(ActionType::ProtocolUpdateParameter),
         25 => Ok(ActionType::ProtocolUpgradeProgram),
         26 => Ok(ActionType::ProtocolEmergencyAction),
+        27 => Ok(ActionType::VictimReliefUpholdAppeal),
+        28 => Ok(ActionType::VictimReliefOverturnAppeal),
         _ => err!(CustomError::InvalidActionForProposalType),
     }
 }
@@ -346,6 +348,8 @@ pub fn security_proposal_type_for_action(action_type: ActionType) -> Result<Prop
         }
         ActionType::VictimReliefRejectClaim => Ok(ProposalType::VictimReliefRejectClaim),
         ActionType::VictimReliefUpdatePolicy => Ok(ProposalType::VictimReliefUpdatePolicy),
+        ActionType::VictimReliefUpholdAppeal => Ok(ProposalType::VictimReliefUpholdAppeal),
+        ActionType::VictimReliefOverturnAppeal => Ok(ProposalType::VictimReliefOverturnAppeal),
         ActionType::ScamRegistryPublishReport => Ok(ProposalType::ScamRegistryPublishReport),
         ActionType::ScamRegistryRemoveReport => Ok(ProposalType::ScamRegistryRemoveReport),
         ActionType::ScamRegistryAppealDecision => Ok(ProposalType::ScamRegistryAppealDecision),

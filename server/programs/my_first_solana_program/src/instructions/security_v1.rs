@@ -573,6 +573,14 @@ pub fn is_action_valid_for_proposal_type(
                 ActionType::VictimReliefUpdatePolicy
             )
             | (
+                ProposalType::VictimReliefUpholdAppeal,
+                ActionType::VictimReliefUpholdAppeal
+            )
+            | (
+                ProposalType::VictimReliefOverturnAppeal,
+                ActionType::VictimReliefOverturnAppeal
+            )
+            | (
                 ProposalType::ScamRegistryPublishReport,
                 ActionType::ScamRegistryPublishReport
             )

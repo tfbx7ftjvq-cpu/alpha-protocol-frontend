@@ -95,8 +95,10 @@ Phase 2E-6B-2 uses the registry to gate the first Victim Relief decision executi
 
 - `VictimReliefApproveCompensation`
 - `VictimReliefRejectClaim`
+- `VictimReliefUpholdAppeal`
+- `VictimReliefOverturnAppeal`
 
-Both paths require the `VictimRelief` registry entry to be enabled and bound to the current Alpha Protocol program id. The registry does not execute payouts; it only proves the module is an approved governance target for the Universal Governance Decision Adapter and Security Layer flow.
+These paths require the `VictimRelief` registry entry to be enabled and bound to the current Alpha Protocol program id. The registry does not execute payouts; it only proves the module is an approved governance target for the Universal Governance Decision Adapter and Security Layer flow.
 - `program_id == expected target program`
 - `program_id == crate::ID`
 
@@ -223,3 +225,17 @@ payout requests, or transfer relief vault USDC.
 
 The registry is expected to become the allow-list for future Victim Relief DAO
 execution, but that closure is intentionally deferred.
+
+## Stage 6B-3 Victim Relief Appeal Usage
+
+Phase 2E-6B-3 consumes the same `VictimRelief` registry for strict appeal
+decisions:
+
+- `VictimReliefUpholdAppeal`
+- `VictimReliefOverturnAppeal`
+
+Both wrappers validate the registry before trusting the adapter / Security Layer
+flow. Appeal governance targets `VictimReliefAppealV1`, not the original case.
+Uphold creates no payout request. Overturn creates `ReliefPayoutRequestV1`, but
+does not transfer USDC or mark the case paid. Registry mutation, payout
+execution, appeal cancel / expiry, and frontend support remain out of scope.

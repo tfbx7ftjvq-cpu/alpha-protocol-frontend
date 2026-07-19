@@ -637,4 +637,40 @@ pub enum CustomError {
 
     #[msg("Invalid Victim Relief decision schema")]
     InvalidVictimReliefDecisionSchema,
+
+    #[msg("Victim Relief appeal already exists")]
+    VictimReliefAppealAlreadyExists,
+
+    #[msg("Victim Relief appeal window is closed")]
+    VictimReliefAppealWindowClosed,
+
+    #[msg("Victim Relief appeal evidence mismatch")]
+    VictimReliefAppealEvidenceMismatch,
+
+    #[msg("Victim Relief appeal original decision mismatch")]
+    VictimReliefAppealOriginalDecisionMismatch,
+
+    #[msg("Victim Relief appeal action mismatch")]
+    VictimReliefAppealActionMismatch,
+
+    #[msg("Victim Relief appeal target mismatch")]
+    VictimReliefAppealTargetMismatch,
+
+    #[msg("Victim Relief appeal parameters mismatch")]
+    VictimReliefAppealParametersMismatch,
+
+    #[msg("Victim Relief appeal status mismatch")]
+    VictimReliefAppealStatusMismatch,
+
+    #[msg("Victim Relief appeal execution already completed")]
+    VictimReliefAppealExecutionAlreadyCompleted,
+
+    #[msg("Victim Relief appeal is not eligible")]
+    VictimReliefAppealNotEligible,
+
+    #[msg("Victim Relief appeal payout request already exists")]
+    VictimReliefAppealPayoutRequestAlreadyExists,
+
+    #[msg("Invalid Victim Relief appeal schema")]
+    InvalidVictimReliefAppealSchema,
 }

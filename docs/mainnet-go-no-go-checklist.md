@@ -38,6 +38,7 @@ The Devnet report only records Devnet health. It is not Mainnet approval. Before
 - Green Label config must not be paused.
 - Mainnet `STAKING_POOL` must be explicitly provided to the sanity check.
 - Victim Relief approve/reject may create decision records and payout requests, but Mainnet must not present `PayoutQueued` as paid until the relief-vault payout execution and receipt path is complete.
+- Victim Relief appeal uphold/overturn may create appeal decision records and, for overturn, a payout request; Mainnet must not present appeal overturn as paid until Stage 6B-4 payout execution is complete.
 
 ## 5. Go/No-Go Decision Table
 
@@ -75,6 +76,7 @@ Any one of the following means NO-GO:
 - Frontend presents Devnet test parameters as Mainnet production rules.
 - Final `cargo test`, `anchor build --ignore-keys`, and `npm run build` are not complete.
 - Victim Relief relief-vault payout transfer / receipt path is missing while public messaging claims paid relief is live.
+- Victim Relief appeal cancel / expiry or payout completion is claimed live before those paths exist.
 
 ## 7. Manual Review Required
 
@@ -280,6 +282,10 @@ Manual review notes:
 - On-chain case data is limited to salted commitments, Merkle roots, public keys, amounts, counts, timestamps, and status fields.
 - PII, evidence plaintext, complaint text, and plaintext evidence URLs must remain off-chain.
 - Current Victim Relief does not approve claims, reject claims, create payout requests, transfer relief vault USDC, or execute DAO decisions.
+- Stage 6B-2 adds evidence freeze, approve/reject execution records, and payout request creation without USDC transfer.
+- Stage 6B-3 adds one-time appeal governance for rejected cases: claimant-opened appeal, DAO uphold/overturn, immutable appeal receipt, and payout request creation on overturn.
+- Appeal overturn is not payment. `PayoutQueued`, `PayoutRequest Approved`, and `Queue Executed` must not be presented as funds paid.
+- Appeal cancel / expiry is not implemented; unresolved appeals can remain `AppealPending`.
 - DAO decisions are not legal judgments, insurance determinations, credit ratings, or investment advice.
 - Token launch and Mainnet production remain NO-GO until Victim Relief governance closure, payout policy, authority migration, sanity checks, and final build/test are complete.
 

@@ -32,6 +32,8 @@ Some mappings are currently executable by existing modules, such as Green Label 
 
 Phase 2E-6B-2 activates the first Victim Relief business decision paths for `VictimReliefApproveCompensation` and `VictimReliefRejectClaim`. These paths still do not transfer USDC; approve creates a frozen `ReliefPayoutRequestV1`, and reject creates an immutable decision record.
 
+Phase 2E-6B-3 appends `VictimReliefUpholdAppeal` and `VictimReliefOverturnAppeal`. Opening an appeal is not a governance action; it is a claimant business action. Appeal decisions are DAO actions that target `VictimReliefAppealV1`.
+
 ## 3. Mapping Model
 
 The mapping is intentionally centralized:
@@ -50,7 +52,9 @@ The mapping uses exhaustive `match` branches and has no default fallback.
 
 The goal is to prevent callers from bypassing DAO semantics by directly choosing a low-level Security `ActionType`.
 
-For Victim Relief, the canonical governance target is the `VictimReliefCaseV1` account. The program recomputes the Victim Relief decision parameters hash from the frozen evidence snapshot, policy, case, Treasury config, relief vault, action, and proposal id. Callers do not choose the approved amount or recipient at execution time.
+For initial Victim Relief approve/reject, the canonical governance target is the `VictimReliefCaseV1` account. The program recomputes the Victim Relief decision parameters hash from the frozen evidence snapshot, policy, case, Treasury config, relief vault, action, and proposal id. Callers do not choose the approved amount or recipient at execution time.
+
+For appeal uphold/overturn, the canonical governance target is `VictimReliefAppealV1`. The program recomputes the appeal decision parameters hash from the case, appeal, original snapshot, original reject receipt, policy, Treasury config, relief vault, action, and proposal id.
 
 ## 4. ProtocolModuleIdV1
 
@@ -112,6 +116,7 @@ The framework currently covers:
 - Green Label certification approval / rejection / revocation
 - Green Label refund / slash
 - Victim Relief compensation approval / rejection / policy update
+- Victim Relief appeal uphold / overturn
 - Scam Registry publish / remove / appeal
 - Contributor add / remove / update role / milestone / payout approval
 - Protocol parameter update / upgrade / emergency action
@@ -165,6 +170,8 @@ Stage 6B-1 adds Victim Relief foundation accounts:
 - `VictimReliefCaseV1`
 
 The Victim Relief governance actions remain future execution actions. Stage 6B-1 does not approve claims, reject claims, transfer relief USDC, create payout requests, or connect cases to DAO decisions.
+
+Stage 6B-2 implements `VictimReliefApproveCompensation` and `VictimReliefRejectClaim`. Stage 6B-3 implements `VictimReliefUpholdAppeal` and `VictimReliefOverturnAppeal`. None of these Victim Relief governance paths transfers USDC; Stage 6B-4 must add payout execution.
 
 ## 8. Typed Proposal Action Binding
 

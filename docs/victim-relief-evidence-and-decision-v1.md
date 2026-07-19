@@ -129,7 +129,25 @@ Approve changes the case to `PayoutQueued` and freezes:
 
 Reject changes the case to `Rejected`, sets `approved_amount_usdc = 0`, records the appeal deadline from the locked policy, and decrements claimant active case count once.
 
-Reject does not create a payout request, does not transfer USDC, and does not automatically open an appeal. Appeal support is deferred to Stage 6B-3.
+Reject does not create a payout request, does not transfer USDC, and does not automatically open an appeal.
+
+## Stage 6B-3 Appeal Governance
+
+Stage 6B-3 adds [Victim Relief Appeal Governance V1](victim-relief-appeal-governance-v1.md).
+
+Appeal rules:
+
+- only the claimant can open an appeal
+- only rejected cases can be appealed
+- V1 allows one appeal per case
+- appeal evidence stores only a commitment
+- appeal governance targets the `VictimReliefAppealV1` account
+- `VictimReliefUpholdAppeal` creates no payout request
+- `VictimReliefOverturnAppeal` creates `ReliefPayoutRequestV1`
+- overturn uses the same deterministic policy-capped amount as initial approve
+- no USDC is transferred in the appeal phase
+
+`PayoutQueued` remains distinct from `Paid`. Stage 6B-4 must perform the actual relief-vault transfer and write a payment receipt before a claim can be described as paid on-chain.
 
 ## Review Deadline Residual Risk
 

@@ -29,6 +29,17 @@ Victim Relief now has an evidence freeze and DAO approve/reject decision layer:
 
 This improves governance readiness for relief cases, but it still does not move USDC from the relief vault. `PayoutQueued` is not `Paid`, and Stage 6B-4 must implement the final relief-vault transfer and payout receipt before Victim Relief can be described as end-to-end paid on-chain.
 
+## Phase 2E-6B-3 Addendum
+
+Victim Relief now has a one-time appeal governance layer for rejected cases:
+
+- `VictimReliefAppealV1` records the claimant-opened appeal.
+- `VictimReliefUpholdAppeal` keeps the rejection and creates an immutable appeal decision receipt.
+- `VictimReliefOverturnAppeal` restores a deterministic payout path and creates `ReliefPayoutRequestV1`.
+- Appeal governance targets the appeal account and revalidates the original evidence snapshot, original reject receipt, module registry, adapter, Security decision, queue item, and appeal parameters hash.
+
+This improves DAO review completeness, but it still does not make Victim Relief paid end-to-end. Overturn creates a payout request only; Stage 6B-4 must add the relief-vault transfer and payout execution receipt. Appeal cancel / expiry is also intentionally missing, so unresolved appeals can remain `AppealPending`.
+
 ## 1. Executive Summary
 
 Alpha Protocol has a credible Devnet foundation for Treasury V2 accounting, USDC four-pool revenue routing, staking reward funding, Green Label refund / slash E2E, and Security Layer execution gating.
@@ -446,8 +457,8 @@ Still missing:
 
 - evidence freeze / snapshot binding
 - DAO approve / reject decision receipt
-- appeal flow
-- payout request
+- appeal flow with uphold / overturn decision receipt
+- payout request creation for approve / overturn
 - relief vault transfer
 - Treasury execution integration
 - frontend review surface

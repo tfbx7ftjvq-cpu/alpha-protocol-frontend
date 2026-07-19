@@ -250,6 +250,8 @@ pub enum ProposalType {
     ProtocolUpdateParameter,
     ProtocolUpgradeProgram,
     ProtocolEmergencyAction,
+    VictimReliefUpholdAppeal,
+    VictimReliefOverturnAppeal,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -296,6 +298,8 @@ pub enum ActionType {
     ProtocolUpdateParameter,
     ProtocolUpgradeProgram,
     ProtocolEmergencyAction,
+    VictimReliefUpholdAppeal,
+    VictimReliefOverturnAppeal,
 }
 
 #[account]
@@ -466,6 +470,8 @@ pub enum GovernanceActionTypeV1 {
     ProtocolUpdateParameter,
     ProtocolUpgradeProgram,
     ProtocolEmergencyAction,
+    VictimReliefUpholdAppeal,
+    VictimReliefOverturnAppeal,
 }
 
 /// Stable identifier for the protocol module targeted by a governance action.
@@ -889,6 +895,113 @@ pub struct ReliefPayoutRequestV1 {
 
 impl ReliefPayoutRequestV1 {
     pub const INIT_SPACE: usize = (32 * 13) + (8 * 4) + 1 + 2 + 1 + 32;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VictimReliefAppealStatusV1 {
+    Pending,
+    Upheld,
+    Overturned,
+}
+
+#[account]
+pub struct VictimReliefAppealV1 {
+    pub victim_relief_case: Pubkey,
+    pub config: Pubkey,
+    pub policy: Pubkey,
+    pub policy_version: u64,
+    pub claimant: Pubkey,
+    pub original_evidence_snapshot: Pubkey,
+    pub original_decision_record: Pubkey,
+    pub original_governance_proposal: Pubkey,
+    pub original_execution_queue_item: Pubkey,
+    pub appeal_evidence_root: [u8; 32],
+    pub appeal_evidence_count: u32,
+    pub status: VictimReliefAppealStatusV1,
+    pub decision_proposal: Pubkey,
+    pub decision_queue: Pubkey,
+    pub opened_at: i64,
+    pub appeal_deadline: i64,
+    pub resolved_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+    pub reserved: [u8; 32],
+}
+
+impl VictimReliefAppealV1 {
+    pub const INIT_SPACE: usize = (32 * 10) + 32 + (8 * 4) + 4 + 1 + 2 + 1 + 32;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VictimReliefAppealDecisionParametersV1 {
+    pub schema_version: u16,
+    pub config: Pubkey,
+    pub policy: Pubkey,
+    pub policy_version: u64,
+    pub victim_relief_case: Pubkey,
+    pub victim_relief_appeal: Pubkey,
+    pub original_evidence_snapshot: Pubkey,
+    pub original_decision_record: Pubkey,
+    pub case_id: u64,
+    pub claimant: Pubkey,
+    pub subject_commitment: [u8; 32],
+    pub original_evidence_root: [u8; 32],
+    pub original_evidence_count: u32,
+    pub original_evidence_revision: u32,
+    pub appeal_evidence_root: [u8; 32],
+    pub appeal_evidence_count: u32,
+    pub claimed_amount_usdc: u64,
+    pub approved_amount_usdc: u64,
+    pub recipient_owner: Pubkey,
+    pub recipient_token_account: Pubkey,
+    pub usdc_mint: Pubkey,
+    pub treasury_config: Pubkey,
+    pub relief_usdc_vault: Pubkey,
+    pub action_type: GovernanceActionTypeV1,
+    pub expected_case_status: VictimReliefCaseStatusV1,
+    pub expected_appeal_status: VictimReliefAppealStatusV1,
+    pub proposal_id: u64,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VictimReliefAppealExecutionTypeV1 {
+    Uphold,
+    Overturn,
+}
+
+#[account]
+pub struct VictimReliefAppealDecisionExecutionRecordV1 {
+    pub execution_queue_item: Pubkey,
+    pub proposal_decision: Pubkey,
+    pub governance_proposal: Pubkey,
+    pub governance_proposal_action: Pubkey,
+    pub module_registry: Pubkey,
+    pub config: Pubkey,
+    pub policy: Pubkey,
+    pub victim_relief_case: Pubkey,
+    pub victim_relief_appeal: Pubkey,
+    pub original_decision_record: Pubkey,
+    pub original_evidence_snapshot: Pubkey,
+    pub execution_type: VictimReliefAppealExecutionTypeV1,
+    pub governance_action_type: GovernanceActionTypeV1,
+    pub case_status_before: VictimReliefCaseStatusV1,
+    pub case_status_after: VictimReliefCaseStatusV1,
+    pub appeal_status_before: VictimReliefAppealStatusV1,
+    pub appeal_status_after: VictimReliefAppealStatusV1,
+    pub claimed_amount_usdc: u64,
+    pub approved_amount_usdc: u64,
+    pub recipient_owner: Pubkey,
+    pub recipient_token_account: Pubkey,
+    pub parameters_hash: [u8; 32],
+    pub canonical_governance_payload_hash: [u8; 32],
+    pub executor: Pubkey,
+    pub executed_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+}
+
+impl VictimReliefAppealDecisionExecutionRecordV1 {
+    pub const INIT_SPACE: usize = (32 * 14) + 6 + (8 * 3) + (32 * 2) + 2 + 1;
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -1526,6 +1639,23 @@ mod tests {
         let minimum = (32 * 13) + (8 * 4) + 1 + 2 + 1 + 32;
         assert_eq!(ReliefPayoutRequestV1::INIT_SPACE, minimum);
         assert_eq!(ReliefPayoutRequestV1::INIT_SPACE, 484);
+    }
+
+    #[test]
+    fn victim_relief_appeal_space_is_exact() {
+        let minimum = (32 * 10) + 32 + (8 * 4) + 4 + 1 + 2 + 1 + 32;
+        assert_eq!(VictimReliefAppealV1::INIT_SPACE, minimum);
+        assert_eq!(VictimReliefAppealV1::INIT_SPACE, 424);
+    }
+
+    #[test]
+    fn victim_relief_appeal_decision_execution_record_space_is_exact() {
+        let minimum = (32 * 14) + 6 + (8 * 3) + (32 * 2) + 2 + 1;
+        assert_eq!(
+            VictimReliefAppealDecisionExecutionRecordV1::INIT_SPACE,
+            minimum
+        );
+        assert_eq!(VictimReliefAppealDecisionExecutionRecordV1::INIT_SPACE, 545);
     }
 
     #[test]

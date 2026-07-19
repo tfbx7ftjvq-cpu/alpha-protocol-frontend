@@ -210,6 +210,30 @@ pub mod my_first_solana_program {
         instructions::victim_relief_v1::execute_reject_victim_relief_case_v1_handler(ctx)
     }
 
+    pub fn open_victim_relief_appeal_v1(
+        ctx: Context<OpenVictimReliefAppealV1>,
+        appeal_evidence_root: [u8; 32],
+        appeal_evidence_count: u32,
+    ) -> Result<()> {
+        instructions::victim_relief_v1::open_victim_relief_appeal_v1_handler(
+            ctx,
+            appeal_evidence_root,
+            appeal_evidence_count,
+        )
+    }
+
+    pub fn execute_uphold_victim_relief_appeal_v1(
+        ctx: Context<ExecuteUpholdVictimReliefAppealV1>,
+    ) -> Result<()> {
+        instructions::victim_relief_v1::execute_uphold_victim_relief_appeal_v1_handler(ctx)
+    }
+
+    pub fn execute_overturn_victim_relief_appeal_v1(
+        ctx: Context<ExecuteOverturnVictimReliefAppealV1>,
+    ) -> Result<()> {
+        instructions::victim_relief_v1::execute_overturn_victim_relief_appeal_v1_handler(ctx)
+    }
+
     pub fn initialize_governance_config_v1(
         ctx: Context<InitializeGovernanceConfigV1>,
     ) -> Result<()> {

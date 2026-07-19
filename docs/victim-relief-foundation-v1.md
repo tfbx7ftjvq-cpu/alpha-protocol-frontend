@@ -28,6 +28,20 @@ min(case.claimed_amount_usdc, policy.max_payout_per_case_usdc)
 
 V1 does not support arbitrary partial compensation. Review deadline is recorded for audit only and does not create permissionless `UnderReview` expiry in this phase.
 
+## Phase 2E-6B-3 Appeal Governance Layer
+
+Appeal governance is documented in [victim-relief-appeal-governance-v1.md](victim-relief-appeal-governance-v1.md).
+
+It adds a one-time claimant appeal path for rejected cases:
+
+```text
+Rejected -> AppealPending -> DAO Uphold / Overturn
+```
+
+Opening an appeal is a claimant business action, not a DAO action. Uphold creates only an immutable appeal decision receipt. Overturn restores the deterministic payout path by creating `ReliefPayoutRequestV1`, but it still does not transfer USDC. `PayoutRequest Approved` and `Queue Executed` are not proof of payment.
+
+V1 appeal does not implement cancel or expiry. If DAO governance does not process an appeal, the case can remain in `AppealPending`; this liveness risk is intentionally deferred until appeal-proposal linkage is modeled safely.
+
 ## Privacy Boundary
 
 Victim Relief V1 stores only fixed-length commitments and public accounting fields on-chain.
@@ -159,6 +173,7 @@ This phase does not implement:
 - evidence freeze / governance snapshot binding
 - appeals
 - payout requests
+- appeals
 - relief vault transfer
 - Treasury execution
 - submission bond
