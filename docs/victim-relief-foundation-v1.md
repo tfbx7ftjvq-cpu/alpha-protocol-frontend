@@ -12,13 +12,13 @@ Victim Relief Foundation V1 establishes the first on-chain account layer for rel
 - claimant cancellation
 - permissionless expiry
 
-This is a foundation layer only. It does not approve claims, reject claims, pay claims, transfer USDC, or execute any DAO-controlled relief payout.
+This original foundation layer did not approve claims, reject claims, pay claims, transfer USDC, or execute any DAO-controlled relief payout. Later stages add DAO decision and the first strict payout path described below.
 
 ## Phase 2E-6B-2 Evidence and Decision Layer
 
 The next Victim Relief layer is documented in [victim-relief-evidence-and-decision-v1.md](victim-relief-evidence-and-decision-v1.md).
 
-It adds immutable evidence snapshots, DAO approve/reject execution records, and `ReliefPayoutRequestV1`. It still does not transfer USDC. `PayoutQueued` is not `Paid`, and queue execution is not proof that funds were paid. Stage 6B-4 must add the actual relief-vault payout receipt.
+It adds immutable evidence snapshots, DAO approve/reject execution records, and `ReliefPayoutRequestV1`. This layer by itself does not transfer USDC. `PayoutQueued` is not `Paid`, and queue execution is not proof that funds were paid.
 
 V1 approval uses the deterministic policy-capped amount:
 
@@ -48,7 +48,15 @@ Victim Relief payout foundation is documented in [victim-relief-payout-foundatio
 
 It adds strict payout origin typing, canonical payout parameters hashing, authorization validators, common vault / recipient / pause checks, and the immutable `ReliefPayoutExecutionRecordV1` model. It still does not add a public payout wrapper, transfer USDC, mark a request `Executed`, mark a case `Paid`, or decrement active case count.
 
-The only valid future payout origins are original DAO approve and appeal overturn. `Queue Executed`, `PayoutQueued`, and `PayoutRequest Approved` remain distinct from actual payment.
+The only valid payout origins are original DAO approve and appeal overturn. `Queue Executed`, `PayoutQueued`, and `PayoutRequest Approved` remain distinct from actual payment until a strict payout wrapper runs.
+
+## Phase 2E-6B-4B-2 Original Approved Payout
+
+Original approve payout is documented in [victim-relief-original-approved-payout-v1.md](victim-relief-original-approved-payout-v1.md).
+
+It adds `execute_victim_relief_approved_payout_v1` for original DAO approve cases only. The instruction accepts no arguments, fixes origin to `OriginalApprove`, fixes action to `VictimReliefApproveCompensation`, transfers the exact frozen amount from the relief USDC vault using `transfer_checked`, marks the request `Executed`, marks the case `Paid`, decrements claimant active case count, and writes the immutable payout receipt.
+
+Appeal overturn payout remains deferred to Stage 6B-4B-3.
 
 ## Privacy Boundary
 
@@ -174,23 +182,24 @@ Spam is partially mitigated, not eliminated.
 
 ## Not Implemented
 
-This phase does not implement:
+Later phases extend this foundation with evidence freeze, DAO decisions, appeals, and the first strict payout path.
 
-- DAO approve / reject domain execution
-- governance decision receipt
-- evidence freeze / governance snapshot binding
-- appeals
-- payout requests
-- appeals
-- relief vault transfer
-- payout execution receipt writer as a public instruction
-- Treasury execution
+As of Stage 6B-4B-2, the original DAO approve payout path can execute an exact USDC transfer from the relief vault through `execute_victim_relief_approved_payout_v1`, then mark the request `Executed`, mark the case `Paid`, decrement claimant active count, and write `ReliefPayoutExecutionRecordV1`.
+
+Still not implemented:
+
+- appeal overturn payout transfer
+- partial payout
+- recipient migration
+- payout cancellation
+- vault reservation / fair ordering
+- payout statistics
 - submission bond
 - third-party recipient
 - frontend
 - Devnet or Mainnet deployment
 
-There is no relief vault transfer entrypoint in this phase. Authority cannot approve or pay claims through these instructions.
+Authority and guardian wallets cannot bypass DAO authorization to pay claims through these instructions.
 
 ## Compatibility
 

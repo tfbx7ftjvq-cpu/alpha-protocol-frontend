@@ -15,6 +15,8 @@ Phase 2E-6B-4B-1 adds the read-safe foundation for future Victim Relief payout e
 
 This phase does not add a public payout instruction, does not transfer USDC, does not mark requests `Executed`, does not mark cases `Paid`, and does not decrement claimant active case count.
 
+Stage 6B-4B-2 adds the first strict payout wrapper for the original DAO approve path. See [victim-relief-original-approved-payout-v1.md](victim-relief-original-approved-payout-v1.md).
+
 ## Valid Payout Origins
 
 There are only two valid V1 payout authorization origins.
@@ -39,12 +41,12 @@ Reject, uphold, policy update, guardian authority, generic Treasury spending, ca
 
 ## Strict Wrapper Model
 
-Future payout execution should use two public wrappers:
+Payout execution uses separate strict public wrappers:
 
 - `execute_victim_relief_approved_payout_v1`
 - `execute_victim_relief_overturn_payout_v1`
 
-Both should call a shared private payout core after their authorization-specific receipt checks pass. The generic public payout model is intentionally avoided because it increases optional-account, unchecked-account, receipt-type, and action-confusion risk.
+Stage 6B-4B-2 implements `execute_victim_relief_approved_payout_v1` for the original approve path only. Stage 6B-4B-3 must still implement the appeal overturn wrapper. The generic public payout model is intentionally avoided because it increases optional-account, unchecked-account, receipt-type, and action-confusion risk.
 
 ## Payout Origin Stable Codes
 
@@ -93,7 +95,7 @@ The executor does not enter the canonical payout hash. Dynamic vault balances, r
 
 ## Payout Execution Receipt
 
-`ReliefPayoutExecutionRecordV1` is the future proof of actual relief payout execution.
+`ReliefPayoutExecutionRecordV1` is the proof of actual relief payout execution once a strict payout wrapper writes it after the exact transfer.
 
 PDA:
 
@@ -101,7 +103,7 @@ PDA:
 relief_payout_rcpt_v1 + relief_payout_request
 ```
 
-The receipt is one per payout request, immutable, and has no public initializer, update, or close instruction in this phase. Future strict payout wrappers are the only intended writers.
+The receipt is one per payout request, immutable, and has no public initializer, update, or close instruction. Strict payout wrappers are the only intended writers.
 
 ## Common Validation Boundary
 
@@ -138,7 +140,15 @@ Current vault balance is determined by the SPL Token account.
 
 ## Deferred Work
 
-Stage 6B-4B-2 should implement the original-approve strict payout wrapper and actual relief-vault transfer.
+Stage 6B-4B-2 implements the original-approve strict payout wrapper and actual relief-vault transfer:
+
+- fixed origin `OriginalApprove`
+- fixed action `VictimReliefApproveCompensation`
+- exact `transfer_checked` from `relief_usdc_vault`
+- request status moves to `Executed`
+- case status moves to `Paid`
+- claimant active case count decrements once
+- immutable payout execution receipt is written
 
 Stage 6B-4B-3 should implement the appeal-overturn strict payout wrapper and actual relief-vault transfer.
 
@@ -152,4 +162,4 @@ Deferred beyond this phase:
 - frontend integration
 - Devnet / Mainnet deployment
 
-`PayoutRequest Approved`, `PayoutQueued`, and `Queue Executed` are still not payment. Mainnet and token launch remain NO-GO.
+For appeal overturn, `PayoutRequest Approved`, `PayoutQueued`, and `Queue Executed` are still not payment until the dedicated appeal payout wrapper exists. Mainnet and token launch remain NO-GO.

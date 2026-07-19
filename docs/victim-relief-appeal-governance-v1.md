@@ -218,9 +218,9 @@ The wrappers do not trust caller-supplied action, target, recipient, amount, evi
 
 The payout request uses the appeal proposal / decision / queue references, keeps the original evidence snapshot reference, and stores the appeal decision parameters hash.
 
-`PayoutRequest Approved` is not payment. `Queue Executed` is not payment. Stage 6B-4 must verify appeal-aware payout execution before any relief-vault transfer.
+`PayoutRequest Approved` is not payment. `Queue Executed` is not payment. The original approve payout wrapper from Stage 6B-4B-2 does not accept appeal overturn authorization receipts. Stage 6B-4B-3 must add the dedicated appeal-aware payout wrapper before appeal overturn can move relief-vault USDC.
 
-Stage 6B-4B-1 adds the payout foundation in [victim-relief-payout-foundation-v1.md](victim-relief-payout-foundation-v1.md). The future appeal payout path must use a dedicated `execute_victim_relief_overturn_payout_v1` wrapper, validate the `VictimReliefAppealDecisionExecutionRecordV1::Overturn` receipt, and write `ReliefPayoutExecutionRecordV1`. Stage 6B-4B-1 itself does not transfer USDC.
+Stage 6B-4B-1 adds the payout foundation in [victim-relief-payout-foundation-v1.md](victim-relief-payout-foundation-v1.md). Stage 6B-4B-2 adds original approve payout in [victim-relief-original-approved-payout-v1.md](victim-relief-original-approved-payout-v1.md). The future appeal payout path must use a dedicated `execute_victim_relief_overturn_payout_v1` wrapper, validate the `VictimReliefAppealDecisionExecutionRecordV1::Overturn` receipt, and write `ReliefPayoutExecutionRecordV1`.
 
 ## Non-Goals And Residual Risk
 
@@ -228,8 +228,7 @@ This phase intentionally does not implement:
 
 - appeal cancel
 - appeal expiry
-- relief-vault transfer
-- payout execution receipt
+- appeal overturn relief-vault transfer
 - arbitrary partial compensation
 - additional evidence plaintext storage
 - frontend

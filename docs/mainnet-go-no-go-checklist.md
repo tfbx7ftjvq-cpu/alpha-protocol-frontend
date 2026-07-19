@@ -37,7 +37,7 @@ The Devnet report only records Devnet health. It is not Mainnet approval. Before
 - Security config must not be paused.
 - Green Label config must not be paused.
 - Mainnet `STAKING_POOL` must be explicitly provided to the sanity check.
-- Victim Relief approve/reject may create decision records and payout requests, but Mainnet must not present `PayoutQueued` as paid until the relief-vault payout execution and receipt path is complete.
+- Victim Relief original approve now has a strict payout execution and receipt path, but Mainnet must not present `PayoutQueued` as paid unless request `Executed`, case `Paid`, actual relief-vault transfer, and payout receipt are all present.
 - Victim Relief appeal uphold/overturn may create appeal decision records and, for overturn, a payout request; Mainnet must not present appeal overturn as paid until Stage 6B-4 payout execution is complete.
 
 ## 5. Go/No-Go Decision Table
@@ -75,7 +75,7 @@ Any one of the following means NO-GO:
 - Frontend cannot clearly display cluster.
 - Frontend presents Devnet test parameters as Mainnet production rules.
 - Final `cargo test`, `anchor build --ignore-keys`, and `npm run build` are not complete.
-- Victim Relief relief-vault payout transfer / receipt path is missing while public messaging claims paid relief is live.
+- Victim Relief relief-vault payout transfer / receipt path is missing for any payout origin that public messaging claims is paid live.
 - Victim Relief appeal cancel / expiry or payout completion is claimed live before those paths exist.
 
 ## 7. Manual Review Required
@@ -281,12 +281,13 @@ Manual review notes:
 - Victim Relief foundation accounts are implemented for config, immutable policy, claimant anti-spam state, case submission, evidence root updates, cancellation, and expiry.
 - On-chain case data is limited to salted commitments, Merkle roots, public keys, amounts, counts, timestamps, and status fields.
 - PII, evidence plaintext, complaint text, and plaintext evidence URLs must remain off-chain.
-- Current Victim Relief does not approve claims, reject claims, create payout requests, transfer relief vault USDC, or execute DAO decisions.
+- Victim Relief now supports evidence freeze, DAO approve/reject execution records, payout request creation, one-time appeal governance, and original approve payout execution.
 - Stage 6B-2 adds evidence freeze, approve/reject execution records, and payout request creation without USDC transfer.
 - Stage 6B-3 adds one-time appeal governance for rejected cases: claimant-opened appeal, DAO uphold/overturn, immutable appeal receipt, and payout request creation on overturn.
-- Stage 6B-4B-1 adds strict payout origin typing, payout parameters hashing, the immutable payout execution receipt model, and validation helpers. It still does not add a public payout instruction or transfer USDC.
-- Appeal overturn is not payment. `PayoutQueued`, `PayoutRequest Approved`, and `Queue Executed` must not be presented as funds paid.
-- Original approve and appeal overturn must use separate strict payout wrappers before any Relief vault transfer can be considered complete.
+- Stage 6B-4B-1 adds strict payout origin typing, payout parameters hashing, the immutable payout execution receipt model, and validation helpers.
+- Stage 6B-4B-2 adds `execute_victim_relief_approved_payout_v1` for original approve only: exact relief-vault USDC transfer, request `Executed`, case `Paid`, active count decrement, and immutable payout receipt.
+- Appeal overturn is not payment. `PayoutQueued`, `PayoutRequest Approved`, and `Queue Executed` must not be presented as funds paid for appeal cases until the dedicated appeal payout wrapper exists.
+- Original approve and appeal overturn use separate strict payout wrappers; only original approve is implemented now.
 - Appeal cancel / expiry is not implemented; unresolved appeals can remain `AppealPending`.
 - DAO decisions are not legal judgments, insurance determinations, credit ratings, or investment advice.
 - Token launch and Mainnet production remain NO-GO until Victim Relief governance closure, payout policy, authority migration, sanity checks, and final build/test are complete.

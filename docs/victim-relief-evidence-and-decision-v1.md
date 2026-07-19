@@ -121,9 +121,11 @@ Approve changes the case to `PayoutQueued` and freezes:
 - relief vault
 - proposal / decision / queue / snapshot links
 
-`PayoutQueued` is not `Paid`. Queue execution is not proof that funds were paid. Stage 6B-4 must add the payout receipt and the actual relief-vault transfer.
+`PayoutQueued` is not `Paid`. Queue execution is not proof that funds were paid.
 
 Stage 6B-4B-1 is documented in [victim-relief-payout-foundation-v1.md](victim-relief-payout-foundation-v1.md). It adds payout origin typing, payout parameters hashing, a future immutable payout receipt account, and strict validation helpers. It still does not expose a public payout wrapper and still does not transfer USDC.
+
+Stage 6B-4B-2 is documented in [victim-relief-original-approved-payout-v1.md](victim-relief-original-approved-payout-v1.md). It adds `execute_victim_relief_approved_payout_v1` for the original approve path only. That wrapper performs the exact relief-vault `transfer_checked`, marks the request `Executed`, marks the case `Paid`, decrements claimant active case count, and writes `ReliefPayoutExecutionRecordV1`.
 
 ## Reject
 
@@ -149,7 +151,7 @@ Appeal rules:
 - overturn uses the same deterministic policy-capped amount as initial approve
 - no USDC is transferred in the appeal phase
 
-`PayoutQueued` remains distinct from `Paid`. Stage 6B-4 must perform the actual relief-vault transfer and write a payment receipt before a claim can be described as paid on-chain.
+`PayoutQueued` remains distinct from `Paid`. Original approve can become `Paid` only through the strict original payout wrapper. Appeal overturn remains queued-only until Stage 6B-4B-3 implements the dedicated appeal payout wrapper.
 
 Future payout execution must use strict wrappers for original approve and appeal overturn. A generic caller-selected payout path is not part of V1.
 
