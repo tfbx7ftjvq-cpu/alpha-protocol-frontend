@@ -11,7 +11,7 @@ Rejected
 -> DAO Uphold or Overturn
 -> immutable appeal decision receipt
 -> Overturn creates ReliefPayoutRequestV1
--> Stage 6B-4 performs any relief-vault transfer
+-> Stage 6B-4B-3 performs the appeal-overturn relief-vault transfer
 ```
 
 This phase does not transfer USDC, does not execute payouts, does not create an appeal cancel or expiry path, and does not add a new governance action for opening an appeal. Opening an appeal is a claimant business action, not a DAO action.
@@ -218,9 +218,17 @@ The wrappers do not trust caller-supplied action, target, recipient, amount, evi
 
 The payout request uses the appeal proposal / decision / queue references, keeps the original evidence snapshot reference, and stores the appeal decision parameters hash.
 
-`PayoutRequest Approved` is not payment. `Queue Executed` is not payment. The original approve payout wrapper from Stage 6B-4B-2 does not accept appeal overturn authorization receipts. Stage 6B-4B-3 must add the dedicated appeal-aware payout wrapper before appeal overturn can move relief-vault USDC.
+## Appeal Overturn Payout
 
-Stage 6B-4B-1 adds the payout foundation in [victim-relief-payout-foundation-v1.md](victim-relief-payout-foundation-v1.md). Stage 6B-4B-2 adds original approve payout in [victim-relief-original-approved-payout-v1.md](victim-relief-original-approved-payout-v1.md). The future appeal payout path must use a dedicated `execute_victim_relief_overturn_payout_v1` wrapper, validate the `VictimReliefAppealDecisionExecutionRecordV1::Overturn` receipt, and write `ReliefPayoutExecutionRecordV1`.
+Stage 6B-4B-3 is documented in [victim-relief-appeal-overturn-payout-v1.md](victim-relief-appeal-overturn-payout-v1.md).
+
+`execute_victim_relief_overturn_payout_v1` is the only V1 appeal-overturn payout wrapper. It accepts no instruction arguments, fixes origin to `AppealOverturn`, fixes action to `VictimReliefOverturnAppeal`, requires the original reject receipt and appeal overturn receipt, transfers the exact frozen amount from the relief USDC vault, marks the request `Executed`, marks the case `Paid`, leaves the appeal `Overturned`, decrements claimant active case count, and writes `ReliefPayoutExecutionRecordV1`.
+
+Uphold and reject are never payout origins. `PayoutQueued`, `PayoutRequest Approved`, and `Queue Executed` are not payment without the payout wrapper, request `Executed`, case `Paid`, and payout receipt.
+
+`PayoutRequest Approved` is not payment. `Queue Executed` is not payment. The original approve payout wrapper from Stage 6B-4B-2 does not accept appeal overturn authorization receipts. Stage 6B-4B-3 adds the dedicated appeal-aware payout wrapper before appeal overturn can move relief-vault USDC.
+
+Stage 6B-4B-1 adds the payout foundation in [victim-relief-payout-foundation-v1.md](victim-relief-payout-foundation-v1.md). Stage 6B-4B-2 adds original approve payout in [victim-relief-original-approved-payout-v1.md](victim-relief-original-approved-payout-v1.md). Stage 6B-4B-3 adds appeal overturn payout in [victim-relief-appeal-overturn-payout-v1.md](victim-relief-appeal-overturn-payout-v1.md).
 
 ## Non-Goals And Residual Risk
 
@@ -228,7 +236,6 @@ This phase intentionally does not implement:
 
 - appeal cancel
 - appeal expiry
-- appeal overturn relief-vault transfer
 - arbitrary partial compensation
 - additional evidence plaintext storage
 - frontend

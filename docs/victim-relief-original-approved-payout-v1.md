@@ -15,7 +15,7 @@ VictimReliefApproveCompensation
 -> ReliefPayoutExecutionRecordV1
 ```
 
-This phase supports only the original DAO approve source. Appeal overturn payout remains deferred to Stage 6B-4B-3.
+This phase supports only the original DAO approve source. Appeal overturn payout is implemented separately in Stage 6B-4B-3; see [victim-relief-appeal-overturn-payout-v1.md](victim-relief-appeal-overturn-payout-v1.md).
 
 ## Public Instruction
 
@@ -124,7 +124,6 @@ If the recipient token account is invalid or closed, payout fails without recipi
 
 Not implemented in this phase:
 
-- appeal overturn payout wrapper
 - generic payout instruction
 - partial payout
 - recipient migration
@@ -136,5 +135,7 @@ Not implemented in this phase:
 - Devnet or Mainnet deployment
 
 `Queue Executed` alone is not payment. For original approve, payment completion requires request `Executed`, case `Paid`, the actual relief-vault transfer, and `ReliefPayoutExecutionRecordV1`.
+
+Original approve and appeal overturn are intentionally separate strict wrappers. Original approve accepts only the original approval receipt; appeal overturn accepts only the appeal overturn receipt and original reject linkage.
 
 Local tests are not Devnet or Mainnet verification. Mainnet production and token launch remain NO-GO.

@@ -56,7 +56,13 @@ Original approve payout is documented in [victim-relief-original-approved-payout
 
 It adds `execute_victim_relief_approved_payout_v1` for original DAO approve cases only. The instruction accepts no arguments, fixes origin to `OriginalApprove`, fixes action to `VictimReliefApproveCompensation`, transfers the exact frozen amount from the relief USDC vault using `transfer_checked`, marks the request `Executed`, marks the case `Paid`, decrements claimant active case count, and writes the immutable payout receipt.
 
-Appeal overturn payout remains deferred to Stage 6B-4B-3.
+## Phase 2E-6B-4B-3 Appeal Overturn Payout
+
+Appeal overturn payout is documented in [victim-relief-appeal-overturn-payout-v1.md](victim-relief-appeal-overturn-payout-v1.md).
+
+It adds `execute_victim_relief_overturn_payout_v1` for appeal overturn cases only. The instruction accepts no arguments, fixes origin to `AppealOverturn`, fixes action to `VictimReliefOverturnAppeal`, requires both the original reject receipt and the appeal overturn receipt, transfers the exact frozen amount from the relief USDC vault using `transfer_checked`, marks the request `Executed`, marks the case `Paid`, decrements claimant active case count, and writes the immutable payout receipt.
+
+Original approve and appeal overturn remain separate wrappers. Neither path accepts caller-selected amount, recipient, source vault, payout origin, action, or payload hash.
 
 ## Privacy Boundary
 
@@ -184,11 +190,10 @@ Spam is partially mitigated, not eliminated.
 
 Later phases extend this foundation with evidence freeze, DAO decisions, appeals, and the first strict payout path.
 
-As of Stage 6B-4B-2, the original DAO approve payout path can execute an exact USDC transfer from the relief vault through `execute_victim_relief_approved_payout_v1`, then mark the request `Executed`, mark the case `Paid`, decrement claimant active count, and write `ReliefPayoutExecutionRecordV1`.
+As of Stage 6B-4B-3, the original DAO approve payout path can execute an exact USDC transfer from the relief vault through `execute_victim_relief_approved_payout_v1`, and the appeal overturn payout path can execute through `execute_victim_relief_overturn_payout_v1`. Both paths mark the request `Executed`, mark the case `Paid`, decrement claimant active count, and write `ReliefPayoutExecutionRecordV1`.
 
 Still not implemented:
 
-- appeal overturn payout transfer
 - partial payout
 - recipient migration
 - payout cancellation

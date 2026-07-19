@@ -127,6 +127,8 @@ Stage 6B-4B-1 is documented in [victim-relief-payout-foundation-v1.md](victim-re
 
 Stage 6B-4B-2 is documented in [victim-relief-original-approved-payout-v1.md](victim-relief-original-approved-payout-v1.md). It adds `execute_victim_relief_approved_payout_v1` for the original approve path only. That wrapper performs the exact relief-vault `transfer_checked`, marks the request `Executed`, marks the case `Paid`, decrements claimant active case count, and writes `ReliefPayoutExecutionRecordV1`.
 
+Stage 6B-4B-3 is documented in [victim-relief-appeal-overturn-payout-v1.md](victim-relief-appeal-overturn-payout-v1.md). It adds `execute_victim_relief_overturn_payout_v1` for appeal overturn payout only. That wrapper requires both the original reject receipt and the appeal overturn receipt, performs the exact relief-vault `transfer_checked`, marks the request `Executed`, marks the case `Paid`, leaves the appeal `Overturned`, decrements claimant active case count, and writes `ReliefPayoutExecutionRecordV1`.
+
 ## Reject
 
 `execute_reject_victim_relief_case_v1` creates only the immutable decision execution record.
@@ -151,9 +153,9 @@ Appeal rules:
 - overturn uses the same deterministic policy-capped amount as initial approve
 - no USDC is transferred in the appeal phase
 
-`PayoutQueued` remains distinct from `Paid`. Original approve can become `Paid` only through the strict original payout wrapper. Appeal overturn remains queued-only until Stage 6B-4B-3 implements the dedicated appeal payout wrapper.
+`PayoutQueued` remains distinct from `Paid`. Original approve can become `Paid` only through the strict original payout wrapper. Appeal overturn can become `Paid` only through the dedicated appeal payout wrapper.
 
-Future payout execution must use strict wrappers for original approve and appeal overturn. A generic caller-selected payout path is not part of V1.
+Payout execution must use strict wrappers for original approve and appeal overturn. A generic caller-selected payout path is not part of V1.
 
 ## Review Deadline Residual Risk
 

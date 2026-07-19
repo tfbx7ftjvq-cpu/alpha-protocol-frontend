@@ -240,6 +240,12 @@ pub mod my_first_solana_program {
         instructions::victim_relief_v1::execute_victim_relief_approved_payout_v1_handler(ctx)
     }
 
+    pub fn execute_victim_relief_overturn_payout_v1(
+        ctx: Context<ExecuteVictimReliefOverturnPayoutV1>,
+    ) -> Result<()> {
+        instructions::victim_relief_v1::execute_victim_relief_overturn_payout_v1_handler(ctx)
+    }
+
     pub fn initialize_governance_config_v1(
         ctx: Context<InitializeGovernanceConfigV1>,
     ) -> Result<()> {

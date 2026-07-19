@@ -480,9 +480,10 @@ Phase 2E-6B-4B-1 adds the payout foundation documented in
 This improves the safety foundation for relief-vault payments, but this
 foundation phase itself does not transfer USDC. `ReliefPayoutRequestV1::Approved`,
 `PayoutQueued`, and `ExecutionQueueItemV1::Executed` are not proof of payment.
-Stage 6B-4B-2 implements the original approve wrapper; Stage 6B-4B-3 must still
-implement the appeal overturn wrapper before all Victim Relief payout origins can
-be described as paid end-to-end on-chain.
+Stage 6B-4B-2 implements the original approve wrapper. Stage 6B-4B-3 implements
+the appeal overturn wrapper. Both payout origins now require a dedicated strict
+wrapper, exact relief-vault transfer, request `Executed`, case `Paid`, and
+`ReliefPayoutExecutionRecordV1` before they can be described as paid on-chain.
 
 ## Victim Relief Original Approved Payout Update
 
@@ -498,10 +499,30 @@ Phase 2E-6B-4B-2 adds the original approve payout wrapper documented in
 - successful execution marks request `Executed`, case `Paid`, decrements claimant active count, and writes `ReliefPayoutExecutionRecordV1`.
 
 This improves Victim Relief payout completeness for original approve cases only.
-It does not implement appeal overturn payout, partial payout, recipient
-migration, cancellation, vault reservation, payout stats, or frontend display.
+It does not implement partial payout, recipient migration, cancellation, vault
+reservation, payout stats, or frontend display.
 Payout outflow does not mutate Treasury cumulative revenue totals or
 `RevenueRoutingStatsV1`.
+
+## Victim Relief Appeal Overturn Payout Update
+
+Phase 2E-6B-4B-3 adds the appeal overturn payout wrapper documented in
+[victim-relief-appeal-overturn-payout-v1.md](victim-relief-appeal-overturn-payout-v1.md):
+
+- `execute_victim_relief_overturn_payout_v1` accepts no instruction args.
+- payout origin is fixed to `AppealOverturn`.
+- governance action is fixed to `VictimReliefOverturnAppeal`.
+- the original reject receipt and appeal overturn receipt are both required.
+- source is fixed to the Treasury relief USDC vault PDA.
+- amount and recipient are frozen by `ReliefPayoutRequestV1`.
+- transfer uses SPL Token `transfer_checked` with the `vault_authority_v2` PDA signer.
+- successful execution marks request `Executed`, case `Paid`, leaves appeal `Overturned`, decrements claimant active count, and writes `ReliefPayoutExecutionRecordV1`.
+
+Original approve and appeal overturn now have separate strict payout wrappers.
+There is still no generic payout path, partial payout, recipient migration,
+cancellation, reservation / fair ordering, payout stats, frontend display, or
+Devnet/Mainnet verification. Payout outflow does not mutate Treasury cumulative
+revenue totals or `RevenueRoutingStatsV1`.
 
 ### Phase 2E-2: Revenue Routing Design
 

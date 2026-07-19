@@ -17,6 +17,8 @@ This phase does not add a public payout instruction, does not transfer USDC, doe
 
 Stage 6B-4B-2 adds the first strict payout wrapper for the original DAO approve path. See [victim-relief-original-approved-payout-v1.md](victim-relief-original-approved-payout-v1.md).
 
+Stage 6B-4B-3 adds the second strict payout wrapper for the appeal overturn path. See [victim-relief-appeal-overturn-payout-v1.md](victim-relief-appeal-overturn-payout-v1.md).
+
 ## Valid Payout Origins
 
 There are only two valid V1 payout authorization origins.
@@ -46,7 +48,7 @@ Payout execution uses separate strict public wrappers:
 - `execute_victim_relief_approved_payout_v1`
 - `execute_victim_relief_overturn_payout_v1`
 
-Stage 6B-4B-2 implements `execute_victim_relief_approved_payout_v1` for the original approve path only. Stage 6B-4B-3 must still implement the appeal overturn wrapper. The generic public payout model is intentionally avoided because it increases optional-account, unchecked-account, receipt-type, and action-confusion risk.
+Stage 6B-4B-2 implements `execute_victim_relief_approved_payout_v1` for the original approve path only. Stage 6B-4B-3 implements `execute_victim_relief_overturn_payout_v1` for the appeal overturn path only. The generic public payout model is intentionally avoided because it increases optional-account, unchecked-account, receipt-type, and action-confusion risk.
 
 ## Payout Origin Stable Codes
 
@@ -150,7 +152,17 @@ Stage 6B-4B-2 implements the original-approve strict payout wrapper and actual r
 - claimant active case count decrements once
 - immutable payout execution receipt is written
 
-Stage 6B-4B-3 should implement the appeal-overturn strict payout wrapper and actual relief-vault transfer.
+Stage 6B-4B-3 implements the appeal-overturn strict payout wrapper and actual relief-vault transfer:
+
+- fixed origin `AppealOverturn`
+- fixed action `VictimReliefOverturnAppeal`
+- original reject receipt and appeal overturn receipt are both required
+- exact `transfer_checked` from `relief_usdc_vault`
+- request status moves to `Executed`
+- case status moves to `Paid`
+- appeal remains `Overturned`
+- claimant active case count decrements once
+- immutable payout execution receipt is written
 
 Deferred beyond this phase:
 
@@ -162,4 +174,6 @@ Deferred beyond this phase:
 - frontend integration
 - Devnet / Mainnet deployment
 
-For appeal overturn, `PayoutRequest Approved`, `PayoutQueued`, and `Queue Executed` are still not payment until the dedicated appeal payout wrapper exists. Mainnet and token launch remain NO-GO.
+For both original approve and appeal overturn, `PayoutRequest Approved`, `PayoutQueued`, and `Queue Executed` are not payment. Payment requires the dedicated wrapper, exact relief-vault transfer, request `Executed`, case `Paid`, and `ReliefPayoutExecutionRecordV1`.
+
+Mainnet and token launch remain NO-GO.
