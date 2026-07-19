@@ -455,17 +455,33 @@ make Victim Relief payout-ready.
 
 Still missing:
 
-- evidence freeze / snapshot binding
-- DAO approve / reject decision receipt
-- appeal flow with uphold / overturn decision receipt
-- payout request creation for approve / overturn
 - relief vault transfer
-- Treasury execution integration
+- public strict original-approve payout wrapper
+- public strict appeal-overturn payout wrapper
+- immutable proof that USDC actually left the relief vault
 - frontend review surface
 
 Victim Relief cases store only salted commitments and Merkle roots. Raw evidence
 and PII must remain off-chain. DAO decisions are not court judgments, insurance
 determinations, or investment advice.
+
+## Victim Relief Payout Foundation Update
+
+Phase 2E-6B-4B-1 adds the payout foundation documented in
+[victim-relief-payout-foundation-v1.md](victim-relief-payout-foundation-v1.md):
+
+- strict payout origin typing for original approve and appeal overturn
+- canonical payout parameters hash
+- immutable `ReliefPayoutExecutionRecordV1` model
+- original approve authorization validator
+- appeal overturn authorization validator
+- common request / case / vault / recipient / pause / balance validator
+
+This improves the safety foundation for relief-vault payments, but it still does
+not transfer USDC. `ReliefPayoutRequestV1::Approved`, `PayoutQueued`, and
+`ExecutionQueueItemV1::Executed` are not proof of payment. Stage 6B-4B-2 and
+6B-4B-3 must implement the two strict payout wrappers before Victim Relief can
+be described as paid end-to-end on-chain.
 
 ### Phase 2E-2: Revenue Routing Design
 

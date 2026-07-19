@@ -220,6 +220,8 @@ The payout request uses the appeal proposal / decision / queue references, keeps
 
 `PayoutRequest Approved` is not payment. `Queue Executed` is not payment. Stage 6B-4 must verify appeal-aware payout execution before any relief-vault transfer.
 
+Stage 6B-4B-1 adds the payout foundation in [victim-relief-payout-foundation-v1.md](victim-relief-payout-foundation-v1.md). The future appeal payout path must use a dedicated `execute_victim_relief_overturn_payout_v1` wrapper, validate the `VictimReliefAppealDecisionExecutionRecordV1::Overturn` receipt, and write `ReliefPayoutExecutionRecordV1`. Stage 6B-4B-1 itself does not transfer USDC.
+
 ## Non-Goals And Residual Risk
 
 This phase intentionally does not implement:

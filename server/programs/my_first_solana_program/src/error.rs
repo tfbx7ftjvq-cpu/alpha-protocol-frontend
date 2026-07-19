@@ -673,4 +673,49 @@ pub enum CustomError {
 
     #[msg("Invalid Victim Relief appeal schema")]
     InvalidVictimReliefAppealSchema,
+
+    #[msg("Invalid Victim Relief payout origin")]
+    InvalidVictimReliefPayoutOrigin,
+
+    #[msg("Victim Relief payout request mismatch")]
+    VictimReliefPayoutRequestMismatch,
+
+    #[msg("Victim Relief payout status mismatch")]
+    VictimReliefPayoutStatusMismatch,
+
+    #[msg("Victim Relief payout authorization mismatch")]
+    VictimReliefPayoutAuthorizationMismatch,
+
+    #[msg("Victim Relief payout action mismatch")]
+    VictimReliefPayoutActionMismatch,
+
+    #[msg("Victim Relief payout receipt already exists")]
+    VictimReliefPayoutReceiptAlreadyExists,
+
+    #[msg("Victim Relief payout parameters mismatch")]
+    VictimReliefPayoutParametersMismatch,
+
+    #[msg("Victim Relief payout recipient mismatch")]
+    VictimReliefPayoutRecipientMismatch,
+
+    #[msg("Victim Relief payout vault mismatch")]
+    VictimReliefPayoutVaultMismatch,
+
+    #[msg("Victim Relief payout mint mismatch")]
+    VictimReliefPayoutMintMismatch,
+
+    #[msg("Victim Relief payout decimals mismatch")]
+    VictimReliefPayoutDecimalsMismatch,
+
+    #[msg("Victim Relief payout insufficient funds")]
+    VictimReliefPayoutInsufficientFunds,
+
+    #[msg("Victim Relief payout claimant state mismatch")]
+    VictimReliefPayoutClaimantStateMismatch,
+
+    #[msg("Victim Relief payout is paused")]
+    VictimReliefPayoutPaused,
+
+    #[msg("Invalid Victim Relief payout schema")]
+    InvalidVictimReliefPayoutSchema,
 }

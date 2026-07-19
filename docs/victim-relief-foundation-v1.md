@@ -42,6 +42,14 @@ Opening an appeal is a claimant business action, not a DAO action. Uphold create
 
 V1 appeal does not implement cancel or expiry. If DAO governance does not process an appeal, the case can remain in `AppealPending`; this liveness risk is intentionally deferred until appeal-proposal linkage is modeled safely.
 
+## Phase 2E-6B-4B-1 Payout Foundation
+
+Victim Relief payout foundation is documented in [victim-relief-payout-foundation-v1.md](victim-relief-payout-foundation-v1.md).
+
+It adds strict payout origin typing, canonical payout parameters hashing, authorization validators, common vault / recipient / pause checks, and the immutable `ReliefPayoutExecutionRecordV1` model. It still does not add a public payout wrapper, transfer USDC, mark a request `Executed`, mark a case `Paid`, or decrement active case count.
+
+The only valid future payout origins are original DAO approve and appeal overturn. `Queue Executed`, `PayoutQueued`, and `PayoutRequest Approved` remain distinct from actual payment.
+
 ## Privacy Boundary
 
 Victim Relief V1 stores only fixed-length commitments and public accounting fields on-chain.
@@ -175,6 +183,7 @@ This phase does not implement:
 - payout requests
 - appeals
 - relief vault transfer
+- payout execution receipt writer as a public instruction
 - Treasury execution
 - submission bond
 - third-party recipient

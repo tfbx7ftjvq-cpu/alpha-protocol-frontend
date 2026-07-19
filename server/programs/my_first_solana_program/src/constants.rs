@@ -66,6 +66,7 @@ pub const VICTIM_RELIEF_EVIDENCE_SNAPSHOT_V1_SEED: &[u8] = b"victim_relief_evide
 pub const VICTIM_RELIEF_DECISION_EXECUTION_RECORD_V1_SEED: &[u8] =
     b"victim_relief_decision_rcpt_v1";
 pub const RELIEF_PAYOUT_REQUEST_V1_SEED: &[u8] = b"relief_payout_request_v1";
+pub const RELIEF_PAYOUT_EXECUTION_RECORD_V1_SEED: &[u8] = b"relief_payout_rcpt_v1";
 pub const VICTIM_RELIEF_APPEAL_V1_SEED: &[u8] = b"victim_relief_appeal_v1";
 pub const VICTIM_RELIEF_APPEAL_DECISION_EXECUTION_RECORD_V1_SEED: &[u8] =
     b"victim_relief_appeal_rcpt_v1";

@@ -284,7 +284,9 @@ Manual review notes:
 - Current Victim Relief does not approve claims, reject claims, create payout requests, transfer relief vault USDC, or execute DAO decisions.
 - Stage 6B-2 adds evidence freeze, approve/reject execution records, and payout request creation without USDC transfer.
 - Stage 6B-3 adds one-time appeal governance for rejected cases: claimant-opened appeal, DAO uphold/overturn, immutable appeal receipt, and payout request creation on overturn.
+- Stage 6B-4B-1 adds strict payout origin typing, payout parameters hashing, the immutable payout execution receipt model, and validation helpers. It still does not add a public payout instruction or transfer USDC.
 - Appeal overturn is not payment. `PayoutQueued`, `PayoutRequest Approved`, and `Queue Executed` must not be presented as funds paid.
+- Original approve and appeal overturn must use separate strict payout wrappers before any Relief vault transfer can be considered complete.
 - Appeal cancel / expiry is not implemented; unresolved appeals can remain `AppealPending`.
 - DAO decisions are not legal judgments, insurance determinations, credit ratings, or investment advice.
 - Token launch and Mainnet production remain NO-GO until Victim Relief governance closure, payout policy, authority migration, sanity checks, and final build/test are complete.

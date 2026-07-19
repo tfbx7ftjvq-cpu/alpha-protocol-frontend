@@ -123,6 +123,8 @@ Approve changes the case to `PayoutQueued` and freezes:
 
 `PayoutQueued` is not `Paid`. Queue execution is not proof that funds were paid. Stage 6B-4 must add the payout receipt and the actual relief-vault transfer.
 
+Stage 6B-4B-1 is documented in [victim-relief-payout-foundation-v1.md](victim-relief-payout-foundation-v1.md). It adds payout origin typing, payout parameters hashing, a future immutable payout receipt account, and strict validation helpers. It still does not expose a public payout wrapper and still does not transfer USDC.
+
 ## Reject
 
 `execute_reject_victim_relief_case_v1` creates only the immutable decision execution record.
@@ -148,6 +150,8 @@ Appeal rules:
 - no USDC is transferred in the appeal phase
 
 `PayoutQueued` remains distinct from `Paid`. Stage 6B-4 must perform the actual relief-vault transfer and write a payment receipt before a claim can be described as paid on-chain.
+
+Future payout execution must use strict wrappers for original approve and appeal overturn. A generic caller-selected payout path is not part of V1.
 
 ## Review Deadline Residual Risk
 

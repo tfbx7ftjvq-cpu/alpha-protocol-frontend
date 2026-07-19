@@ -897,6 +897,76 @@ impl ReliefPayoutRequestV1 {
     pub const INIT_SPACE: usize = (32 * 13) + (8 * 4) + 1 + 2 + 1 + 32;
 }
 
+/// Strict source path for a Victim Relief payout.
+///
+/// Variant order is part of serialized payout receipts. Do not reorder
+/// existing variants; append new variants only.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VictimReliefPayoutOriginV1 {
+    OriginalApprove,
+    AppealOverturn,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VictimReliefPayoutParametersV1 {
+    pub schema_version: u16,
+    pub payout_origin: VictimReliefPayoutOriginV1,
+    pub payout_request: Pubkey,
+    pub victim_relief_case: Pubkey,
+    pub config: Pubkey,
+    pub policy: Pubkey,
+    pub policy_version: u64,
+    pub authorization_action_type: GovernanceActionTypeV1,
+    pub governance_proposal: Pubkey,
+    pub proposal_decision: Pubkey,
+    pub execution_queue_item: Pubkey,
+    pub governance_proposal_action: Pubkey,
+    pub authorization_execution_record: Pubkey,
+    pub evidence_snapshot: Pubkey,
+    pub approved_amount_usdc: u64,
+    pub recipient_owner: Pubkey,
+    pub recipient_token_account: Pubkey,
+    pub treasury_config: Pubkey,
+    pub relief_usdc_vault: Pubkey,
+    pub vault_authority_v2: Pubkey,
+    pub usdc_mint: Pubkey,
+    pub authorization_parameters_hash: [u8; 32],
+}
+
+#[account]
+pub struct ReliefPayoutExecutionRecordV1 {
+    pub payout_request: Pubkey,
+    pub victim_relief_case: Pubkey,
+    pub config: Pubkey,
+    pub policy: Pubkey,
+    pub policy_version: u64,
+    pub payout_origin: VictimReliefPayoutOriginV1,
+    pub authorization_action_type: GovernanceActionTypeV1,
+    pub governance_proposal: Pubkey,
+    pub proposal_decision: Pubkey,
+    pub execution_queue_item: Pubkey,
+    pub governance_proposal_action: Pubkey,
+    pub authorization_execution_record: Pubkey,
+    pub evidence_snapshot: Pubkey,
+    pub relief_usdc_vault: Pubkey,
+    pub vault_authority_v2: Pubkey,
+    pub recipient_owner: Pubkey,
+    pub recipient_token_account: Pubkey,
+    pub amount_usdc: u64,
+    pub usdc_mint: Pubkey,
+    pub authorization_parameters_hash: [u8; 32],
+    pub payout_parameters_hash: [u8; 32],
+    pub executor: Pubkey,
+    pub executed_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+    pub reserved: [u8; 32],
+}
+
+impl ReliefPayoutExecutionRecordV1 {
+    pub const INIT_SPACE: usize = (32 * 16) + (8 * 3) + 2 + (32 * 3) + 2 + 1;
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VictimReliefAppealStatusV1 {
     Pending,
@@ -1639,6 +1709,13 @@ mod tests {
         let minimum = (32 * 13) + (8 * 4) + 1 + 2 + 1 + 32;
         assert_eq!(ReliefPayoutRequestV1::INIT_SPACE, minimum);
         assert_eq!(ReliefPayoutRequestV1::INIT_SPACE, 484);
+    }
+
+    #[test]
+    fn relief_payout_execution_record_space_is_exact() {
+        let minimum = (32 * 16) + (8 * 3) + 2 + (32 * 3) + 2 + 1;
+        assert_eq!(ReliefPayoutExecutionRecordV1::INIT_SPACE, minimum);
+        assert_eq!(ReliefPayoutExecutionRecordV1::INIT_SPACE, 637);
     }
 
     #[test]
