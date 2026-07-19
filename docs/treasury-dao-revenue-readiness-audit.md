@@ -499,8 +499,9 @@ Phase 2E-6B-4B-2 adds the original approve payout wrapper documented in
 - successful execution marks request `Executed`, case `Paid`, decrements claimant active count, and writes `ReliefPayoutExecutionRecordV1`.
 
 This improves Victim Relief payout completeness for original approve cases only.
-It does not implement partial payout, recipient migration, cancellation, vault
-reservation, payout stats, or frontend display.
+It does not implement partial payout, recipient migration, vault reservation,
+payout stats, or frontend display. Stage 6B-4B-4B adds a separate governance
+cancellation path for approved-but-unpaid requests.
 Payout outflow does not mutate Treasury cumulative revenue totals or
 `RevenueRoutingStatsV1`.
 
@@ -520,9 +521,35 @@ Phase 2E-6B-4B-3 adds the appeal overturn payout wrapper documented in
 
 Original approve and appeal overturn now have separate strict payout wrappers.
 There is still no generic payout path, partial payout, recipient migration,
-cancellation, reservation / fair ordering, payout stats, frontend display, or
-Devnet/Mainnet verification. Payout outflow does not mutate Treasury cumulative
-revenue totals or `RevenueRoutingStatsV1`.
+reservation / fair ordering, payout stats, frontend display, or Devnet/Mainnet
+verification. Stage 6B-4B-4B adds strict DAO/Security cancellation for
+approved-but-unpaid requests only. Payout outflow and cancellation do not mutate
+Treasury cumulative revenue totals or `RevenueRoutingStatsV1`.
+
+## Victim Relief Payout Cancellation Governance Update
+
+Phase 2E-6B-4B-4B adds the cancellation governance path documented in
+[victim-relief-payout-cancellation-governance-v1.md](victim-relief-payout-cancellation-governance-v1.md):
+
+- `GovernanceActionTypeV1::VictimReliefCancelPayout` is append-only and maps to
+  the Victim Relief module.
+- `execute_cancel_original_victim_relief_payout_v1` cancels unpaid payout
+  requests created by original approve governance.
+- `execute_cancel_overturn_victim_relief_payout_v1` cancels unpaid payout
+  requests created by appeal overturn governance.
+- Cancellation requires the original authorization chain, a separate
+  cancellation governance proposal, adapter, approved Security decision, executed
+  queue item, canonical cancellation parameters hash, and immutable
+  `VictimReliefPayoutCancellationRecordV1`.
+- Cancellation changes request `Approved -> Cancelled`, case
+  `PayoutQueued -> Cancelled`, and decrements claimant active case count once.
+- Cancellation does not transfer USDC, mutate Treasury revenue totals, rewrite
+  recipient data, or create a payout receipt.
+
+This improves terminal-state safety for authorized-but-unpaid relief requests.
+It does not solve recipient migration, vault reservation / FIFO ordering, payout
+stats, appeal expiry, frontend display, Devnet strict E2E, Mainnet authority
+migration, or legal / compliance review. Token launch remains NO-GO.
 
 ### Phase 2E-2: Revenue Routing Design
 

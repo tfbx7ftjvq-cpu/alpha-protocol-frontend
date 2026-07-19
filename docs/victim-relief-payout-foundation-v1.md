@@ -164,11 +164,21 @@ Stage 6B-4B-3 implements the appeal-overturn strict payout wrapper and actual re
 - claimant active case count decrements once
 - immutable payout execution receipt is written
 
+Stage 6B-4B-4B implements strict cancellation governance for unpaid approved payout requests:
+
+- fixed action `VictimReliefCancelPayout`
+- canonical target `ReliefPayoutRequestV1`
+- separate wrappers for original approve and appeal overturn sources
+- request status moves to `Cancelled`
+- case status moves to `Cancelled`
+- claimant active case count decrements once
+- immutable cancellation receipt is written
+- no USDC transfer and no Treasury accounting mutation
+
 Deferred beyond this phase:
 
 - partial payouts
 - recipient migration
-- payout cancellation
 - vault reservation / fair ordering
 - payout stats account
 - frontend integration
@@ -177,3 +187,5 @@ Deferred beyond this phase:
 For both original approve and appeal overturn, `PayoutRequest Approved`, `PayoutQueued`, and `Queue Executed` are not payment. Payment requires the dedicated wrapper, exact relief-vault transfer, request `Executed`, case `Paid`, and `ReliefPayoutExecutionRecordV1`.
 
 Mainnet and token launch remain NO-GO.
+
+See [victim-relief-payout-cancellation-governance-v1.md](victim-relief-payout-cancellation-governance-v1.md).

@@ -39,6 +39,7 @@ The Devnet report only records Devnet health. It is not Mainnet approval. Before
 - Mainnet `STAKING_POOL` must be explicitly provided to the sanity check.
 - Victim Relief original approve and appeal overturn now have separate strict payout execution and receipt paths, but Mainnet must not present `PayoutQueued` as paid unless request `Executed`, case `Paid`, actual relief-vault transfer, and payout receipt are all present.
 - Victim Relief appeal uphold creates no payout; appeal overturn is payable only through `execute_victim_relief_overturn_payout_v1` and cannot be treated as paid from queue execution alone.
+- Victim Relief payout cancellation exists only for approved-but-unpaid requests through strict DAO/Security governance; cancellation is not a guardian shortcut, recipient migration, or USDC transfer.
 
 ## 5. Go/No-Go Decision Table
 
@@ -76,7 +77,7 @@ Any one of the following means NO-GO:
 - Frontend presents Devnet test parameters as Mainnet production rules.
 - Final `cargo test`, `anchor build --ignore-keys`, and `npm run build` are not complete.
 - Victim Relief relief-vault payout transfer / receipt path is missing for any payout origin that public messaging claims is paid live.
-- Victim Relief appeal cancel / expiry or payout completion is claimed live before those paths exist.
+- Victim Relief payout cancellation, appeal cancel / expiry, or payout completion is claimed live beyond the implemented strict paths.
 
 ## 7. Manual Review Required
 
@@ -287,11 +288,12 @@ Manual review notes:
 - Stage 6B-4B-1 adds strict payout origin typing, payout parameters hashing, the immutable payout execution receipt model, and validation helpers.
 - Stage 6B-4B-2 adds `execute_victim_relief_approved_payout_v1` for original approve only: exact relief-vault USDC transfer, request `Executed`, case `Paid`, active count decrement, and immutable payout receipt.
 - Stage 6B-4B-3 adds `execute_victim_relief_overturn_payout_v1` for appeal overturn only: original reject receipt + appeal overturn receipt validation, exact relief-vault USDC transfer, request `Executed`, case `Paid`, active count decrement, appeal remains `Overturned`, and immutable payout receipt.
+- Stage 6B-4B-4B adds `execute_cancel_original_victim_relief_payout_v1` and `execute_cancel_overturn_victim_relief_payout_v1` for strict governance cancellation of approved-but-unpaid requests. Cancellation creates an immutable receipt, marks the request and case `Cancelled`, and does not transfer USDC or mutate Treasury revenue accounting.
 - `PayoutQueued`, `PayoutRequest Approved`, and `Queue Executed` must not be presented as funds paid unless the relevant strict payout wrapper has executed and written `ReliefPayoutExecutionRecordV1`.
 - Original approve and appeal overturn use separate strict payout wrappers; no generic payout path exists.
 - Appeal cancel / expiry is not implemented; unresolved appeals can remain `AppealPending`.
 - DAO decisions are not legal judgments, insurance determinations, credit ratings, or investment advice.
-- Token launch and Mainnet production remain NO-GO until Victim Relief governance closure, payout policy, authority migration, sanity checks, and final build/test are complete.
+- Token launch and Mainnet production remain NO-GO until Victim Relief Devnet strict E2E, payout/cancellation policy review, authority migration, sanity checks, and final build/test are complete.
 
 ## 23. Current Conclusion
 

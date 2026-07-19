@@ -718,4 +718,28 @@ pub enum CustomError {
 
     #[msg("Invalid Victim Relief payout schema")]
     InvalidVictimReliefPayoutSchema,
+
+    #[msg("Victim Relief payout cancellation action mismatch")]
+    VictimReliefPayoutCancellationActionMismatch,
+
+    #[msg("Victim Relief payout cancellation target mismatch")]
+    VictimReliefPayoutCancellationTargetMismatch,
+
+    #[msg("Victim Relief payout cancellation parameters mismatch")]
+    VictimReliefPayoutCancellationParametersMismatch,
+
+    #[msg("Victim Relief payout cancellation authorization mismatch")]
+    VictimReliefPayoutCancellationAuthorizationMismatch,
+
+    #[msg("Victim Relief payout cancellation status mismatch")]
+    VictimReliefPayoutCancellationStatusMismatch,
+
+    #[msg("Victim Relief payout cancellation receipt already exists")]
+    VictimReliefPayoutCancellationReceiptAlreadyExists,
+
+    #[msg("Victim Relief payout cancellation original receipt mismatch")]
+    VictimReliefPayoutCancellationOriginalReceiptMismatch,
+
+    #[msg("Invalid Victim Relief payout cancellation schema")]
+    InvalidVictimReliefPayoutCancellationSchema,
 }

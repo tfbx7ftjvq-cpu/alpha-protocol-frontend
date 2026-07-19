@@ -127,7 +127,7 @@ Not implemented in this phase:
 - generic payout instruction
 - partial payout
 - recipient migration
-- payout cancellation
+- payout cancellation is now implemented separately by Stage 6B-4B-4B
 - vault reservation / fair ordering
 - payout statistics
 - new Governance or Security action types
@@ -139,3 +139,9 @@ Not implemented in this phase:
 Original approve and appeal overturn are intentionally separate strict wrappers. Original approve accepts only the original approval receipt; appeal overturn accepts only the appeal overturn receipt and original reject linkage.
 
 Local tests are not Devnet or Mainnet verification. Mainnet production and token launch remain NO-GO.
+
+## Cancellation Governance
+
+Stage 6B-4B-4B adds `execute_cancel_original_victim_relief_payout_v1` for original approve requests that remain `Approved` and unpaid. Cancellation is a separate DAO + Security action targeting `ReliefPayoutRequestV1`; it writes `VictimReliefPayoutCancellationRecordV1`, marks request and case `Cancelled`, decrements active case count once, and transfers no USDC.
+
+See [victim-relief-payout-cancellation-governance-v1.md](victim-relief-payout-cancellation-governance-v1.md).

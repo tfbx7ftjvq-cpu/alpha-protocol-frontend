@@ -239,3 +239,11 @@ flow. Appeal governance targets `VictimReliefAppealV1`, not the original case.
 Uphold creates no payout request. Overturn creates `ReliefPayoutRequestV1`, but
 does not transfer USDC or mark the case paid. Registry mutation, payout
 execution, appeal cancel / expiry, and frontend support remain out of scope.
+
+## Stage 6B-4B-4B Payout Cancellation Usage
+
+Phase 2E-6B-4B-4B consumes the same `VictimRelief` registry for strict payout cancellation governance:
+
+- `VictimReliefCancelPayout`
+
+The canonical target is `ReliefPayoutRequestV1`. The cancel wrappers validate that the registry is enabled, bound to the current Alpha Protocol program id, and tied to the same Security governance config before trusting the adapter, proposal decision, and execution queue. Cancellation writes an immutable cancellation receipt and transfers no USDC.

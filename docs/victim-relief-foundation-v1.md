@@ -192,11 +192,14 @@ Later phases extend this foundation with evidence freeze, DAO decisions, appeals
 
 As of Stage 6B-4B-3, the original DAO approve payout path can execute an exact USDC transfer from the relief vault through `execute_victim_relief_approved_payout_v1`, and the appeal overturn payout path can execute through `execute_victim_relief_overturn_payout_v1`. Both paths mark the request `Executed`, mark the case `Paid`, decrement claimant active count, and write `ReliefPayoutExecutionRecordV1`.
 
+Stage 6B-4B-4B adds strict DAO + Security cancellation for unpaid approved payout requests through `execute_cancel_original_victim_relief_payout_v1` and `execute_cancel_overturn_victim_relief_payout_v1`. Cancellation targets the payout request, writes `VictimReliefPayoutCancellationRecordV1`, marks request and case `Cancelled`, decrements active count once, and transfers no USDC.
+
+See [victim-relief-payout-cancellation-governance-v1.md](victim-relief-payout-cancellation-governance-v1.md).
+
 Still not implemented:
 
 - partial payout
 - recipient migration
-- payout cancellation
 - vault reservation / fair ordering
 - payout statistics
 - submission bond

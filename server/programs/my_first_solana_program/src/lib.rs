@@ -246,6 +246,18 @@ pub mod my_first_solana_program {
         instructions::victim_relief_v1::execute_victim_relief_overturn_payout_v1_handler(ctx)
     }
 
+    pub fn execute_cancel_original_victim_relief_payout_v1(
+        ctx: Context<ExecuteCancelOriginalVictimReliefPayoutV1>,
+    ) -> Result<()> {
+        instructions::victim_relief_v1::execute_cancel_original_victim_relief_payout_v1_handler(ctx)
+    }
+
+    pub fn execute_cancel_overturn_victim_relief_payout_v1(
+        ctx: Context<ExecuteCancelOverturnVictimReliefPayoutV1>,
+    ) -> Result<()> {
+        instructions::victim_relief_v1::execute_cancel_overturn_victim_relief_payout_v1_handler(ctx)
+    }
+
     pub fn initialize_governance_config_v1(
         ctx: Context<InitializeGovernanceConfigV1>,
     ) -> Result<()> {

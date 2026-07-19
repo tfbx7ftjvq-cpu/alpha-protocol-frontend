@@ -252,6 +252,7 @@ pub enum ProposalType {
     ProtocolEmergencyAction,
     VictimReliefUpholdAppeal,
     VictimReliefOverturnAppeal,
+    VictimReliefCancelPayout,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -300,6 +301,7 @@ pub enum ActionType {
     ProtocolEmergencyAction,
     VictimReliefUpholdAppeal,
     VictimReliefOverturnAppeal,
+    VictimReliefCancelPayout,
 }
 
 #[account]
@@ -472,6 +474,7 @@ pub enum GovernanceActionTypeV1 {
     ProtocolEmergencyAction,
     VictimReliefUpholdAppeal,
     VictimReliefOverturnAppeal,
+    VictimReliefCancelPayout,
 }
 
 /// Stable identifier for the protocol module targeted by a governance action.
@@ -965,6 +968,79 @@ pub struct ReliefPayoutExecutionRecordV1 {
 
 impl ReliefPayoutExecutionRecordV1 {
     pub const INIT_SPACE: usize = (32 * 16) + (8 * 3) + 2 + (32 * 3) + 2 + 1;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VictimReliefPayoutCancellationParametersV1 {
+    pub schema_version: u16,
+    pub payout_origin: VictimReliefPayoutOriginV1,
+    pub payout_request: Pubkey,
+    pub victim_relief_case: Pubkey,
+    pub config: Pubkey,
+    pub policy: Pubkey,
+    pub policy_version: u64,
+    pub original_authorization_action_type: GovernanceActionTypeV1,
+    pub original_governance_proposal: Pubkey,
+    pub original_proposal_decision: Pubkey,
+    pub original_execution_queue_item: Pubkey,
+    pub original_governance_proposal_action: Pubkey,
+    pub original_authorization_execution_record: Pubkey,
+    pub evidence_snapshot: Pubkey,
+    pub original_authorization_parameters_hash: [u8; 32],
+    pub approved_amount_usdc: u64,
+    pub recipient_owner: Pubkey,
+    pub recipient_token_account: Pubkey,
+    pub treasury_config: Pubkey,
+    pub relief_usdc_vault: Pubkey,
+    pub usdc_mint: Pubkey,
+    pub cancellation_action_type: GovernanceActionTypeV1,
+    pub cancellation_governance_proposal: Pubkey,
+    pub cancellation_proposal_decision: Pubkey,
+    pub cancellation_execution_queue_item: Pubkey,
+    pub cancellation_governance_proposal_action: Pubkey,
+    pub expected_request_status: VictimReliefPayoutStatusV1,
+    pub expected_case_status: VictimReliefCaseStatusV1,
+    pub cancellation_proposal_id: u64,
+}
+
+#[account]
+pub struct VictimReliefPayoutCancellationRecordV1 {
+    pub payout_request: Pubkey,
+    pub victim_relief_case: Pubkey,
+    pub config: Pubkey,
+    pub policy: Pubkey,
+    pub policy_version: u64,
+    pub payout_origin: VictimReliefPayoutOriginV1,
+    pub original_authorization_action_type: GovernanceActionTypeV1,
+    pub original_governance_proposal: Pubkey,
+    pub original_proposal_decision: Pubkey,
+    pub original_execution_queue_item: Pubkey,
+    pub original_governance_proposal_action: Pubkey,
+    pub original_authorization_execution_record: Pubkey,
+    pub evidence_snapshot: Pubkey,
+    pub original_authorization_parameters_hash: [u8; 32],
+    pub cancellation_action_type: GovernanceActionTypeV1,
+    pub cancellation_governance_proposal: Pubkey,
+    pub cancellation_proposal_decision: Pubkey,
+    pub cancellation_execution_queue_item: Pubkey,
+    pub cancellation_governance_proposal_action: Pubkey,
+    pub approved_amount_usdc: u64,
+    pub recipient_owner: Pubkey,
+    pub recipient_token_account: Pubkey,
+    pub treasury_config: Pubkey,
+    pub relief_usdc_vault: Pubkey,
+    pub usdc_mint: Pubkey,
+    pub cancellation_parameters_hash: [u8; 32],
+    pub canonical_governance_payload_hash: [u8; 32],
+    pub executor: Pubkey,
+    pub cancelled_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+    pub reserved: [u8; 32],
+}
+
+impl VictimReliefPayoutCancellationRecordV1 {
+    pub const INIT_SPACE: usize = (32 * 20) + (8 * 3) + 3 + 2 + 1 + (32 * 4);
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -1716,6 +1792,13 @@ mod tests {
         let minimum = (32 * 16) + (8 * 3) + 2 + (32 * 3) + 2 + 1;
         assert_eq!(ReliefPayoutExecutionRecordV1::INIT_SPACE, minimum);
         assert_eq!(ReliefPayoutExecutionRecordV1::INIT_SPACE, 637);
+    }
+
+    #[test]
+    fn relief_payout_cancellation_record_space_is_exact() {
+        let minimum = (32 * 20) + (8 * 3) + 3 + 2 + 1 + (32 * 4);
+        assert_eq!(VictimReliefPayoutCancellationRecordV1::INIT_SPACE, minimum);
+        assert_eq!(VictimReliefPayoutCancellationRecordV1::INIT_SPACE, 798);
     }
 
     #[test]

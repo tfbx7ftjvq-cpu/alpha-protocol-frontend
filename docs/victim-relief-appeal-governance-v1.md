@@ -244,3 +244,8 @@ This phase intentionally does not implement:
 There is a liveness residual risk: if DAO governance does not process the appeal, a case can remain in `AppealPending`. Permissionless appeal expiry is deferred because it could race with voting or timelock before proposal linkage is fully modeled.
 
 DAO decisions are not court judgments, insurance determinations, credit ratings, or investment advice. Local tests are not Devnet or Mainnet verification. Mainnet and token launch remain NO-GO.
+## Payout Cancellation Governance
+
+Stage 6B-4B-4B adds strict cancellation for appeal-overturn payout requests that are approved but unpaid. The cancel path targets `ReliefPayoutRequestV1`, requires `VictimReliefCancelPayout` through DAO + Security, preserves the appeal as `Overturned`, marks request and case `Cancelled`, writes an immutable cancellation receipt, and transfers no USDC.
+
+See [victim-relief-payout-cancellation-governance-v1.md](victim-relief-payout-cancellation-governance-v1.md).

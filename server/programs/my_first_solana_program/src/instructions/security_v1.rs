@@ -581,6 +581,10 @@ pub fn is_action_valid_for_proposal_type(
                 ActionType::VictimReliefOverturnAppeal
             )
             | (
+                ProposalType::VictimReliefCancelPayout,
+                ActionType::VictimReliefCancelPayout
+            )
+            | (
                 ProposalType::ScamRegistryPublishReport,
                 ActionType::ScamRegistryPublishReport
             )

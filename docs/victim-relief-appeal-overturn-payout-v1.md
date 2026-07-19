@@ -111,3 +111,9 @@ If paused, underfunded, or the recipient token account is invalid, execution fai
 The original approve payout wrapper remains separate and accepts only `OriginalApprove` / `VictimReliefApproveCompensation`. The appeal wrapper accepts only `AppealOverturn` / `VictimReliefOverturnAppeal`. There is no generic payout wrapper.
 
 Local tests are not Devnet or Mainnet verification. Mainnet production and token launch remain NO-GO.
+
+## Cancellation Governance
+
+Stage 6B-4B-4B adds `execute_cancel_overturn_victim_relief_payout_v1` for appeal overturn requests that remain `Approved` and unpaid. Cancellation is a separate DAO + Security action targeting `ReliefPayoutRequestV1`; it requires the appeal overturn receipt source, writes `VictimReliefPayoutCancellationRecordV1`, marks request and case `Cancelled`, decrements active case count once, leaves the appeal `Overturned`, and transfers no USDC.
+
+See [victim-relief-payout-cancellation-governance-v1.md](victim-relief-payout-cancellation-governance-v1.md).

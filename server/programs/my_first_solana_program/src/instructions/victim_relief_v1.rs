@@ -5,13 +5,14 @@ use crate::constants::{
     BUILDERS_USDC_VAULT_SEED, BUYBACK_USDC_VAULT_SEED, EXECUTION_QUEUE_ITEM_V1_SEED,
     GOVERNANCE_CONFIG_V1_SEED, GOVERNANCE_PROPOSAL_ACTION_V1_SEED, GOVERNANCE_PROPOSAL_V1_SEED,
     GREEN_LABEL_USDC_DECIMALS, PROPOSAL_DECISION_V1_SEED, PROTOCOL_MODULE_REGISTRY_V1_SEED,
-    RELIEF_PAYOUT_EXECUTION_RECORD_V1_SEED, RELIEF_PAYOUT_REQUEST_V1_SEED, RELIEF_USDC_VAULT_SEED,
-    STAKING_USDC_VAULT_SEED, TREASURY_CONFIG_V2_SEED,
-    UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED, VAULT_AUTHORITY_V2_SEED,
-    VICTIM_RELIEF_APPEAL_DECISION_EXECUTION_RECORD_V1_SEED, VICTIM_RELIEF_APPEAL_V1_SEED,
-    VICTIM_RELIEF_CASE_V1_SEED, VICTIM_RELIEF_CLAIMANT_STATE_V1_SEED, VICTIM_RELIEF_CONFIG_V1_SEED,
-    VICTIM_RELIEF_DECISION_EXECUTION_RECORD_V1_SEED, VICTIM_RELIEF_EVIDENCE_SNAPSHOT_V1_SEED,
-    VICTIM_RELIEF_POLICY_V1_SEED, VICTIM_RELIEF_POLICY_VERSION_V1, VICTIM_RELIEF_SCHEMA_VERSION_V1,
+    RELIEF_PAYOUT_CANCELLATION_RECORD_V1_SEED, RELIEF_PAYOUT_EXECUTION_RECORD_V1_SEED,
+    RELIEF_PAYOUT_REQUEST_V1_SEED, RELIEF_USDC_VAULT_SEED, STAKING_USDC_VAULT_SEED,
+    TREASURY_CONFIG_V2_SEED, UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED,
+    VAULT_AUTHORITY_V2_SEED, VICTIM_RELIEF_APPEAL_DECISION_EXECUTION_RECORD_V1_SEED,
+    VICTIM_RELIEF_APPEAL_V1_SEED, VICTIM_RELIEF_CASE_V1_SEED, VICTIM_RELIEF_CLAIMANT_STATE_V1_SEED,
+    VICTIM_RELIEF_CONFIG_V1_SEED, VICTIM_RELIEF_DECISION_EXECUTION_RECORD_V1_SEED,
+    VICTIM_RELIEF_EVIDENCE_SNAPSHOT_V1_SEED, VICTIM_RELIEF_POLICY_V1_SEED,
+    VICTIM_RELIEF_POLICY_VERSION_V1, VICTIM_RELIEF_SCHEMA_VERSION_V1,
 };
 use crate::error::CustomError;
 use crate::instructions::contributor_v1::hash_contributor_payload;
@@ -35,8 +36,9 @@ use crate::state::{
     VictimReliefCaseStatusV1, VictimReliefCaseV1, VictimReliefClaimantStateV1,
     VictimReliefConfigV1, VictimReliefDecisionExecutionRecordV1,
     VictimReliefDecisionExecutionTypeV1, VictimReliefDecisionParametersV1,
-    VictimReliefEvidenceSnapshotV1, VictimReliefPayoutOriginV1, VictimReliefPayoutParametersV1,
-    VictimReliefPayoutStatusV1, VictimReliefPolicyV1,
+    VictimReliefEvidenceSnapshotV1, VictimReliefPayoutCancellationParametersV1,
+    VictimReliefPayoutCancellationRecordV1, VictimReliefPayoutOriginV1,
+    VictimReliefPayoutParametersV1, VictimReliefPayoutStatusV1, VictimReliefPolicyV1,
 };
 
 pub const VICTIM_RELIEF_DECISION_SCHEMA_VERSION: u16 = 1;
@@ -46,6 +48,8 @@ pub const VICTIM_RELIEF_APPEAL_DECISION_PARAMETERS_V1_DOMAIN_BYTES: [u8; 49] =
     *b"alpha_victim_relief_appeal_decision_parameters_v1";
 pub const VICTIM_RELIEF_PAYOUT_PARAMETERS_V1_DOMAIN_BYTES: [u8; 40] =
     *b"alpha_victim_relief_payout_parameters_v1";
+pub const VICTIM_RELIEF_PAYOUT_CANCELLATION_PARAMETERS_V1_DOMAIN_BYTES: [u8; 53] =
+    *b"alpha_victim_relief_payout_cancellation_parameters_v1";
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct VictimReliefDecisionParametersHashEnvelopeV1 {
@@ -63,6 +67,12 @@ pub struct VictimReliefAppealDecisionParametersHashEnvelopeV1 {
 pub struct VictimReliefPayoutParametersHashEnvelopeV1 {
     pub domain_separator: [u8; 40],
     pub parameters: VictimReliefPayoutParametersV1,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VictimReliefPayoutCancellationParametersHashEnvelopeV1 {
+    pub domain_separator: [u8; 53],
+    pub parameters: VictimReliefPayoutCancellationParametersV1,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1140,8 +1150,84 @@ pub struct ExecuteVictimReliefApprovedPayoutV1<'info> {
 
 #[derive(Accounts)]
 pub struct ExecuteVictimReliefOverturnPayoutV1<'info> {
+    pub security_governance_config: Box<Account<'info, GovernanceConfigV1>>,
+
+    pub governance_proposal: Box<Account<'info, GovernanceProposalV1>>,
+
+    pub governance_proposal_action: Box<Account<'info, GovernanceProposalActionV1>>,
+
+    pub proposal_decision: Box<Account<'info, ProposalDecisionV1>>,
+
+    pub execution_queue_item: Box<Account<'info, ExecutionQueueItemV1>>,
+
+    pub victim_relief_config: Box<Account<'info, VictimReliefConfigV1>>,
+
+    pub victim_relief_policy: Box<Account<'info, VictimReliefPolicyV1>>,
+
+    #[account(mut)]
+    pub claimant_state: Box<Account<'info, VictimReliefClaimantStateV1>>,
+
+    #[account(mut)]
+    pub victim_relief_case: Box<Account<'info, VictimReliefCaseV1>>,
+
+    pub victim_relief_appeal: Box<Account<'info, VictimReliefAppealV1>>,
+
+    pub original_evidence_snapshot: Box<Account<'info, VictimReliefEvidenceSnapshotV1>>,
+
+    pub original_decision_record: Box<Account<'info, VictimReliefDecisionExecutionRecordV1>>,
+
+    pub appeal_decision_execution_record:
+        Box<Account<'info, VictimReliefAppealDecisionExecutionRecordV1>>,
+
+    #[account(mut)]
+    pub relief_payout_request: Box<Account<'info, ReliefPayoutRequestV1>>,
+
+    pub treasury_config: Box<Account<'info, TreasuryConfigV2>>,
+
+    /// CHECK: PDA-only vault authority.
+    pub vault_authority: UncheckedAccount<'info>,
+
+    #[account(mut)]
+    pub relief_usdc_vault: Box<Account<'info, TokenAccount>>,
+
+    #[account(mut)]
+    pub recipient_usdc_token_account: Box<Account<'info, TokenAccount>>,
+
+    pub usdc_mint: Box<Account<'info, Mint>>,
+
+    #[account(
+        init,
+        payer = executor,
+        space = 8 + ReliefPayoutExecutionRecordV1::INIT_SPACE,
+        seeds = [
+            RELIEF_PAYOUT_EXECUTION_RECORD_V1_SEED,
+            relief_payout_request.key().as_ref()
+        ],
+        bump
+    )]
+    pub relief_payout_execution_record: Box<Account<'info, ReliefPayoutExecutionRecordV1>>,
+
+    #[account(mut)]
+    pub executor: Signer<'info>,
+
+    pub token_program: Program<'info, Token>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ExecuteCancelOriginalVictimReliefPayoutV1<'info> {
     #[account(seeds = [GOVERNANCE_CONFIG_V1_SEED], bump = security_governance_config.bump)]
     pub security_governance_config: Box<Account<'info, GovernanceConfigV1>>,
+
+    #[account(
+        seeds = [
+            PROTOCOL_MODULE_REGISTRY_V1_SEED,
+            &[protocol_module_stable_code_v1(ProtocolModuleIdV1::VictimRelief)]
+        ],
+        bump = protocol_module_registry.bump
+    )]
+    pub protocol_module_registry: Box<Account<'info, ProtocolModuleRegistryV1>>,
 
     #[account(
         seeds = [GOVERNANCE_PROPOSAL_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
@@ -1169,6 +1255,52 @@ pub struct ExecuteVictimReliefOverturnPayoutV1<'info> {
         bump = execution_queue_item.bump
     )]
     pub execution_queue_item: Box<Account<'info, ExecutionQueueItemV1>>,
+
+    #[account(
+        seeds = [
+            VICTIM_RELIEF_DECISION_EXECUTION_RECORD_V1_SEED,
+            execution_queue_item.key().as_ref()
+        ],
+        bump = decision_execution_record.bump
+    )]
+    pub decision_execution_record: Box<Account<'info, VictimReliefDecisionExecutionRecordV1>>,
+
+    #[account(
+        seeds = [GOVERNANCE_PROPOSAL_V1_SEED, &cancellation_governance_proposal.proposal_id.to_le_bytes()],
+        bump = cancellation_governance_proposal.bump
+    )]
+    pub cancellation_governance_proposal: Box<Account<'info, GovernanceProposalV1>>,
+
+    #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+            cancellation_governance_proposal.key().as_ref()
+        ],
+        bump = cancellation_governance_proposal_action.bump
+    )]
+    pub cancellation_governance_proposal_action: Box<Account<'info, GovernanceProposalActionV1>>,
+
+    #[account(
+        seeds = [
+            UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED,
+            cancellation_governance_proposal.key().as_ref()
+        ],
+        bump = cancellation_governance_decision_adapter.bump
+    )]
+    pub cancellation_governance_decision_adapter:
+        Box<Account<'info, UniversalGovernanceDecisionAdapterV1>>,
+
+    #[account(
+        seeds = [PROPOSAL_DECISION_V1_SEED, &cancellation_governance_proposal.proposal_id.to_le_bytes()],
+        bump = cancellation_proposal_decision.bump
+    )]
+    pub cancellation_proposal_decision: Box<Account<'info, ProposalDecisionV1>>,
+
+    #[account(
+        seeds = [EXECUTION_QUEUE_ITEM_V1_SEED, &cancellation_governance_proposal.proposal_id.to_le_bytes()],
+        bump = cancellation_execution_queue_item.bump
+    )]
+    pub cancellation_execution_queue_item: Box<Account<'info, ExecutionQueueItemV1>>,
 
     #[account(seeds = [VICTIM_RELIEF_CONFIG_V1_SEED], bump = victim_relief_config.bump)]
     pub victim_relief_config: Box<Account<'info, VictimReliefConfigV1>>,
@@ -1207,6 +1339,87 @@ pub struct ExecuteVictimReliefOverturnPayoutV1<'info> {
 
     #[account(
         seeds = [
+            VICTIM_RELIEF_EVIDENCE_SNAPSHOT_V1_SEED,
+            victim_relief_case.key().as_ref()
+        ],
+        bump = evidence_snapshot.bump
+    )]
+    pub evidence_snapshot: Box<Account<'info, VictimReliefEvidenceSnapshotV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            RELIEF_PAYOUT_REQUEST_V1_SEED,
+            victim_relief_case.key().as_ref()
+        ],
+        bump = relief_payout_request.bump
+    )]
+    pub relief_payout_request: Box<Account<'info, ReliefPayoutRequestV1>>,
+
+    #[account(seeds = [TREASURY_CONFIG_V2_SEED], bump = treasury_config.bump)]
+    pub treasury_config: Box<Account<'info, TreasuryConfigV2>>,
+
+    #[account(
+        init,
+        payer = executor,
+        space = 8 + VictimReliefPayoutCancellationRecordV1::INIT_SPACE,
+        seeds = [
+            RELIEF_PAYOUT_CANCELLATION_RECORD_V1_SEED,
+            relief_payout_request.key().as_ref()
+        ],
+        bump
+    )]
+    pub payout_cancellation_record: Box<Account<'info, VictimReliefPayoutCancellationRecordV1>>,
+
+    #[account(mut)]
+    pub executor: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ExecuteCancelOverturnVictimReliefPayoutV1<'info> {
+    #[account(seeds = [GOVERNANCE_CONFIG_V1_SEED], bump = security_governance_config.bump)]
+    pub security_governance_config: Box<Account<'info, GovernanceConfigV1>>,
+
+    #[account(
+        seeds = [
+            PROTOCOL_MODULE_REGISTRY_V1_SEED,
+            &[protocol_module_stable_code_v1(ProtocolModuleIdV1::VictimRelief)]
+        ],
+        bump = protocol_module_registry.bump
+    )]
+    pub protocol_module_registry: Box<Account<'info, ProtocolModuleRegistryV1>>,
+
+    #[account(
+        seeds = [GOVERNANCE_PROPOSAL_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
+        bump = governance_proposal.bump
+    )]
+    pub governance_proposal: Box<Account<'info, GovernanceProposalV1>>,
+
+    #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_proposal_action.bump
+    )]
+    pub governance_proposal_action: Box<Account<'info, GovernanceProposalActionV1>>,
+
+    #[account(
+        seeds = [PROPOSAL_DECISION_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
+        bump = proposal_decision.bump
+    )]
+    pub proposal_decision: Box<Account<'info, ProposalDecisionV1>>,
+
+    #[account(
+        seeds = [EXECUTION_QUEUE_ITEM_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
+        bump = execution_queue_item.bump
+    )]
+    pub execution_queue_item: Box<Account<'info, ExecutionQueueItemV1>>,
+
+    #[account(
+        seeds = [
             VICTIM_RELIEF_APPEAL_V1_SEED,
             victim_relief_case.key().as_ref()
         ],
@@ -1236,6 +1449,78 @@ pub struct ExecuteVictimReliefOverturnPayoutV1<'info> {
         Box<Account<'info, VictimReliefAppealDecisionExecutionRecordV1>>,
 
     #[account(
+        seeds = [GOVERNANCE_PROPOSAL_V1_SEED, &cancellation_governance_proposal.proposal_id.to_le_bytes()],
+        bump = cancellation_governance_proposal.bump
+    )]
+    pub cancellation_governance_proposal: Box<Account<'info, GovernanceProposalV1>>,
+
+    #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+            cancellation_governance_proposal.key().as_ref()
+        ],
+        bump = cancellation_governance_proposal_action.bump
+    )]
+    pub cancellation_governance_proposal_action: Box<Account<'info, GovernanceProposalActionV1>>,
+
+    #[account(
+        seeds = [
+            UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED,
+            cancellation_governance_proposal.key().as_ref()
+        ],
+        bump = cancellation_governance_decision_adapter.bump
+    )]
+    pub cancellation_governance_decision_adapter:
+        Box<Account<'info, UniversalGovernanceDecisionAdapterV1>>,
+
+    #[account(
+        seeds = [PROPOSAL_DECISION_V1_SEED, &cancellation_governance_proposal.proposal_id.to_le_bytes()],
+        bump = cancellation_proposal_decision.bump
+    )]
+    pub cancellation_proposal_decision: Box<Account<'info, ProposalDecisionV1>>,
+
+    #[account(
+        seeds = [EXECUTION_QUEUE_ITEM_V1_SEED, &cancellation_governance_proposal.proposal_id.to_le_bytes()],
+        bump = cancellation_execution_queue_item.bump
+    )]
+    pub cancellation_execution_queue_item: Box<Account<'info, ExecutionQueueItemV1>>,
+
+    #[account(seeds = [VICTIM_RELIEF_CONFIG_V1_SEED], bump = victim_relief_config.bump)]
+    pub victim_relief_config: Box<Account<'info, VictimReliefConfigV1>>,
+
+    #[account(
+        seeds = [
+            VICTIM_RELIEF_POLICY_V1_SEED,
+            victim_relief_config.key().as_ref(),
+            &victim_relief_case.policy_version.to_le_bytes()
+        ],
+        bump = victim_relief_policy.bump
+    )]
+    pub victim_relief_policy: Box<Account<'info, VictimReliefPolicyV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            VICTIM_RELIEF_CLAIMANT_STATE_V1_SEED,
+            victim_relief_config.key().as_ref(),
+            victim_relief_case.claimant.as_ref()
+        ],
+        bump = claimant_state.bump
+    )]
+    pub claimant_state: Box<Account<'info, VictimReliefClaimantStateV1>>,
+
+    #[account(
+        mut,
+        seeds = [
+            VICTIM_RELIEF_CASE_V1_SEED,
+            victim_relief_config.key().as_ref(),
+            &victim_relief_case.case_id.to_le_bytes()
+        ],
+        bump = victim_relief_case.bump
+    )]
+    pub victim_relief_case: Box<Account<'info, VictimReliefCaseV1>>,
+
+    #[account(
         mut,
         seeds = [
             RELIEF_PAYOUT_REQUEST_V1_SEED,
@@ -1248,48 +1533,20 @@ pub struct ExecuteVictimReliefOverturnPayoutV1<'info> {
     #[account(seeds = [TREASURY_CONFIG_V2_SEED], bump = treasury_config.bump)]
     pub treasury_config: Box<Account<'info, TreasuryConfigV2>>,
 
-    #[account(seeds = [VAULT_AUTHORITY_V2_SEED], bump)]
-    /// CHECK: PDA-only vault authority.
-    pub vault_authority: UncheckedAccount<'info>,
-
-    #[account(
-        mut,
-        seeds = [RELIEF_USDC_VAULT_SEED],
-        bump,
-        constraint = relief_usdc_vault.mint == treasury_config.usdc_mint @ CustomError::InvalidMint,
-        constraint = relief_usdc_vault.owner == vault_authority.key() @ CustomError::VictimReliefReliefVaultMismatch
-    )]
-    pub relief_usdc_vault: Box<Account<'info, TokenAccount>>,
-
-    #[account(
-        mut,
-        constraint = recipient_usdc_token_account.key() == relief_payout_request.recipient_token_account @ CustomError::VictimReliefPayoutRecipientMismatch,
-        constraint = recipient_usdc_token_account.owner == relief_payout_request.recipient_owner @ CustomError::VictimReliefPayoutRecipientMismatch,
-        constraint = recipient_usdc_token_account.mint == treasury_config.usdc_mint @ CustomError::VictimReliefPayoutRecipientMismatch
-    )]
-    pub recipient_usdc_token_account: Box<Account<'info, TokenAccount>>,
-
-    #[account(
-        constraint = usdc_mint.key() == treasury_config.usdc_mint @ CustomError::InvalidMint
-    )]
-    pub usdc_mint: Box<Account<'info, Mint>>,
-
     #[account(
         init,
         payer = executor,
-        space = 8 + ReliefPayoutExecutionRecordV1::INIT_SPACE,
+        space = 8 + VictimReliefPayoutCancellationRecordV1::INIT_SPACE,
         seeds = [
-            RELIEF_PAYOUT_EXECUTION_RECORD_V1_SEED,
+            RELIEF_PAYOUT_CANCELLATION_RECORD_V1_SEED,
             relief_payout_request.key().as_ref()
         ],
         bump
     )]
-    pub relief_payout_execution_record: Box<Account<'info, ReliefPayoutExecutionRecordV1>>,
+    pub payout_cancellation_record: Box<Account<'info, VictimReliefPayoutCancellationRecordV1>>,
 
     #[account(mut)]
     pub executor: Signer<'info>,
-
-    pub token_program: Program<'info, Token>,
 
     pub system_program: Program<'info, System>,
 }
@@ -1967,6 +2224,38 @@ pub fn execute_victim_relief_overturn_payout_v1_handler(
 ) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
 
+    let vault_authority_bump = validate_victim_relief_overturn_payout_runtime_pdas_v1(
+        ctx.accounts.security_governance_config.key(),
+        &ctx.accounts.security_governance_config,
+        ctx.accounts.governance_proposal.key(),
+        &ctx.accounts.governance_proposal,
+        ctx.accounts.governance_proposal_action.key(),
+        &ctx.accounts.governance_proposal_action,
+        ctx.accounts.proposal_decision.key(),
+        &ctx.accounts.proposal_decision,
+        ctx.accounts.execution_queue_item.key(),
+        &ctx.accounts.execution_queue_item,
+        ctx.accounts.victim_relief_config.key(),
+        &ctx.accounts.victim_relief_config,
+        ctx.accounts.victim_relief_policy.key(),
+        &ctx.accounts.victim_relief_policy,
+        ctx.accounts.claimant_state.key(),
+        &ctx.accounts.claimant_state,
+        ctx.accounts.victim_relief_case.key(),
+        &ctx.accounts.victim_relief_case,
+        ctx.accounts.victim_relief_appeal.key(),
+        &ctx.accounts.victim_relief_appeal,
+        ctx.accounts.original_evidence_snapshot.key(),
+        &ctx.accounts.original_evidence_snapshot,
+        ctx.accounts.original_decision_record.key(),
+        &ctx.accounts.original_decision_record,
+        ctx.accounts.relief_payout_request.key(),
+        &ctx.accounts.relief_payout_request,
+        ctx.accounts.treasury_config.key(),
+        &ctx.accounts.treasury_config,
+        ctx.accounts.vault_authority.key(),
+    )?;
+
     validate_victim_relief_appeal_overturn_authorization_v1(
         ctx.accounts.governance_proposal.key(),
         &ctx.accounts.governance_proposal,
@@ -2035,7 +2324,7 @@ pub fn execute_victim_relief_overturn_payout_v1_handler(
         ctx.accounts.usdc_mint.to_account_info(),
         ctx.accounts.recipient_usdc_token_account.to_account_info(),
         ctx.accounts.vault_authority.to_account_info(),
-        ctx.bumps.vault_authority,
+        vault_authority_bump,
         payout_parameters.approved_amount_usdc,
         ctx.accounts.usdc_mint.decimals,
     )?;
@@ -2054,6 +2343,203 @@ pub fn execute_victim_relief_overturn_payout_v1_handler(
     require!(
         recorded_hash == payout_parameters_hash,
         CustomError::VictimReliefPayoutParametersMismatch
+    );
+    Ok(())
+}
+
+pub fn execute_cancel_original_victim_relief_payout_v1_handler(
+    ctx: Context<ExecuteCancelOriginalVictimReliefPayoutV1>,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+
+    validate_victim_relief_original_approve_authorization_v1(
+        ctx.accounts.governance_proposal.key(),
+        &ctx.accounts.governance_proposal,
+        ctx.accounts.governance_proposal_action.key(),
+        &ctx.accounts.governance_proposal_action,
+        ctx.accounts.proposal_decision.key(),
+        &ctx.accounts.proposal_decision,
+        ctx.accounts.execution_queue_item.key(),
+        &ctx.accounts.execution_queue_item,
+        ctx.accounts.decision_execution_record.key(),
+        &ctx.accounts.decision_execution_record,
+        ctx.accounts.evidence_snapshot.key(),
+        &ctx.accounts.evidence_snapshot,
+        ctx.accounts.victim_relief_case.key(),
+        &ctx.accounts.victim_relief_case,
+        ctx.accounts.relief_payout_request.key(),
+        &ctx.accounts.relief_payout_request,
+    )?;
+
+    validate_victim_relief_payout_cancellation_common_v1(
+        ctx.accounts.security_governance_config.key(),
+        ctx.accounts.victim_relief_config.key(),
+        &ctx.accounts.victim_relief_config,
+        ctx.accounts.victim_relief_policy.key(),
+        &ctx.accounts.victim_relief_policy,
+        &ctx.accounts.claimant_state,
+        ctx.accounts.victim_relief_case.key(),
+        &ctx.accounts.victim_relief_case,
+        ctx.accounts.evidence_snapshot.key(),
+        &ctx.accounts.evidence_snapshot,
+        ctx.accounts.relief_payout_request.key(),
+        &ctx.accounts.relief_payout_request,
+        ctx.accounts.treasury_config.key(),
+        &ctx.accounts.treasury_config,
+    )?;
+
+    let cancellation_parameters = build_original_payout_cancellation_parameters_v1(
+        ctx.accounts.relief_payout_request.key(),
+        &ctx.accounts.relief_payout_request,
+        ctx.accounts.governance_proposal_action.key(),
+        ctx.accounts.decision_execution_record.key(),
+        ctx.accounts.cancellation_governance_proposal.key(),
+        &ctx.accounts.cancellation_governance_proposal,
+        ctx.accounts.cancellation_proposal_decision.key(),
+        ctx.accounts.cancellation_execution_queue_item.key(),
+        ctx.accounts.cancellation_governance_proposal_action.key(),
+    )?;
+    let cancellation_parameters_hash =
+        hash_victim_relief_payout_cancellation_parameters_v1(&cancellation_parameters)?;
+
+    let canonical_governance_payload_hash =
+        validate_victim_relief_payout_cancellation_governance_v1(
+            &ctx.accounts.security_governance_config,
+            ctx.accounts.security_governance_config.key(),
+            &ctx.accounts.protocol_module_registry,
+            ctx.accounts.protocol_module_registry.key(),
+            &ctx.accounts.cancellation_governance_proposal,
+            ctx.accounts.cancellation_governance_proposal.key(),
+            &ctx.accounts.cancellation_governance_proposal_action,
+            ctx.accounts.cancellation_governance_proposal_action.key(),
+            &ctx.accounts.cancellation_governance_decision_adapter,
+            &ctx.accounts.cancellation_proposal_decision,
+            ctx.accounts.cancellation_proposal_decision.key(),
+            &ctx.accounts.cancellation_execution_queue_item,
+            ctx.accounts.cancellation_execution_queue_item.key(),
+            ctx.accounts.relief_payout_request.key(),
+            &cancellation_parameters,
+            cancellation_parameters_hash,
+            ctx.accounts.payout_cancellation_record.key(),
+            &ctx.accounts.payout_cancellation_record,
+        )?;
+
+    let recorded_hash = record_original_victim_relief_payout_cancellation_v1(
+        &mut ctx.accounts.claimant_state,
+        &mut ctx.accounts.victim_relief_case,
+        &mut ctx.accounts.relief_payout_request,
+        &mut ctx.accounts.payout_cancellation_record,
+        cancellation_parameters,
+        cancellation_parameters_hash,
+        canonical_governance_payload_hash,
+        ctx.accounts.executor.key(),
+        now,
+        ctx.bumps.payout_cancellation_record,
+    )?;
+    require!(
+        recorded_hash == cancellation_parameters_hash,
+        CustomError::VictimReliefPayoutCancellationParametersMismatch
+    );
+    Ok(())
+}
+
+pub fn execute_cancel_overturn_victim_relief_payout_v1_handler(
+    ctx: Context<ExecuteCancelOverturnVictimReliefPayoutV1>,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+
+    validate_victim_relief_appeal_overturn_authorization_v1(
+        ctx.accounts.governance_proposal.key(),
+        &ctx.accounts.governance_proposal,
+        ctx.accounts.governance_proposal_action.key(),
+        &ctx.accounts.governance_proposal_action,
+        ctx.accounts.proposal_decision.key(),
+        &ctx.accounts.proposal_decision,
+        ctx.accounts.execution_queue_item.key(),
+        &ctx.accounts.execution_queue_item,
+        ctx.accounts.victim_relief_appeal.key(),
+        &ctx.accounts.victim_relief_appeal,
+        ctx.accounts.appeal_decision_execution_record.key(),
+        &ctx.accounts.appeal_decision_execution_record,
+        ctx.accounts.original_decision_record.key(),
+        &ctx.accounts.original_decision_record,
+        ctx.accounts.original_evidence_snapshot.key(),
+        &ctx.accounts.original_evidence_snapshot,
+        ctx.accounts.victim_relief_case.key(),
+        &ctx.accounts.victim_relief_case,
+        ctx.accounts.relief_payout_request.key(),
+        &ctx.accounts.relief_payout_request,
+    )?;
+
+    validate_victim_relief_payout_cancellation_common_v1(
+        ctx.accounts.security_governance_config.key(),
+        ctx.accounts.victim_relief_config.key(),
+        &ctx.accounts.victim_relief_config,
+        ctx.accounts.victim_relief_policy.key(),
+        &ctx.accounts.victim_relief_policy,
+        &ctx.accounts.claimant_state,
+        ctx.accounts.victim_relief_case.key(),
+        &ctx.accounts.victim_relief_case,
+        ctx.accounts.original_evidence_snapshot.key(),
+        &ctx.accounts.original_evidence_snapshot,
+        ctx.accounts.relief_payout_request.key(),
+        &ctx.accounts.relief_payout_request,
+        ctx.accounts.treasury_config.key(),
+        &ctx.accounts.treasury_config,
+    )?;
+
+    let cancellation_parameters = build_overturn_payout_cancellation_parameters_v1(
+        ctx.accounts.relief_payout_request.key(),
+        &ctx.accounts.relief_payout_request,
+        ctx.accounts.governance_proposal_action.key(),
+        ctx.accounts.appeal_decision_execution_record.key(),
+        ctx.accounts.cancellation_governance_proposal.key(),
+        &ctx.accounts.cancellation_governance_proposal,
+        ctx.accounts.cancellation_proposal_decision.key(),
+        ctx.accounts.cancellation_execution_queue_item.key(),
+        ctx.accounts.cancellation_governance_proposal_action.key(),
+    )?;
+    let cancellation_parameters_hash =
+        hash_victim_relief_payout_cancellation_parameters_v1(&cancellation_parameters)?;
+
+    let canonical_governance_payload_hash =
+        validate_victim_relief_payout_cancellation_governance_v1(
+            &ctx.accounts.security_governance_config,
+            ctx.accounts.security_governance_config.key(),
+            &ctx.accounts.protocol_module_registry,
+            ctx.accounts.protocol_module_registry.key(),
+            &ctx.accounts.cancellation_governance_proposal,
+            ctx.accounts.cancellation_governance_proposal.key(),
+            &ctx.accounts.cancellation_governance_proposal_action,
+            ctx.accounts.cancellation_governance_proposal_action.key(),
+            &ctx.accounts.cancellation_governance_decision_adapter,
+            &ctx.accounts.cancellation_proposal_decision,
+            ctx.accounts.cancellation_proposal_decision.key(),
+            &ctx.accounts.cancellation_execution_queue_item,
+            ctx.accounts.cancellation_execution_queue_item.key(),
+            ctx.accounts.relief_payout_request.key(),
+            &cancellation_parameters,
+            cancellation_parameters_hash,
+            ctx.accounts.payout_cancellation_record.key(),
+            &ctx.accounts.payout_cancellation_record,
+        )?;
+
+    let recorded_hash = record_overturn_victim_relief_payout_cancellation_v1(
+        &mut ctx.accounts.claimant_state,
+        &mut ctx.accounts.victim_relief_case,
+        &ctx.accounts.victim_relief_appeal,
+        &mut ctx.accounts.relief_payout_request,
+        &mut ctx.accounts.payout_cancellation_record,
+        cancellation_parameters,
+        cancellation_parameters_hash,
+        canonical_governance_payload_hash,
+        ctx.accounts.executor.key(),
+        now,
+        ctx.bumps.payout_cancellation_record,
+    )?;
+    require!(
+        recorded_hash == cancellation_parameters_hash,
+        CustomError::VictimReliefPayoutCancellationParametersMismatch
     );
     Ok(())
 }
@@ -4193,6 +4679,154 @@ fn build_appeal_overturn_payout_parameters_v1(
     )
 }
 
+pub fn hash_victim_relief_payout_cancellation_parameters_v1(
+    parameters: &VictimReliefPayoutCancellationParametersV1,
+) -> Result<[u8; 32]> {
+    require!(
+        parameters.schema_version == VICTIM_RELIEF_DECISION_SCHEMA_VERSION,
+        CustomError::InvalidVictimReliefPayoutCancellationSchema
+    );
+    require!(
+        parameters.cancellation_action_type == GovernanceActionTypeV1::VictimReliefCancelPayout,
+        CustomError::VictimReliefPayoutCancellationActionMismatch
+    );
+    validate_victim_relief_payout_origin_action_v1(
+        parameters.payout_origin,
+        parameters.original_authorization_action_type,
+    )
+    .map_err(|_| error!(CustomError::VictimReliefPayoutCancellationAuthorizationMismatch))?;
+    require!(
+        parameters.expected_request_status == VictimReliefPayoutStatusV1::Approved
+            && parameters.expected_case_status == VictimReliefCaseStatusV1::PayoutQueued,
+        CustomError::VictimReliefPayoutCancellationStatusMismatch
+    );
+    require!(
+        parameters.approved_amount_usdc > 0
+            && parameters.original_authorization_parameters_hash != [0; 32]
+            && parameters.payout_request != Pubkey::default()
+            && parameters.victim_relief_case != Pubkey::default()
+            && parameters.recipient_owner != Pubkey::default()
+            && parameters.recipient_token_account != Pubkey::default()
+            && parameters.cancellation_governance_proposal != Pubkey::default()
+            && parameters.cancellation_governance_proposal_action != Pubkey::default(),
+        CustomError::VictimReliefPayoutCancellationParametersMismatch
+    );
+
+    hash_contributor_payload(&VictimReliefPayoutCancellationParametersHashEnvelopeV1 {
+        domain_separator: VICTIM_RELIEF_PAYOUT_CANCELLATION_PARAMETERS_V1_DOMAIN_BYTES,
+        parameters: *parameters,
+    })
+}
+
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
+fn build_victim_relief_payout_cancellation_parameters_v1(
+    payout_origin: VictimReliefPayoutOriginV1,
+    original_authorization_action_type: GovernanceActionTypeV1,
+    payout_request_key: Pubkey,
+    payout_request: &ReliefPayoutRequestV1,
+    original_governance_proposal_action_key: Pubkey,
+    original_authorization_execution_record_key: Pubkey,
+    cancellation_governance_proposal_key: Pubkey,
+    cancellation_governance_proposal: &GovernanceProposalV1,
+    cancellation_proposal_decision_key: Pubkey,
+    cancellation_execution_queue_item_key: Pubkey,
+    cancellation_governance_proposal_action_key: Pubkey,
+) -> Result<VictimReliefPayoutCancellationParametersV1> {
+    validate_victim_relief_payout_origin_action_v1(
+        payout_origin,
+        original_authorization_action_type,
+    )
+    .map_err(|_| error!(CustomError::VictimReliefPayoutCancellationAuthorizationMismatch))?;
+    Ok(VictimReliefPayoutCancellationParametersV1 {
+        schema_version: VICTIM_RELIEF_DECISION_SCHEMA_VERSION,
+        payout_origin,
+        payout_request: payout_request_key,
+        victim_relief_case: payout_request.victim_relief_case,
+        config: payout_request.config,
+        policy: payout_request.policy,
+        policy_version: payout_request.policy_version,
+        original_authorization_action_type,
+        original_governance_proposal: payout_request.governance_proposal,
+        original_proposal_decision: payout_request.proposal_decision,
+        original_execution_queue_item: payout_request.execution_queue_item,
+        original_governance_proposal_action: original_governance_proposal_action_key,
+        original_authorization_execution_record: original_authorization_execution_record_key,
+        evidence_snapshot: payout_request.evidence_snapshot,
+        original_authorization_parameters_hash: payout_request.parameters_hash,
+        approved_amount_usdc: payout_request.approved_amount_usdc,
+        recipient_owner: payout_request.recipient_owner,
+        recipient_token_account: payout_request.recipient_token_account,
+        treasury_config: payout_request.treasury_config,
+        relief_usdc_vault: payout_request.relief_usdc_vault,
+        usdc_mint: payout_request.usdc_mint,
+        cancellation_action_type: GovernanceActionTypeV1::VictimReliefCancelPayout,
+        cancellation_governance_proposal: cancellation_governance_proposal_key,
+        cancellation_proposal_decision: cancellation_proposal_decision_key,
+        cancellation_execution_queue_item: cancellation_execution_queue_item_key,
+        cancellation_governance_proposal_action: cancellation_governance_proposal_action_key,
+        expected_request_status: VictimReliefPayoutStatusV1::Approved,
+        expected_case_status: VictimReliefCaseStatusV1::PayoutQueued,
+        cancellation_proposal_id: cancellation_governance_proposal.proposal_id,
+    })
+}
+
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
+fn build_original_payout_cancellation_parameters_v1(
+    payout_request_key: Pubkey,
+    payout_request: &ReliefPayoutRequestV1,
+    original_governance_proposal_action_key: Pubkey,
+    original_authorization_execution_record_key: Pubkey,
+    cancellation_governance_proposal_key: Pubkey,
+    cancellation_governance_proposal: &GovernanceProposalV1,
+    cancellation_proposal_decision_key: Pubkey,
+    cancellation_execution_queue_item_key: Pubkey,
+    cancellation_governance_proposal_action_key: Pubkey,
+) -> Result<VictimReliefPayoutCancellationParametersV1> {
+    build_victim_relief_payout_cancellation_parameters_v1(
+        VictimReliefPayoutOriginV1::OriginalApprove,
+        GovernanceActionTypeV1::VictimReliefApproveCompensation,
+        payout_request_key,
+        payout_request,
+        original_governance_proposal_action_key,
+        original_authorization_execution_record_key,
+        cancellation_governance_proposal_key,
+        cancellation_governance_proposal,
+        cancellation_proposal_decision_key,
+        cancellation_execution_queue_item_key,
+        cancellation_governance_proposal_action_key,
+    )
+}
+
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
+fn build_overturn_payout_cancellation_parameters_v1(
+    payout_request_key: Pubkey,
+    payout_request: &ReliefPayoutRequestV1,
+    original_governance_proposal_action_key: Pubkey,
+    original_authorization_execution_record_key: Pubkey,
+    cancellation_governance_proposal_key: Pubkey,
+    cancellation_governance_proposal: &GovernanceProposalV1,
+    cancellation_proposal_decision_key: Pubkey,
+    cancellation_execution_queue_item_key: Pubkey,
+    cancellation_governance_proposal_action_key: Pubkey,
+) -> Result<VictimReliefPayoutCancellationParametersV1> {
+    build_victim_relief_payout_cancellation_parameters_v1(
+        VictimReliefPayoutOriginV1::AppealOverturn,
+        GovernanceActionTypeV1::VictimReliefOverturnAppeal,
+        payout_request_key,
+        payout_request,
+        original_governance_proposal_action_key,
+        original_authorization_execution_record_key,
+        cancellation_governance_proposal_key,
+        cancellation_governance_proposal,
+        cancellation_proposal_decision_key,
+        cancellation_execution_queue_item_key,
+        cancellation_governance_proposal_action_key,
+    )
+}
+
 #[allow(dead_code)]
 #[allow(clippy::too_many_arguments)]
 fn validate_victim_relief_original_approve_authorization_v1(
@@ -4725,6 +5359,178 @@ fn validate_victim_relief_payout_request_and_snapshot_v1(
     Ok(())
 }
 
+fn require_runtime_pda_v1(
+    actual: Pubkey,
+    actual_bump: u8,
+    seeds: &[&[u8]],
+    error_code: CustomError,
+) -> Result<()> {
+    let (expected, expected_bump) = Pubkey::find_program_address(seeds, &crate::ID);
+    if actual != expected || actual_bump != expected_bump {
+        return Err(error!(error_code));
+    }
+    Ok(())
+}
+
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
+fn validate_victim_relief_overturn_payout_runtime_pdas_v1(
+    security_governance_config_key: Pubkey,
+    security_governance_config: &GovernanceConfigV1,
+    governance_proposal_key: Pubkey,
+    governance_proposal: &GovernanceProposalV1,
+    governance_proposal_action_key: Pubkey,
+    governance_proposal_action: &GovernanceProposalActionV1,
+    proposal_decision_key: Pubkey,
+    proposal_decision: &ProposalDecisionV1,
+    execution_queue_item_key: Pubkey,
+    execution_queue_item: &ExecutionQueueItemV1,
+    victim_relief_config_key: Pubkey,
+    victim_relief_config: &VictimReliefConfigV1,
+    victim_relief_policy_key: Pubkey,
+    victim_relief_policy: &VictimReliefPolicyV1,
+    claimant_state_key: Pubkey,
+    claimant_state: &VictimReliefClaimantStateV1,
+    victim_relief_case_key: Pubkey,
+    victim_relief_case: &VictimReliefCaseV1,
+    victim_relief_appeal_key: Pubkey,
+    victim_relief_appeal: &VictimReliefAppealV1,
+    original_evidence_snapshot_key: Pubkey,
+    original_evidence_snapshot: &VictimReliefEvidenceSnapshotV1,
+    original_decision_record_key: Pubkey,
+    original_decision_record: &VictimReliefDecisionExecutionRecordV1,
+    relief_payout_request_key: Pubkey,
+    relief_payout_request: &ReliefPayoutRequestV1,
+    treasury_config_key: Pubkey,
+    treasury_config: &TreasuryConfigV2,
+    vault_authority_key: Pubkey,
+) -> Result<u8> {
+    let proposal_id_bytes = governance_proposal.proposal_id.to_le_bytes();
+    let policy_version_bytes = victim_relief_policy.policy_version.to_le_bytes();
+    let case_id_bytes = victim_relief_case.case_id.to_le_bytes();
+
+    require_runtime_pda_v1(
+        security_governance_config_key,
+        security_governance_config.bump,
+        &[GOVERNANCE_CONFIG_V1_SEED],
+        CustomError::VictimReliefPayoutAuthorizationMismatch,
+    )?;
+    require_runtime_pda_v1(
+        governance_proposal_key,
+        governance_proposal.bump,
+        &[GOVERNANCE_PROPOSAL_V1_SEED, &proposal_id_bytes],
+        CustomError::VictimReliefPayoutAuthorizationMismatch,
+    )?;
+    require_runtime_pda_v1(
+        governance_proposal_action_key,
+        governance_proposal_action.bump,
+        &[
+            GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+            governance_proposal_key.as_ref(),
+        ],
+        CustomError::VictimReliefPayoutAuthorizationMismatch,
+    )?;
+    require_runtime_pda_v1(
+        proposal_decision_key,
+        proposal_decision.bump,
+        &[PROPOSAL_DECISION_V1_SEED, &proposal_id_bytes],
+        CustomError::VictimReliefPayoutAuthorizationMismatch,
+    )?;
+    require_runtime_pda_v1(
+        execution_queue_item_key,
+        execution_queue_item.bump,
+        &[EXECUTION_QUEUE_ITEM_V1_SEED, &proposal_id_bytes],
+        CustomError::VictimReliefPayoutAuthorizationMismatch,
+    )?;
+    require_runtime_pda_v1(
+        victim_relief_config_key,
+        victim_relief_config.bump,
+        &[VICTIM_RELIEF_CONFIG_V1_SEED],
+        CustomError::InvalidVictimReliefConfig,
+    )?;
+    require_runtime_pda_v1(
+        victim_relief_policy_key,
+        victim_relief_policy.bump,
+        &[
+            VICTIM_RELIEF_POLICY_V1_SEED,
+            victim_relief_config_key.as_ref(),
+            &policy_version_bytes,
+        ],
+        CustomError::InvalidVictimReliefPolicyVersion,
+    )?;
+    require_runtime_pda_v1(
+        claimant_state_key,
+        claimant_state.bump,
+        &[
+            VICTIM_RELIEF_CLAIMANT_STATE_V1_SEED,
+            victim_relief_config_key.as_ref(),
+            victim_relief_case.claimant.as_ref(),
+        ],
+        CustomError::VictimReliefPayoutClaimantStateMismatch,
+    )?;
+    require_runtime_pda_v1(
+        victim_relief_case_key,
+        victim_relief_case.bump,
+        &[
+            VICTIM_RELIEF_CASE_V1_SEED,
+            victim_relief_config_key.as_ref(),
+            &case_id_bytes,
+        ],
+        CustomError::VictimReliefPayoutRequestMismatch,
+    )?;
+    require_runtime_pda_v1(
+        victim_relief_appeal_key,
+        victim_relief_appeal.bump,
+        &[
+            VICTIM_RELIEF_APPEAL_V1_SEED,
+            victim_relief_case_key.as_ref(),
+        ],
+        CustomError::VictimReliefPayoutAuthorizationMismatch,
+    )?;
+    require_runtime_pda_v1(
+        original_evidence_snapshot_key,
+        original_evidence_snapshot.bump,
+        &[
+            VICTIM_RELIEF_EVIDENCE_SNAPSHOT_V1_SEED,
+            victim_relief_case_key.as_ref(),
+        ],
+        CustomError::VictimReliefEvidenceSnapshotMismatch,
+    )?;
+    require_runtime_pda_v1(
+        original_decision_record_key,
+        original_decision_record.bump,
+        &[
+            VICTIM_RELIEF_DECISION_EXECUTION_RECORD_V1_SEED,
+            victim_relief_appeal.original_execution_queue_item.as_ref(),
+        ],
+        CustomError::VictimReliefPayoutAuthorizationMismatch,
+    )?;
+    require_runtime_pda_v1(
+        relief_payout_request_key,
+        relief_payout_request.bump,
+        &[
+            RELIEF_PAYOUT_REQUEST_V1_SEED,
+            victim_relief_case_key.as_ref(),
+        ],
+        CustomError::VictimReliefPayoutRequestMismatch,
+    )?;
+    require_runtime_pda_v1(
+        treasury_config_key,
+        treasury_config.bump,
+        &[TREASURY_CONFIG_V2_SEED],
+        CustomError::VictimReliefPayoutRequestMismatch,
+    )?;
+
+    let (expected_vault_authority, vault_authority_bump) =
+        Pubkey::find_program_address(&[VAULT_AUTHORITY_V2_SEED], &crate::ID);
+    require_keys_eq!(
+        vault_authority_key,
+        expected_vault_authority,
+        CustomError::VictimReliefPayoutVaultMismatch
+    );
+    Ok(vault_authority_bump)
+}
+
 #[allow(dead_code)]
 #[allow(clippy::too_many_arguments)]
 fn validate_victim_relief_payout_common_v1(
@@ -4969,6 +5775,507 @@ fn validate_victim_relief_payout_common_v1(
 }
 
 #[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
+fn validate_victim_relief_payout_cancellation_common_v1(
+    security_governance_config_key: Pubkey,
+    victim_relief_config_key: Pubkey,
+    victim_relief_config: &VictimReliefConfigV1,
+    policy_key: Pubkey,
+    policy: &VictimReliefPolicyV1,
+    claimant_state: &VictimReliefClaimantStateV1,
+    case_key: Pubkey,
+    victim_relief_case: &VictimReliefCaseV1,
+    evidence_snapshot_key: Pubkey,
+    evidence_snapshot: &VictimReliefEvidenceSnapshotV1,
+    payout_request_key: Pubkey,
+    payout_request: &ReliefPayoutRequestV1,
+    treasury_config_key: Pubkey,
+    treasury_config: &TreasuryConfigV2,
+) -> Result<()> {
+    require_keys_eq!(
+        victim_relief_config.security_governance_config,
+        security_governance_config_key,
+        CustomError::ProtocolModuleGovernanceConfigMismatch
+    );
+    require!(
+        victim_relief_config.schema_version == VICTIM_RELIEF_SCHEMA_VERSION_V1,
+        CustomError::InvalidVictimReliefConfig
+    );
+    require_keys_eq!(
+        victim_relief_case.config,
+        victim_relief_config_key,
+        CustomError::VictimReliefPayoutRequestMismatch
+    );
+    require_keys_eq!(
+        payout_request.config,
+        victim_relief_config_key,
+        CustomError::VictimReliefPayoutRequestMismatch
+    );
+    require_keys_eq!(
+        victim_relief_case.policy,
+        policy_key,
+        CustomError::InvalidVictimReliefPolicyVersion
+    );
+    require_keys_eq!(
+        payout_request.policy,
+        policy_key,
+        CustomError::InvalidVictimReliefPolicyVersion
+    );
+    require!(
+        victim_relief_case.policy_version == policy.policy_version
+            && payout_request.policy_version == policy.policy_version
+            && policy.schema_version == VICTIM_RELIEF_SCHEMA_VERSION_V1
+            && policy.config == victim_relief_config_key,
+        CustomError::InvalidVictimReliefPolicyVersion
+    );
+    validate_victim_relief_payout_request_and_snapshot_v1(
+        payout_request_key,
+        payout_request,
+        case_key,
+        victim_relief_case,
+        evidence_snapshot_key,
+        evidence_snapshot,
+    )?;
+    require!(
+        payout_request.governance_proposal != Pubkey::default()
+            && payout_request.proposal_decision != Pubkey::default()
+            && payout_request.execution_queue_item != Pubkey::default()
+            && payout_request.parameters_hash != [0; 32],
+        CustomError::VictimReliefPayoutCancellationAuthorizationMismatch
+    );
+    require!(
+        claimant_state.config == victim_relief_config_key
+            && claimant_state.claimant == victim_relief_case.claimant
+            && claimant_state.active_case_count > 0,
+        CustomError::VictimReliefPayoutClaimantStateMismatch
+    );
+    require_keys_eq!(
+        victim_relief_config.treasury_config,
+        treasury_config_key,
+        CustomError::VictimReliefPayoutRequestMismatch
+    );
+    require_keys_eq!(
+        payout_request.treasury_config,
+        treasury_config_key,
+        CustomError::VictimReliefPayoutRequestMismatch
+    );
+    require!(
+        victim_relief_config.usdc_mint == treasury_config.usdc_mint
+            && payout_request.usdc_mint == treasury_config.usdc_mint
+            && victim_relief_case.usdc_mint == treasury_config.usdc_mint,
+        CustomError::VictimReliefPayoutMintMismatch
+    );
+    let (expected_relief_vault, _) =
+        Pubkey::find_program_address(&[RELIEF_USDC_VAULT_SEED], &crate::ID);
+    require_keys_eq!(
+        payout_request.relief_usdc_vault,
+        expected_relief_vault,
+        CustomError::VictimReliefPayoutVaultMismatch
+    );
+    require!(
+        payout_request.approved_amount_usdc > 0
+            && payout_request.status == VictimReliefPayoutStatusV1::Approved
+            && payout_request.executed_at == 0
+            && victim_relief_case.status == VictimReliefCaseStatusV1::PayoutQueued,
+        CustomError::VictimReliefPayoutCancellationStatusMismatch
+    );
+    Ok(())
+}
+
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
+fn validate_victim_relief_payout_cancellation_governance_v1(
+    security_governance_config: &GovernanceConfigV1,
+    security_governance_config_key: Pubkey,
+    protocol_module_registry: &ProtocolModuleRegistryV1,
+    protocol_module_registry_key: Pubkey,
+    cancellation_governance_proposal: &GovernanceProposalV1,
+    cancellation_governance_proposal_key: Pubkey,
+    cancellation_governance_proposal_action: &GovernanceProposalActionV1,
+    cancellation_governance_proposal_action_key: Pubkey,
+    cancellation_governance_decision_adapter: &UniversalGovernanceDecisionAdapterV1,
+    cancellation_proposal_decision: &ProposalDecisionV1,
+    cancellation_proposal_decision_key: Pubkey,
+    cancellation_execution_queue_item: &ExecutionQueueItemV1,
+    cancellation_execution_queue_item_key: Pubkey,
+    payout_request_key: Pubkey,
+    cancellation_parameters: &VictimReliefPayoutCancellationParametersV1,
+    cancellation_parameters_hash: [u8; 32],
+    cancellation_record_key: Pubkey,
+    cancellation_record: &VictimReliefPayoutCancellationRecordV1,
+) -> Result<[u8; 32]> {
+    require!(
+        cancellation_parameters.cancellation_action_type
+            == GovernanceActionTypeV1::VictimReliefCancelPayout,
+        CustomError::VictimReliefPayoutCancellationActionMismatch
+    );
+    require_keys_eq!(
+        cancellation_parameters.payout_request,
+        payout_request_key,
+        CustomError::VictimReliefPayoutCancellationTargetMismatch
+    );
+    require_keys_eq!(
+        cancellation_parameters.cancellation_governance_proposal,
+        cancellation_governance_proposal_key,
+        CustomError::VictimReliefPayoutCancellationAuthorizationMismatch
+    );
+    require_keys_eq!(
+        cancellation_parameters.cancellation_governance_proposal_action,
+        cancellation_governance_proposal_action_key,
+        CustomError::VictimReliefPayoutCancellationAuthorizationMismatch
+    );
+    require_keys_eq!(
+        cancellation_parameters.cancellation_proposal_decision,
+        cancellation_proposal_decision_key,
+        CustomError::VictimReliefPayoutCancellationAuthorizationMismatch
+    );
+    require_keys_eq!(
+        cancellation_parameters.cancellation_execution_queue_item,
+        cancellation_execution_queue_item_key,
+        CustomError::VictimReliefPayoutCancellationAuthorizationMismatch
+    );
+    require!(
+        cancellation_parameters.cancellation_proposal_id
+            == cancellation_governance_proposal.proposal_id,
+        CustomError::InvalidProposalId
+    );
+    require!(
+        cancellation_governance_proposal.status == GovernanceProposalStatusV1::Passed,
+        CustomError::InvalidGovernanceProposal
+    );
+    validate_governance_proposal_action_v1(
+        cancellation_governance_proposal,
+        cancellation_governance_proposal_action,
+        cancellation_governance_proposal_key,
+    )?;
+    require!(
+        cancellation_governance_proposal_action.action_type
+            == GovernanceActionTypeV1::VictimReliefCancelPayout,
+        CustomError::VictimReliefPayoutCancellationActionMismatch
+    );
+    require!(
+        cancellation_governance_proposal_action.module_id == ProtocolModuleIdV1::VictimRelief,
+        CustomError::VictimReliefPayoutCancellationActionMismatch
+    );
+    require_keys_eq!(
+        cancellation_governance_proposal_action.target_program,
+        crate::ID,
+        CustomError::VictimReliefPayoutCancellationTargetMismatch
+    );
+    require_keys_eq!(
+        cancellation_governance_proposal_action.target_account,
+        payout_request_key,
+        CustomError::VictimReliefPayoutCancellationTargetMismatch
+    );
+    require!(
+        cancellation_governance_proposal_action.parameters_hash == cancellation_parameters_hash,
+        CustomError::VictimReliefPayoutCancellationParametersMismatch
+    );
+    validate_protocol_module_registry_v1(
+        protocol_module_registry,
+        protocol_module_registry_key,
+        security_governance_config_key,
+        ProtocolModuleIdV1::VictimRelief,
+        crate::ID,
+    )?;
+    require!(
+        security_governance_config_key != Pubkey::default()
+            && security_governance_config.authority != Pubkey::default(),
+        CustomError::ProtocolModuleGovernanceConfigMismatch
+    );
+
+    let governance_payload = GovernancePayloadV1 {
+        schema_version: GOVERNANCE_PAYLOAD_V1_SCHEMA_VERSION,
+        action_type: cancellation_governance_proposal_action.action_type,
+        module_id: cancellation_governance_proposal_action.module_id,
+        target_program: cancellation_governance_proposal_action.target_program,
+        target_account: cancellation_governance_proposal_action.target_account,
+        parameters_hash: cancellation_governance_proposal_action.parameters_hash,
+        evidence_hash: cancellation_governance_proposal_action.evidence_hash,
+        created_at: cancellation_governance_proposal_action.created_at,
+    };
+    let canonical_governance_payload_hash = hash_governance_payload_v1(&governance_payload)?;
+    require!(
+        canonical_governance_payload_hash
+            == cancellation_governance_proposal_action.canonical_payload_hash
+            && cancellation_governance_proposal.payload_hash == canonical_governance_payload_hash,
+        CustomError::VictimReliefPayoutCancellationParametersMismatch
+    );
+
+    let expected_security_action =
+        map_governance_action_to_security_action(GovernanceActionTypeV1::VictimReliefCancelPayout)?;
+    require!(
+        cancellation_governance_decision_adapter.governance_proposal
+            == cancellation_governance_proposal_key
+            && cancellation_governance_decision_adapter.proposal_decision
+                == cancellation_proposal_decision_key
+            && cancellation_governance_decision_adapter.action_type == expected_security_action
+            && cancellation_governance_decision_adapter.target_program == crate::ID
+            && cancellation_governance_decision_adapter.target_account == payout_request_key
+            && cancellation_governance_decision_adapter.payload_hash
+                == canonical_governance_payload_hash
+            && cancellation_governance_decision_adapter.executed,
+        CustomError::InvalidGovernanceDecisionAdapter
+    );
+    require!(
+        cancellation_proposal_decision.proposal_id == cancellation_governance_proposal.proposal_id
+            && cancellation_proposal_decision.proposer == cancellation_governance_proposal.proposer
+            && cancellation_proposal_decision.proposal_type
+                == security_proposal_type_for_action(expected_security_action)?
+            && cancellation_proposal_decision.decision == ProposalDecision::Approved,
+        CustomError::ProposalNotApproved
+    );
+    require!(
+        cancellation_execution_queue_item.proposal_id
+            == cancellation_governance_proposal.proposal_id
+            && cancellation_execution_queue_item.proposer
+                == cancellation_governance_proposal.proposer
+            && cancellation_execution_queue_item.action_type == expected_security_action
+            && cancellation_execution_queue_item.target_program == crate::ID
+            && cancellation_execution_queue_item.target_account == payout_request_key
+            && cancellation_execution_queue_item.decision == ProposalDecision::Approved
+            && cancellation_execution_queue_item.status == ExecutionStatus::Executed
+            && cancellation_execution_queue_item.payload_hash == canonical_governance_payload_hash
+            && cancellation_execution_queue_item_key != Pubkey::default(),
+        CustomError::InvalidExecutionStatus
+    );
+
+    let (expected_record, _) = Pubkey::find_program_address(
+        &[
+            RELIEF_PAYOUT_CANCELLATION_RECORD_V1_SEED,
+            payout_request_key.as_ref(),
+        ],
+        &crate::ID,
+    );
+    require_keys_eq!(
+        cancellation_record_key,
+        expected_record,
+        CustomError::VictimReliefPayoutCancellationTargetMismatch
+    );
+    require!(
+        cancellation_record.payout_request == Pubkey::default() && cancellation_record.bump == 0,
+        CustomError::VictimReliefPayoutCancellationReceiptAlreadyExists
+    );
+
+    Ok(canonical_governance_payload_hash)
+}
+
+#[allow(dead_code)]
+fn record_victim_relief_payout_cancellation_receipt_v1(
+    receipt: &mut VictimReliefPayoutCancellationRecordV1,
+    parameters: VictimReliefPayoutCancellationParametersV1,
+    cancellation_parameters_hash: [u8; 32],
+    canonical_governance_payload_hash: [u8; 32],
+    executor: Pubkey,
+    cancelled_at: i64,
+    bump: u8,
+) -> Result<[u8; 32]> {
+    require!(
+        receipt.payout_request == Pubkey::default(),
+        CustomError::VictimReliefPayoutCancellationReceiptAlreadyExists
+    );
+    require!(
+        cancelled_at > 0,
+        CustomError::InvalidVictimReliefPayoutCancellationSchema
+    );
+    let recomputed_hash = hash_victim_relief_payout_cancellation_parameters_v1(&parameters)?;
+    require!(
+        recomputed_hash == cancellation_parameters_hash,
+        CustomError::VictimReliefPayoutCancellationParametersMismatch
+    );
+
+    receipt.payout_request = parameters.payout_request;
+    receipt.victim_relief_case = parameters.victim_relief_case;
+    receipt.config = parameters.config;
+    receipt.policy = parameters.policy;
+    receipt.policy_version = parameters.policy_version;
+    receipt.payout_origin = parameters.payout_origin;
+    receipt.original_authorization_action_type = parameters.original_authorization_action_type;
+    receipt.original_governance_proposal = parameters.original_governance_proposal;
+    receipt.original_proposal_decision = parameters.original_proposal_decision;
+    receipt.original_execution_queue_item = parameters.original_execution_queue_item;
+    receipt.original_governance_proposal_action = parameters.original_governance_proposal_action;
+    receipt.original_authorization_execution_record =
+        parameters.original_authorization_execution_record;
+    receipt.evidence_snapshot = parameters.evidence_snapshot;
+    receipt.original_authorization_parameters_hash =
+        parameters.original_authorization_parameters_hash;
+    receipt.cancellation_action_type = parameters.cancellation_action_type;
+    receipt.cancellation_governance_proposal = parameters.cancellation_governance_proposal;
+    receipt.cancellation_proposal_decision = parameters.cancellation_proposal_decision;
+    receipt.cancellation_execution_queue_item = parameters.cancellation_execution_queue_item;
+    receipt.cancellation_governance_proposal_action =
+        parameters.cancellation_governance_proposal_action;
+    receipt.approved_amount_usdc = parameters.approved_amount_usdc;
+    receipt.recipient_owner = parameters.recipient_owner;
+    receipt.recipient_token_account = parameters.recipient_token_account;
+    receipt.treasury_config = parameters.treasury_config;
+    receipt.relief_usdc_vault = parameters.relief_usdc_vault;
+    receipt.usdc_mint = parameters.usdc_mint;
+    receipt.cancellation_parameters_hash = cancellation_parameters_hash;
+    receipt.canonical_governance_payload_hash = canonical_governance_payload_hash;
+    receipt.executor = executor;
+    receipt.cancelled_at = cancelled_at;
+    receipt.schema_version = VICTIM_RELIEF_DECISION_SCHEMA_VERSION;
+    receipt.bump = bump;
+    receipt.reserved = [0; 32];
+    Ok(cancellation_parameters_hash)
+}
+
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
+fn record_victim_relief_payout_cancellation_state_v1(
+    claimant_state: &mut VictimReliefClaimantStateV1,
+    victim_relief_case: &mut VictimReliefCaseV1,
+    payout_request: &mut ReliefPayoutRequestV1,
+    receipt: &mut VictimReliefPayoutCancellationRecordV1,
+    parameters: VictimReliefPayoutCancellationParametersV1,
+    cancellation_parameters_hash: [u8; 32],
+    canonical_governance_payload_hash: [u8; 32],
+    executor: Pubkey,
+    now: i64,
+    receipt_bump: u8,
+) -> Result<[u8; 32]> {
+    require!(
+        parameters.cancellation_action_type == GovernanceActionTypeV1::VictimReliefCancelPayout,
+        CustomError::VictimReliefPayoutCancellationActionMismatch
+    );
+    require!(
+        parameters.expected_request_status == VictimReliefPayoutStatusV1::Approved
+            && parameters.expected_case_status == VictimReliefCaseStatusV1::PayoutQueued,
+        CustomError::VictimReliefPayoutCancellationStatusMismatch
+    );
+    require!(
+        payout_request.status == VictimReliefPayoutStatusV1::Approved
+            && payout_request.executed_at == 0
+            && victim_relief_case.status == VictimReliefCaseStatusV1::PayoutQueued,
+        CustomError::VictimReliefPayoutCancellationStatusMismatch
+    );
+    require!(
+        payout_request.approved_amount_usdc > 0
+            && payout_request.approved_amount_usdc == victim_relief_case.approved_amount_usdc
+            && parameters.approved_amount_usdc == payout_request.approved_amount_usdc,
+        CustomError::VictimReliefPayoutCancellationParametersMismatch
+    );
+    require!(
+        parameters.recipient_owner == payout_request.recipient_owner
+            && parameters.recipient_token_account == payout_request.recipient_token_account
+            && payout_request.recipient_owner == victim_relief_case.recipient_owner
+            && payout_request.recipient_token_account == victim_relief_case.recipient_token_account,
+        CustomError::VictimReliefPayoutRecipientMismatch
+    );
+    require!(
+        claimant_state.config == victim_relief_case.config
+            && claimant_state.claimant == victim_relief_case.claimant
+            && claimant_state.active_case_count > 0,
+        CustomError::VictimReliefPayoutClaimantStateMismatch
+    );
+    require!(
+        parameters.payout_request != Pubkey::default()
+            && parameters.victim_relief_case == payout_request.victim_relief_case
+            && parameters.config == payout_request.config
+            && parameters.policy == payout_request.policy
+            && parameters.policy_version == payout_request.policy_version
+            && parameters.treasury_config == payout_request.treasury_config
+            && parameters.relief_usdc_vault == payout_request.relief_usdc_vault
+            && parameters.usdc_mint == payout_request.usdc_mint
+            && parameters.original_authorization_parameters_hash == payout_request.parameters_hash,
+        CustomError::VictimReliefPayoutCancellationParametersMismatch
+    );
+
+    payout_request.status = VictimReliefPayoutStatusV1::Cancelled;
+    payout_request.executed_at = 0;
+
+    victim_relief_case.status = VictimReliefCaseStatusV1::Cancelled;
+    victim_relief_case.updated_at = now;
+
+    close_victim_relief_active_case_count_v1(claimant_state, now)?;
+    record_victim_relief_payout_cancellation_receipt_v1(
+        receipt,
+        parameters,
+        cancellation_parameters_hash,
+        canonical_governance_payload_hash,
+        executor,
+        now,
+        receipt_bump,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_original_victim_relief_payout_cancellation_v1(
+    claimant_state: &mut VictimReliefClaimantStateV1,
+    victim_relief_case: &mut VictimReliefCaseV1,
+    payout_request: &mut ReliefPayoutRequestV1,
+    receipt: &mut VictimReliefPayoutCancellationRecordV1,
+    parameters: VictimReliefPayoutCancellationParametersV1,
+    cancellation_parameters_hash: [u8; 32],
+    canonical_governance_payload_hash: [u8; 32],
+    executor: Pubkey,
+    now: i64,
+    receipt_bump: u8,
+) -> Result<[u8; 32]> {
+    require!(
+        parameters.payout_origin == VictimReliefPayoutOriginV1::OriginalApprove
+            && parameters.original_authorization_action_type
+                == GovernanceActionTypeV1::VictimReliefApproveCompensation,
+        CustomError::VictimReliefPayoutCancellationAuthorizationMismatch
+    );
+    record_victim_relief_payout_cancellation_state_v1(
+        claimant_state,
+        victim_relief_case,
+        payout_request,
+        receipt,
+        parameters,
+        cancellation_parameters_hash,
+        canonical_governance_payload_hash,
+        executor,
+        now,
+        receipt_bump,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_overturn_victim_relief_payout_cancellation_v1(
+    claimant_state: &mut VictimReliefClaimantStateV1,
+    victim_relief_case: &mut VictimReliefCaseV1,
+    appeal: &VictimReliefAppealV1,
+    payout_request: &mut ReliefPayoutRequestV1,
+    receipt: &mut VictimReliefPayoutCancellationRecordV1,
+    parameters: VictimReliefPayoutCancellationParametersV1,
+    cancellation_parameters_hash: [u8; 32],
+    canonical_governance_payload_hash: [u8; 32],
+    executor: Pubkey,
+    now: i64,
+    receipt_bump: u8,
+) -> Result<[u8; 32]> {
+    require!(
+        parameters.payout_origin == VictimReliefPayoutOriginV1::AppealOverturn
+            && parameters.original_authorization_action_type
+                == GovernanceActionTypeV1::VictimReliefOverturnAppeal,
+        CustomError::VictimReliefPayoutCancellationAuthorizationMismatch
+    );
+    require!(
+        appeal.status == VictimReliefAppealStatusV1::Overturned
+            && appeal.victim_relief_case == payout_request.victim_relief_case
+            && appeal.decision_proposal == payout_request.governance_proposal
+            && appeal.decision_queue == payout_request.execution_queue_item,
+        CustomError::VictimReliefPayoutCancellationAuthorizationMismatch
+    );
+    record_victim_relief_payout_cancellation_state_v1(
+        claimant_state,
+        victim_relief_case,
+        payout_request,
+        receipt,
+        parameters,
+        cancellation_parameters_hash,
+        canonical_governance_payload_hash,
+        executor,
+        now,
+        receipt_bump,
+    )
+}
+
+#[allow(dead_code)]
 fn record_relief_payout_execution_v1(
     receipt: &mut ReliefPayoutExecutionRecordV1,
     parameters: VictimReliefPayoutParametersV1,
@@ -5197,6 +6504,7 @@ mod tests {
         governance_action_stable_code_v1, map_governance_action_to_governance_proposal_type_v1,
         map_governance_action_to_module,
     };
+    use crate::state::ActionType;
     use anchor_lang::solana_program::program_option::COption;
     use anchor_lang::solana_program::program_pack::Pack;
     use anchor_lang::AccountDeserialize;
@@ -5475,6 +6783,214 @@ mod tests {
             bump: 0,
             reserved: [0; 32],
         }
+    }
+
+    fn empty_payout_cancellation_record() -> VictimReliefPayoutCancellationRecordV1 {
+        VictimReliefPayoutCancellationRecordV1 {
+            payout_request: Pubkey::default(),
+            victim_relief_case: Pubkey::default(),
+            config: Pubkey::default(),
+            policy: Pubkey::default(),
+            policy_version: 0,
+            payout_origin: VictimReliefPayoutOriginV1::OriginalApprove,
+            original_authorization_action_type:
+                GovernanceActionTypeV1::VictimReliefApproveCompensation,
+            original_governance_proposal: Pubkey::default(),
+            original_proposal_decision: Pubkey::default(),
+            original_execution_queue_item: Pubkey::default(),
+            original_governance_proposal_action: Pubkey::default(),
+            original_authorization_execution_record: Pubkey::default(),
+            evidence_snapshot: Pubkey::default(),
+            original_authorization_parameters_hash: [0; 32],
+            cancellation_action_type: GovernanceActionTypeV1::VictimReliefCancelPayout,
+            cancellation_governance_proposal: Pubkey::default(),
+            cancellation_proposal_decision: Pubkey::default(),
+            cancellation_execution_queue_item: Pubkey::default(),
+            cancellation_governance_proposal_action: Pubkey::default(),
+            approved_amount_usdc: 0,
+            recipient_owner: Pubkey::default(),
+            recipient_token_account: Pubkey::default(),
+            treasury_config: Pubkey::default(),
+            relief_usdc_vault: Pubkey::default(),
+            usdc_mint: Pubkey::default(),
+            cancellation_parameters_hash: [0; 32],
+            canonical_governance_payload_hash: [0; 32],
+            executor: Pubkey::default(),
+            cancelled_at: 0,
+            schema_version: 0,
+            bump: 0,
+            reserved: [0; 32],
+        }
+    }
+
+    fn victim_relief_module_registry_fixture(
+        security_config: Pubkey,
+    ) -> (ProtocolModuleRegistryV1, Pubkey) {
+        let (registry_key, bump) = Pubkey::find_program_address(
+            &[
+                PROTOCOL_MODULE_REGISTRY_V1_SEED,
+                &[protocol_module_stable_code_v1(
+                    ProtocolModuleIdV1::VictimRelief,
+                )],
+            ],
+            &crate::ID,
+        );
+        (
+            ProtocolModuleRegistryV1 {
+                security_governance_config: security_config,
+                module_id: ProtocolModuleIdV1::VictimRelief,
+                module_code: protocol_module_stable_code_v1(ProtocolModuleIdV1::VictimRelief),
+                program_id: crate::ID,
+                enabled: true,
+                schema_version: VICTIM_RELIEF_SCHEMA_VERSION_V1,
+                created_at: 1_000,
+                updated_at: 1_000,
+                bump,
+            },
+            registry_key,
+        )
+    }
+
+    struct PayoutCancellationGovernanceFixture {
+        governance_proposal_key: Pubkey,
+        governance_proposal: GovernanceProposalV1,
+        governance_proposal_action_key: Pubkey,
+        governance_proposal_action: GovernanceProposalActionV1,
+        proposal_decision_key: Pubkey,
+        proposal_decision: ProposalDecisionV1,
+        execution_queue_item_key: Pubkey,
+        execution_queue_item: ExecutionQueueItemV1,
+        adapter: UniversalGovernanceDecisionAdapterV1,
+        parameters_hash: [u8; 32],
+        canonical_payload_hash: [u8; 32],
+    }
+
+    fn cancellation_fixture_for_request(
+        payout_origin: VictimReliefPayoutOriginV1,
+        original_action: GovernanceActionTypeV1,
+        payout_request_key: Pubkey,
+        payout_request: &ReliefPayoutRequestV1,
+        original_action_key: Pubkey,
+        original_record_key: Pubkey,
+    ) -> (
+        PayoutCancellationGovernanceFixture,
+        VictimReliefPayoutCancellationParametersV1,
+    ) {
+        let proposer = Pubkey::new_unique();
+        let proposal_id = 144;
+        let created_at = 6_000;
+        let governance_proposal_key = Pubkey::new_unique();
+        let governance_proposal_action_key = Pubkey::new_unique();
+        let proposal_decision_key = Pubkey::new_unique();
+        let execution_queue_item_key = Pubkey::new_unique();
+        let (
+            mut governance_proposal,
+            mut governance_proposal_action,
+            proposal_decision,
+            mut execution_queue_item,
+        ) = governance_accounts_fixture(
+            GovernanceActionTypeV1::VictimReliefCancelPayout,
+            payout_request_key,
+            proposer,
+            proposal_id,
+            created_at,
+        );
+        governance_proposal_action.governance_proposal = governance_proposal_key;
+        governance_proposal.payload_hash = governance_proposal_action.canonical_payload_hash;
+
+        let params = build_victim_relief_payout_cancellation_parameters_v1(
+            payout_origin,
+            original_action,
+            payout_request_key,
+            payout_request,
+            original_action_key,
+            original_record_key,
+            governance_proposal_key,
+            &governance_proposal,
+            proposal_decision_key,
+            execution_queue_item_key,
+            governance_proposal_action_key,
+        )
+        .unwrap();
+        let params_hash = hash_victim_relief_payout_cancellation_parameters_v1(&params).unwrap();
+        governance_proposal_action.parameters_hash = params_hash;
+        let payload = GovernancePayloadV1 {
+            schema_version: GOVERNANCE_PAYLOAD_V1_SCHEMA_VERSION,
+            action_type: governance_proposal_action.action_type,
+            module_id: governance_proposal_action.module_id,
+            target_program: governance_proposal_action.target_program,
+            target_account: governance_proposal_action.target_account,
+            parameters_hash: governance_proposal_action.parameters_hash,
+            evidence_hash: governance_proposal_action.evidence_hash,
+            created_at: governance_proposal_action.created_at,
+        };
+        let canonical_payload_hash = hash_governance_payload_v1(&payload).unwrap();
+        governance_proposal_action.canonical_payload_hash = canonical_payload_hash;
+        governance_proposal.payload_hash = canonical_payload_hash;
+        execution_queue_item.payload_hash = canonical_payload_hash;
+
+        let adapter = UniversalGovernanceDecisionAdapterV1 {
+            governance_proposal: governance_proposal_key,
+            proposal_decision: proposal_decision_key,
+            action_type: ActionType::VictimReliefCancelPayout,
+            target_program: crate::ID,
+            target_account: payout_request_key,
+            payload_hash: canonical_payload_hash,
+            created_at,
+            executed: true,
+            bump: 5,
+        };
+
+        (
+            PayoutCancellationGovernanceFixture {
+                governance_proposal_key,
+                governance_proposal,
+                governance_proposal_action_key,
+                governance_proposal_action,
+                proposal_decision_key,
+                proposal_decision,
+                execution_queue_item_key,
+                execution_queue_item,
+                adapter,
+                parameters_hash: params_hash,
+                canonical_payload_hash,
+            },
+            params,
+        )
+    }
+
+    fn original_cancellation_fixture() -> (
+        OriginalPayoutFixture,
+        PayoutCancellationGovernanceFixture,
+        VictimReliefPayoutCancellationParametersV1,
+    ) {
+        let f = original_payout_fixture();
+        let (cancel, params) = cancellation_fixture_for_request(
+            VictimReliefPayoutOriginV1::OriginalApprove,
+            GovernanceActionTypeV1::VictimReliefApproveCompensation,
+            f.payout_request_key,
+            &f.payout_request,
+            f.governance_proposal_action_key,
+            f.authorization_record_key,
+        );
+        (f, cancel, params)
+    }
+
+    fn appeal_cancellation_fixture() -> (
+        AppealPayoutFixture,
+        PayoutCancellationGovernanceFixture,
+        VictimReliefPayoutCancellationParametersV1,
+    ) {
+        let f = appeal_payout_fixture();
+        let (cancel, params) = cancellation_fixture_for_request(
+            VictimReliefPayoutOriginV1::AppealOverturn,
+            GovernanceActionTypeV1::VictimReliefOverturnAppeal,
+            f.base.payout_request_key,
+            &f.base.payout_request,
+            f.governance_proposal_action_key,
+            f.appeal_authorization_record_key,
+        );
+        (f, cancel, params)
     }
 
     fn empty_appeal() -> VictimReliefAppealV1 {
@@ -6074,6 +7590,299 @@ mod tests {
             appeal_authorization_record_key,
             appeal_authorization_record,
         }
+    }
+
+    fn set_original_payout_fixture_runtime_pda_bumps(f: &mut OriginalPayoutFixture) {
+        let (_, security_bump) =
+            Pubkey::find_program_address(&[GOVERNANCE_CONFIG_V1_SEED], &crate::ID);
+        f.security_config.bump = security_bump;
+        let (_, config_bump) =
+            Pubkey::find_program_address(&[VICTIM_RELIEF_CONFIG_V1_SEED], &crate::ID);
+        f.config.bump = config_bump;
+        let (_, policy_bump) = Pubkey::find_program_address(
+            &[
+                VICTIM_RELIEF_POLICY_V1_SEED,
+                f.config_key.as_ref(),
+                &f.policy.policy_version.to_le_bytes(),
+            ],
+            &crate::ID,
+        );
+        f.policy.bump = policy_bump;
+        let (_, claimant_state_bump) = Pubkey::find_program_address(
+            &[
+                VICTIM_RELIEF_CLAIMANT_STATE_V1_SEED,
+                f.config_key.as_ref(),
+                f.victim_relief_case.claimant.as_ref(),
+            ],
+            &crate::ID,
+        );
+        f.claimant_state.bump = claimant_state_bump;
+        let (_, case_bump) = Pubkey::find_program_address(
+            &[
+                VICTIM_RELIEF_CASE_V1_SEED,
+                f.config_key.as_ref(),
+                &f.victim_relief_case.case_id.to_le_bytes(),
+            ],
+            &crate::ID,
+        );
+        f.victim_relief_case.bump = case_bump;
+        let (_, snapshot_bump) = Pubkey::find_program_address(
+            &[VICTIM_RELIEF_EVIDENCE_SNAPSHOT_V1_SEED, f.case_key.as_ref()],
+            &crate::ID,
+        );
+        f.snapshot.bump = snapshot_bump;
+    }
+
+    fn appeal_payout_runtime_pda_fixture() -> AppealPayoutFixture {
+        let mut base = original_payout_fixture();
+        set_original_payout_fixture_runtime_pda_bumps(&mut base);
+
+        let (appeal_key, appeal_bump) = Pubkey::find_program_address(
+            &[VICTIM_RELIEF_APPEAL_V1_SEED, base.case_key.as_ref()],
+            &crate::ID,
+        );
+        let proposer = Pubkey::new_unique();
+        let proposal_id = 99u64;
+        let proposal_id_bytes = proposal_id.to_le_bytes();
+        let (governance_proposal_key, governance_proposal_bump) = Pubkey::find_program_address(
+            &[GOVERNANCE_PROPOSAL_V1_SEED, &proposal_id_bytes],
+            &crate::ID,
+        );
+        let (governance_proposal_action_key, governance_proposal_action_bump) =
+            Pubkey::find_program_address(
+                &[
+                    GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+                    governance_proposal_key.as_ref(),
+                ],
+                &crate::ID,
+            );
+        let (proposal_decision_key, proposal_decision_bump) = Pubkey::find_program_address(
+            &[PROPOSAL_DECISION_V1_SEED, &proposal_id_bytes],
+            &crate::ID,
+        );
+        let (execution_queue_item_key, execution_queue_item_bump) = Pubkey::find_program_address(
+            &[EXECUTION_QUEUE_ITEM_V1_SEED, &proposal_id_bytes],
+            &crate::ID,
+        );
+        let (
+            mut governance_proposal,
+            mut governance_proposal_action,
+            mut proposal_decision,
+            mut execution_queue_item,
+        ) = governance_accounts_fixture(
+            GovernanceActionTypeV1::VictimReliefOverturnAppeal,
+            appeal_key,
+            proposer,
+            proposal_id,
+            5_000,
+        );
+        governance_proposal.bump = governance_proposal_bump;
+        governance_proposal.payload_hash = governance_proposal_action.canonical_payload_hash;
+        governance_proposal_action.governance_proposal = governance_proposal_key;
+        governance_proposal_action.bump = governance_proposal_action_bump;
+        proposal_decision.bump = proposal_decision_bump;
+        execution_queue_item.bump = execution_queue_item_bump;
+
+        base.payout_request.governance_proposal = governance_proposal_key;
+        base.payout_request.proposal_decision = proposal_decision_key;
+        base.payout_request.execution_queue_item = execution_queue_item_key;
+        base.payout_request.parameters_hash = governance_proposal_action.parameters_hash;
+        base.victim_relief_case.decision_proposal = governance_proposal_key;
+        base.victim_relief_case.decision_queue = execution_queue_item_key;
+
+        let original_queue = Pubkey::new_unique();
+        let (original_decision_record_key, original_bump) = Pubkey::find_program_address(
+            &[
+                VICTIM_RELIEF_DECISION_EXECUTION_RECORD_V1_SEED,
+                original_queue.as_ref(),
+            ],
+            &crate::ID,
+        );
+        let original_decision_record = VictimReliefDecisionExecutionRecordV1 {
+            execution_queue_item: original_queue,
+            proposal_decision: Pubkey::new_unique(),
+            governance_proposal: Pubkey::new_unique(),
+            governance_proposal_action: Pubkey::new_unique(),
+            module_registry: Pubkey::new_unique(),
+            config: base.config_key,
+            policy: base.policy_key,
+            victim_relief_case: base.case_key,
+            evidence_snapshot: base.snapshot_key,
+            execution_type: VictimReliefDecisionExecutionTypeV1::Reject,
+            governance_action_type: GovernanceActionTypeV1::VictimReliefRejectClaim,
+            case_status_before: VictimReliefCaseStatusV1::UnderReview,
+            case_status_after: VictimReliefCaseStatusV1::Rejected,
+            claimed_amount_usdc: base.victim_relief_case.claimed_amount_usdc,
+            approved_amount_usdc: 0,
+            recipient_owner: base.victim_relief_case.recipient_owner,
+            recipient_token_account: base.victim_relief_case.recipient_token_account,
+            parameters_hash: [8; 32],
+            canonical_governance_payload_hash: [9; 32],
+            executor: Pubkey::new_unique(),
+            executed_at: 4_000,
+            schema_version: VICTIM_RELIEF_DECISION_SCHEMA_VERSION,
+            bump: original_bump,
+        };
+        let mut appeal = empty_appeal();
+        appeal.victim_relief_case = base.case_key;
+        appeal.config = base.config_key;
+        appeal.policy = base.policy_key;
+        appeal.policy_version = base.victim_relief_case.policy_version;
+        appeal.claimant = base.victim_relief_case.claimant;
+        appeal.original_evidence_snapshot = base.snapshot_key;
+        appeal.original_decision_record = original_decision_record_key;
+        appeal.original_governance_proposal = original_decision_record.governance_proposal;
+        appeal.original_execution_queue_item = original_queue;
+        appeal.status = VictimReliefAppealStatusV1::Overturned;
+        appeal.decision_proposal = governance_proposal_key;
+        appeal.decision_queue = execution_queue_item_key;
+        appeal.resolved_at = 5_200;
+        appeal.schema_version = VICTIM_RELIEF_SCHEMA_VERSION_V1;
+        appeal.bump = appeal_bump;
+
+        let (appeal_authorization_record_key, authorization_bump) = Pubkey::find_program_address(
+            &[
+                VICTIM_RELIEF_APPEAL_DECISION_EXECUTION_RECORD_V1_SEED,
+                execution_queue_item_key.as_ref(),
+            ],
+            &crate::ID,
+        );
+        let appeal_authorization_record = VictimReliefAppealDecisionExecutionRecordV1 {
+            execution_queue_item: execution_queue_item_key,
+            proposal_decision: proposal_decision_key,
+            governance_proposal: governance_proposal_key,
+            governance_proposal_action: governance_proposal_action_key,
+            module_registry: Pubkey::new_unique(),
+            config: base.config_key,
+            policy: base.policy_key,
+            victim_relief_case: base.case_key,
+            victim_relief_appeal: appeal_key,
+            original_decision_record: original_decision_record_key,
+            original_evidence_snapshot: base.snapshot_key,
+            execution_type: VictimReliefAppealExecutionTypeV1::Overturn,
+            governance_action_type: GovernanceActionTypeV1::VictimReliefOverturnAppeal,
+            case_status_before: VictimReliefCaseStatusV1::AppealPending,
+            case_status_after: VictimReliefCaseStatusV1::PayoutQueued,
+            appeal_status_before: VictimReliefAppealStatusV1::Pending,
+            appeal_status_after: VictimReliefAppealStatusV1::Overturned,
+            claimed_amount_usdc: base.victim_relief_case.claimed_amount_usdc,
+            approved_amount_usdc: base.payout_request.approved_amount_usdc,
+            recipient_owner: base.payout_request.recipient_owner,
+            recipient_token_account: base.payout_request.recipient_token_account,
+            parameters_hash: base.payout_request.parameters_hash,
+            canonical_governance_payload_hash: governance_proposal_action.canonical_payload_hash,
+            executor: Pubkey::new_unique(),
+            executed_at: 5_200,
+            schema_version: VICTIM_RELIEF_DECISION_SCHEMA_VERSION,
+            bump: authorization_bump,
+        };
+
+        AppealPayoutFixture {
+            base,
+            appeal_key,
+            appeal,
+            original_decision_record_key,
+            original_decision_record,
+            governance_proposal_key,
+            governance_proposal,
+            governance_proposal_action_key,
+            governance_proposal_action,
+            proposal_decision_key,
+            proposal_decision,
+            execution_queue_item_key,
+            execution_queue_item,
+            appeal_authorization_record_key,
+            appeal_authorization_record,
+        }
+    }
+
+    fn validate_appeal_payout_runtime_pdas_fixture(f: &AppealPayoutFixture) -> Result<u8> {
+        let (claimant_state_key, _) = Pubkey::find_program_address(
+            &[
+                VICTIM_RELIEF_CLAIMANT_STATE_V1_SEED,
+                f.base.config_key.as_ref(),
+                f.base.claimant_state.claimant.as_ref(),
+            ],
+            &crate::ID,
+        );
+        validate_victim_relief_overturn_payout_runtime_pdas_v1(
+            f.base.security_config_key,
+            &f.base.security_config,
+            f.governance_proposal_key,
+            &f.governance_proposal,
+            f.governance_proposal_action_key,
+            &f.governance_proposal_action,
+            f.proposal_decision_key,
+            &f.proposal_decision,
+            f.execution_queue_item_key,
+            &f.execution_queue_item,
+            f.base.config_key,
+            &f.base.config,
+            f.base.policy_key,
+            &f.base.policy,
+            claimant_state_key,
+            &f.base.claimant_state,
+            f.base.case_key,
+            &f.base.victim_relief_case,
+            f.appeal_key,
+            &f.appeal,
+            f.base.snapshot_key,
+            &f.base.snapshot,
+            f.original_decision_record_key,
+            &f.original_decision_record,
+            f.base.payout_request_key,
+            &f.base.payout_request,
+            f.base.treasury_config_key,
+            &f.base.treasury_config,
+            f.base.vault_authority_key,
+        )
+    }
+
+    #[test]
+    fn overturn_payout_runtime_pdas_accept_correct_accounts() {
+        let f = appeal_payout_runtime_pda_fixture();
+        let (_, expected_vault_authority_bump) =
+            Pubkey::find_program_address(&[VAULT_AUTHORITY_V2_SEED], &crate::ID);
+
+        assert_eq!(
+            validate_appeal_payout_runtime_pdas_fixture(&f).unwrap(),
+            expected_vault_authority_bump
+        );
+    }
+
+    #[test]
+    fn overturn_payout_runtime_pdas_reject_account_substitution_before_cpi() {
+        let mut f = appeal_payout_runtime_pda_fixture();
+        let request_status = f.base.payout_request.status;
+        let case_status = f.base.victim_relief_case.status;
+        let relief_vault_amount = f.base.relief_vault.amount;
+
+        f.appeal_key = Pubkey::new_unique();
+
+        assert_eq!(
+            validate_appeal_payout_runtime_pdas_fixture(&f).unwrap_err(),
+            CustomError::VictimReliefPayoutAuthorizationMismatch.into()
+        );
+        assert_eq!(f.base.payout_request.status, request_status);
+        assert_eq!(f.base.victim_relief_case.status, case_status);
+        assert_eq!(f.base.relief_vault.amount, relief_vault_amount);
+    }
+
+    #[test]
+    fn overturn_payout_runtime_pdas_reject_bump_mismatch_before_cpi() {
+        let mut f = appeal_payout_runtime_pda_fixture();
+        let request_status = f.base.payout_request.status;
+        let case_status = f.base.victim_relief_case.status;
+        let relief_vault_amount = f.base.relief_vault.amount;
+        f.governance_proposal.bump = f.governance_proposal.bump.wrapping_add(1);
+
+        assert_eq!(
+            validate_appeal_payout_runtime_pdas_fixture(&f).unwrap_err(),
+            CustomError::VictimReliefPayoutAuthorizationMismatch.into()
+        );
+        assert_eq!(f.base.payout_request.status, request_status);
+        assert_eq!(f.base.victim_relief_case.status, case_status);
+        assert_eq!(f.base.relief_vault.amount, relief_vault_amount);
     }
 
     #[test]
@@ -8244,6 +10053,528 @@ mod tests {
     }
 
     #[test]
+    fn cancellation_parameters_hash_binds_origin_request_and_cancellation_governance() {
+        let (f, cancel, params) = original_cancellation_fixture();
+        let hash_a = hash_victim_relief_payout_cancellation_parameters_v1(&params).unwrap();
+        assert_eq!(hash_a, cancel.parameters_hash);
+        assert_eq!(
+            hash_victim_relief_payout_cancellation_parameters_v1(&params).unwrap(),
+            hash_a
+        );
+
+        let mut changed = params;
+        changed.payout_origin = VictimReliefPayoutOriginV1::AppealOverturn;
+        changed.original_authorization_action_type =
+            GovernanceActionTypeV1::VictimReliefOverturnAppeal;
+        assert_ne!(
+            hash_a,
+            hash_victim_relief_payout_cancellation_parameters_v1(&changed).unwrap()
+        );
+
+        let mut changed = params;
+        changed.payout_request = Pubkey::new_unique();
+        assert_ne!(
+            hash_a,
+            hash_victim_relief_payout_cancellation_parameters_v1(&changed).unwrap()
+        );
+
+        let mut changed = params;
+        changed.original_authorization_execution_record = Pubkey::new_unique();
+        assert_ne!(
+            hash_a,
+            hash_victim_relief_payout_cancellation_parameters_v1(&changed).unwrap()
+        );
+
+        let mut changed = params;
+        changed.approved_amount_usdc = f.payout_request.approved_amount_usdc + 1;
+        assert_ne!(
+            hash_a,
+            hash_victim_relief_payout_cancellation_parameters_v1(&changed).unwrap()
+        );
+
+        let mut changed = params;
+        changed.recipient_token_account = Pubkey::new_unique();
+        assert_ne!(
+            hash_a,
+            hash_victim_relief_payout_cancellation_parameters_v1(&changed).unwrap()
+        );
+
+        let mut changed = params;
+        changed.cancellation_execution_queue_item = Pubkey::new_unique();
+        assert_ne!(
+            hash_a,
+            hash_victim_relief_payout_cancellation_parameters_v1(&changed).unwrap()
+        );
+
+        let mut changed = params;
+        changed.expected_request_status = VictimReliefPayoutStatusV1::Executed;
+        assert_eq!(
+            hash_victim_relief_payout_cancellation_parameters_v1(&changed).unwrap_err(),
+            CustomError::VictimReliefPayoutCancellationStatusMismatch.into()
+        );
+    }
+
+    #[test]
+    fn cancellation_receipt_records_verified_fields_and_rejects_replay() {
+        let (_f, cancel, params) = original_cancellation_fixture();
+        let mut receipt = empty_payout_cancellation_record();
+        let executor = Pubkey::new_unique();
+        let now = 9_999;
+        let recorded_hash = record_victim_relief_payout_cancellation_receipt_v1(
+            &mut receipt,
+            params,
+            cancel.parameters_hash,
+            cancel.canonical_payload_hash,
+            executor,
+            now,
+            11,
+        )
+        .unwrap();
+
+        assert_eq!(recorded_hash, cancel.parameters_hash);
+        assert_eq!(receipt.payout_request, params.payout_request);
+        assert_eq!(receipt.victim_relief_case, params.victim_relief_case);
+        assert_eq!(
+            receipt.payout_origin,
+            VictimReliefPayoutOriginV1::OriginalApprove
+        );
+        assert_eq!(
+            receipt.original_authorization_action_type,
+            GovernanceActionTypeV1::VictimReliefApproveCompensation
+        );
+        assert_eq!(
+            receipt.cancellation_action_type,
+            GovernanceActionTypeV1::VictimReliefCancelPayout
+        );
+        assert_eq!(
+            receipt.cancellation_governance_proposal,
+            cancel.governance_proposal_key
+        );
+        assert_eq!(receipt.approved_amount_usdc, params.approved_amount_usdc);
+        assert_eq!(receipt.cancellation_parameters_hash, cancel.parameters_hash);
+        assert_eq!(
+            receipt.canonical_governance_payload_hash,
+            cancel.canonical_payload_hash
+        );
+        assert_eq!(receipt.executor, executor);
+        assert_eq!(receipt.cancelled_at, now);
+        assert_eq!(
+            receipt.schema_version,
+            VICTIM_RELIEF_DECISION_SCHEMA_VERSION
+        );
+        assert_eq!(receipt.bump, 11);
+
+        assert_eq!(
+            record_victim_relief_payout_cancellation_receipt_v1(
+                &mut receipt,
+                params,
+                cancel.parameters_hash,
+                cancel.canonical_payload_hash,
+                executor,
+                now + 1,
+                12,
+            )
+            .unwrap_err(),
+            CustomError::VictimReliefPayoutCancellationReceiptAlreadyExists.into()
+        );
+    }
+
+    #[test]
+    fn original_payout_cancellation_marks_request_case_and_active_count() {
+        let (f, cancel, params) = original_cancellation_fixture();
+        let mut claimant_state = f.claimant_state;
+        let mut victim_relief_case = f.victim_relief_case;
+        let mut payout_request = f.payout_request;
+        let mut receipt = empty_payout_cancellation_record();
+        let total_cases_before = claimant_state.total_case_count;
+        let now = 10_000;
+        let executor = Pubkey::new_unique();
+
+        let recorded_hash = record_original_victim_relief_payout_cancellation_v1(
+            &mut claimant_state,
+            &mut victim_relief_case,
+            &mut payout_request,
+            &mut receipt,
+            params,
+            cancel.parameters_hash,
+            cancel.canonical_payload_hash,
+            executor,
+            now,
+            12,
+        )
+        .unwrap();
+
+        assert_eq!(recorded_hash, cancel.parameters_hash);
+        assert_eq!(payout_request.status, VictimReliefPayoutStatusV1::Cancelled);
+        assert_eq!(payout_request.executed_at, 0);
+        assert_eq!(
+            victim_relief_case.status,
+            VictimReliefCaseStatusV1::Cancelled
+        );
+        assert_eq!(victim_relief_case.updated_at, now);
+        assert_eq!(claimant_state.active_case_count, 0);
+        assert_eq!(claimant_state.total_case_count, total_cases_before);
+        assert_eq!(claimant_state.updated_at, now);
+        assert_eq!(receipt.payout_request, f.payout_request_key);
+        assert_eq!(
+            receipt.payout_origin,
+            VictimReliefPayoutOriginV1::OriginalApprove
+        );
+    }
+
+    #[test]
+    fn appeal_overturn_payout_cancellation_keeps_appeal_overturned() {
+        let (f, cancel, params) = appeal_cancellation_fixture();
+        let mut claimant_state = f.base.claimant_state;
+        let mut victim_relief_case = f.base.victim_relief_case;
+        let mut payout_request = f.base.payout_request;
+        let mut receipt = empty_payout_cancellation_record();
+        let appeal_status_before = f.appeal.status;
+        let appeal_resolved_at_before = f.appeal.resolved_at;
+        let now = 10_100;
+
+        let recorded_hash = record_overturn_victim_relief_payout_cancellation_v1(
+            &mut claimant_state,
+            &mut victim_relief_case,
+            &f.appeal,
+            &mut payout_request,
+            &mut receipt,
+            params,
+            cancel.parameters_hash,
+            cancel.canonical_payload_hash,
+            Pubkey::new_unique(),
+            now,
+            13,
+        )
+        .unwrap();
+
+        assert_eq!(recorded_hash, cancel.parameters_hash);
+        assert_eq!(payout_request.status, VictimReliefPayoutStatusV1::Cancelled);
+        assert_eq!(
+            victim_relief_case.status,
+            VictimReliefCaseStatusV1::Cancelled
+        );
+        assert_eq!(claimant_state.active_case_count, 0);
+        assert_eq!(f.appeal.status, appeal_status_before);
+        assert_eq!(f.appeal.resolved_at, appeal_resolved_at_before);
+        assert_eq!(
+            receipt.payout_origin,
+            VictimReliefPayoutOriginV1::AppealOverturn
+        );
+        assert_eq!(
+            receipt.original_authorization_action_type,
+            GovernanceActionTypeV1::VictimReliefOverturnAppeal
+        );
+        assert_eq!(
+            receipt.original_authorization_execution_record,
+            f.appeal_authorization_record_key
+        );
+    }
+
+    #[test]
+    fn cancellation_common_validator_allows_pause_and_rejects_paid_requests() {
+        let mut f = original_payout_fixture();
+        f.config.paused = true;
+        f.security_config.is_paused = true;
+        validate_victim_relief_payout_cancellation_common_v1(
+            f.security_config_key,
+            f.config_key,
+            &f.config,
+            f.policy_key,
+            &f.policy,
+            &f.claimant_state,
+            f.case_key,
+            &f.victim_relief_case,
+            f.snapshot_key,
+            &f.snapshot,
+            f.payout_request_key,
+            &f.payout_request,
+            f.treasury_config_key,
+            &f.treasury_config,
+        )
+        .unwrap();
+
+        f.payout_request.status = VictimReliefPayoutStatusV1::Executed;
+        f.payout_request.executed_at = 10_000;
+        f.victim_relief_case.status = VictimReliefCaseStatusV1::Paid;
+        assert_eq!(
+            validate_victim_relief_payout_cancellation_common_v1(
+                f.security_config_key,
+                f.config_key,
+                &f.config,
+                f.policy_key,
+                &f.policy,
+                &f.claimant_state,
+                f.case_key,
+                &f.victim_relief_case,
+                f.snapshot_key,
+                &f.snapshot,
+                f.payout_request_key,
+                &f.payout_request,
+                f.treasury_config_key,
+                &f.treasury_config,
+            )
+            .unwrap_err(),
+            CustomError::VictimReliefPayoutStatusMismatch.into()
+        );
+    }
+
+    #[test]
+    fn cancellation_governance_validator_requires_cancel_action_target_and_hash() {
+        let (f, mut cancel, params) = original_cancellation_fixture();
+        let (registry, registry_key) = victim_relief_module_registry_fixture(f.security_config_key);
+        let receipt = empty_payout_cancellation_record();
+        let (receipt_key, _) = Pubkey::find_program_address(
+            &[
+                RELIEF_PAYOUT_CANCELLATION_RECORD_V1_SEED,
+                f.payout_request_key.as_ref(),
+            ],
+            &crate::ID,
+        );
+
+        let canonical = validate_victim_relief_payout_cancellation_governance_v1(
+            &f.security_config,
+            f.security_config_key,
+            &registry,
+            registry_key,
+            &cancel.governance_proposal,
+            cancel.governance_proposal_key,
+            &cancel.governance_proposal_action,
+            cancel.governance_proposal_action_key,
+            &cancel.adapter,
+            &cancel.proposal_decision,
+            cancel.proposal_decision_key,
+            &cancel.execution_queue_item,
+            cancel.execution_queue_item_key,
+            f.payout_request_key,
+            &params,
+            cancel.parameters_hash,
+            receipt_key,
+            &receipt,
+        )
+        .unwrap();
+        assert_eq!(canonical, cancel.canonical_payload_hash);
+
+        cancel.governance_proposal_action.target_account = f.case_key;
+        assert_eq!(
+            validate_victim_relief_payout_cancellation_governance_v1(
+                &f.security_config,
+                f.security_config_key,
+                &registry,
+                registry_key,
+                &cancel.governance_proposal,
+                cancel.governance_proposal_key,
+                &cancel.governance_proposal_action,
+                cancel.governance_proposal_action_key,
+                &cancel.adapter,
+                &cancel.proposal_decision,
+                cancel.proposal_decision_key,
+                &cancel.execution_queue_item,
+                cancel.execution_queue_item_key,
+                f.payout_request_key,
+                &params,
+                cancel.parameters_hash,
+                receipt_key,
+                &receipt,
+            )
+            .unwrap_err(),
+            CustomError::GovernanceActionTargetMismatch.into()
+        );
+
+        let (f, mut cancel, params) = original_cancellation_fixture();
+        let (registry, registry_key) = victim_relief_module_registry_fixture(f.security_config_key);
+        let receipt = empty_payout_cancellation_record();
+        let (receipt_key, _) = Pubkey::find_program_address(
+            &[
+                RELIEF_PAYOUT_CANCELLATION_RECORD_V1_SEED,
+                f.payout_request_key.as_ref(),
+            ],
+            &crate::ID,
+        );
+        cancel.governance_proposal_action.parameters_hash = [99; 32];
+        assert_eq!(
+            validate_victim_relief_payout_cancellation_governance_v1(
+                &f.security_config,
+                f.security_config_key,
+                &registry,
+                registry_key,
+                &cancel.governance_proposal,
+                cancel.governance_proposal_key,
+                &cancel.governance_proposal_action,
+                cancel.governance_proposal_action_key,
+                &cancel.adapter,
+                &cancel.proposal_decision,
+                cancel.proposal_decision_key,
+                &cancel.execution_queue_item,
+                cancel.execution_queue_item_key,
+                f.payout_request_key,
+                &params,
+                cancel.parameters_hash,
+                receipt_key,
+                &receipt,
+            )
+            .unwrap_err(),
+            CustomError::GovernanceProposalActionMismatch.into()
+        );
+
+        let (f, mut cancel, params) = original_cancellation_fixture();
+        let (registry, registry_key) = victim_relief_module_registry_fixture(f.security_config_key);
+        let receipt = empty_payout_cancellation_record();
+        let (receipt_key, _) = Pubkey::find_program_address(
+            &[
+                RELIEF_PAYOUT_CANCELLATION_RECORD_V1_SEED,
+                f.payout_request_key.as_ref(),
+            ],
+            &crate::ID,
+        );
+        cancel.proposal_decision.decision = ProposalDecision::Rejected;
+        assert_eq!(
+            validate_victim_relief_payout_cancellation_governance_v1(
+                &f.security_config,
+                f.security_config_key,
+                &registry,
+                registry_key,
+                &cancel.governance_proposal,
+                cancel.governance_proposal_key,
+                &cancel.governance_proposal_action,
+                cancel.governance_proposal_action_key,
+                &cancel.adapter,
+                &cancel.proposal_decision,
+                cancel.proposal_decision_key,
+                &cancel.execution_queue_item,
+                cancel.execution_queue_item_key,
+                f.payout_request_key,
+                &params,
+                cancel.parameters_hash,
+                receipt_key,
+                &receipt,
+            )
+            .unwrap_err(),
+            CustomError::ProposalNotApproved.into()
+        );
+
+        let (f, cancel, params) = original_cancellation_fixture();
+        let (registry, registry_key) = victim_relief_module_registry_fixture(f.security_config_key);
+        let mut receipt = empty_payout_cancellation_record();
+        receipt.payout_request = f.payout_request_key;
+        let (receipt_key, _) = Pubkey::find_program_address(
+            &[
+                RELIEF_PAYOUT_CANCELLATION_RECORD_V1_SEED,
+                f.payout_request_key.as_ref(),
+            ],
+            &crate::ID,
+        );
+        assert_eq!(
+            validate_victim_relief_payout_cancellation_governance_v1(
+                &f.security_config,
+                f.security_config_key,
+                &registry,
+                registry_key,
+                &cancel.governance_proposal,
+                cancel.governance_proposal_key,
+                &cancel.governance_proposal_action,
+                cancel.governance_proposal_action_key,
+                &cancel.adapter,
+                &cancel.proposal_decision,
+                cancel.proposal_decision_key,
+                &cancel.execution_queue_item,
+                cancel.execution_queue_item_key,
+                f.payout_request_key,
+                &params,
+                cancel.parameters_hash,
+                receipt_key,
+                &receipt,
+            )
+            .unwrap_err(),
+            CustomError::VictimReliefPayoutCancellationReceiptAlreadyExists.into()
+        );
+    }
+
+    #[test]
+    fn payout_and_cancellation_are_mutually_exclusive_by_status() {
+        let (f, cancel, cancel_params) = original_cancellation_fixture();
+        let payout_params = build_original_approve_payout_parameters_v1(
+            f.payout_request_key,
+            &f.payout_request,
+            f.governance_proposal_action_key,
+            f.authorization_record_key,
+            f.vault_authority_key,
+        )
+        .unwrap();
+        let mut claimant_state = f.claimant_state;
+        let mut victim_relief_case = f.victim_relief_case;
+        let mut payout_request = f.payout_request;
+        let mut payout_receipt = empty_payout_execution_record();
+        record_original_approved_victim_relief_payout_v1(
+            &mut claimant_state,
+            &mut victim_relief_case,
+            &mut payout_request,
+            &mut payout_receipt,
+            payout_params,
+            Pubkey::new_unique(),
+            10_000,
+            6,
+        )
+        .unwrap();
+        assert_eq!(
+            record_original_victim_relief_payout_cancellation_v1(
+                &mut claimant_state,
+                &mut victim_relief_case,
+                &mut payout_request,
+                &mut empty_payout_cancellation_record(),
+                cancel_params,
+                cancel.parameters_hash,
+                cancel.canonical_payload_hash,
+                Pubkey::new_unique(),
+                10_001,
+                8,
+            )
+            .unwrap_err(),
+            CustomError::VictimReliefPayoutCancellationStatusMismatch.into()
+        );
+
+        let (f, cancel, cancel_params) = original_cancellation_fixture();
+        let payout_params = build_original_approve_payout_parameters_v1(
+            f.payout_request_key,
+            &f.payout_request,
+            f.governance_proposal_action_key,
+            f.authorization_record_key,
+            f.vault_authority_key,
+        )
+        .unwrap();
+        let mut claimant_state = f.claimant_state;
+        let mut victim_relief_case = f.victim_relief_case;
+        let mut payout_request = f.payout_request;
+        record_original_victim_relief_payout_cancellation_v1(
+            &mut claimant_state,
+            &mut victim_relief_case,
+            &mut payout_request,
+            &mut empty_payout_cancellation_record(),
+            cancel_params,
+            cancel.parameters_hash,
+            cancel.canonical_payload_hash,
+            Pubkey::new_unique(),
+            10_100,
+            8,
+        )
+        .unwrap();
+        assert_eq!(
+            record_original_approved_victim_relief_payout_v1(
+                &mut claimant_state,
+                &mut victim_relief_case,
+                &mut payout_request,
+                &mut empty_payout_execution_record(),
+                payout_params,
+                Pubkey::new_unique(),
+                10_101,
+                6,
+            )
+            .unwrap_err(),
+            CustomError::VictimReliefPayoutStatusMismatch.into()
+        );
+    }
+
+    #[test]
     fn victim_relief_pdas_are_stable() {
         let (config_pda, _) =
             Pubkey::find_program_address(&[VICTIM_RELIEF_CONFIG_V1_SEED], &crate::ID);
@@ -8287,6 +10618,13 @@ mod tests {
             ],
             &crate::ID,
         );
+        let (payout_cancellation_receipt_pda, _) = Pubkey::find_program_address(
+            &[
+                RELIEF_PAYOUT_CANCELLATION_RECORD_V1_SEED,
+                payout_request_pda.as_ref(),
+            ],
+            &crate::ID,
+        );
         let (appeal_pda, _) = Pubkey::find_program_address(
             &[VICTIM_RELIEF_APPEAL_V1_SEED, case_pda.as_ref()],
             &crate::ID,
@@ -8314,6 +10652,7 @@ mod tests {
         assert_ne!(snapshot_pda, Pubkey::default());
         assert_ne!(payout_request_pda, Pubkey::default());
         assert_ne!(payout_execution_receipt_pda, Pubkey::default());
+        assert_ne!(payout_cancellation_receipt_pda, Pubkey::default());
         assert_ne!(appeal_pda, Pubkey::default());
         assert_ne!(receipt_pda, Pubkey::default());
         assert_ne!(appeal_receipt_pda, Pubkey::default());

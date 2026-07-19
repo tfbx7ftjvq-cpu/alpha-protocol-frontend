@@ -34,6 +34,8 @@ Phase 2E-6B-2 activates the first Victim Relief business decision paths for `Vic
 
 Phase 2E-6B-3 appends `VictimReliefUpholdAppeal` and `VictimReliefOverturnAppeal`. Opening an appeal is not a governance action; it is a claimant business action. Appeal decisions are DAO actions that target `VictimReliefAppealV1`.
 
+Phase 2E-6B-4B-4B appends `VictimReliefCancelPayout`. This is a terminal DAO + Security action for unpaid approved `ReliefPayoutRequestV1` accounts. It does not transfer USDC and does not reuse reject/uphold actions.
+
 ## 3. Mapping Model
 
 The mapping is intentionally centralized:
@@ -55,6 +57,8 @@ The goal is to prevent callers from bypassing DAO semantics by directly choosing
 For initial Victim Relief approve/reject, the canonical governance target is the `VictimReliefCaseV1` account. The program recomputes the Victim Relief decision parameters hash from the frozen evidence snapshot, policy, case, Treasury config, relief vault, action, and proposal id. Callers do not choose the approved amount or recipient at execution time.
 
 For appeal uphold/overturn, the canonical governance target is `VictimReliefAppealV1`. The program recomputes the appeal decision parameters hash from the case, appeal, original snapshot, original reject receipt, policy, Treasury config, relief vault, action, and proposal id.
+
+For payout cancellation, the canonical governance target is `ReliefPayoutRequestV1`. The program recomputes the cancellation parameters hash from the payout request, original authorization source, frozen amount and recipient, cancellation proposal/decision/queue/action, expected statuses, and original authorization hash. Authority or guardian wallets cannot single-sign cancellation, and there is no generic cancel action.
 
 ## 4. ProtocolModuleIdV1
 

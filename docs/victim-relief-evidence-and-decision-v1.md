@@ -157,6 +157,12 @@ Appeal rules:
 
 Payout execution must use strict wrappers for original approve and appeal overturn. A generic caller-selected payout path is not part of V1.
 
+## Payout Cancellation Governance
+
+Stage 6B-4B-4B adds strict cancellation governance for unpaid approved payout requests. Cancellation targets `ReliefPayoutRequestV1`, uses `VictimReliefCancelPayout`, supports separate original-approve and appeal-overturn wrappers, writes `VictimReliefPayoutCancellationRecordV1`, and transfers no USDC. `PayoutQueued` still does not equal `Paid`; cancellation is a terminal unpaid outcome.
+
+See [victim-relief-payout-cancellation-governance-v1.md](victim-relief-payout-cancellation-governance-v1.md).
+
 ## Review Deadline Residual Risk
 
 `review_deadline` is an audit field in this phase. There is no permissionless `UnderReview` expiry because the case is not yet linked to an active governance proposal lifecycle. Adding expiry before reliable proposal linkage could allow a case to be expired during DAO voting or timelock.
