@@ -2,12 +2,13 @@ use anchor_lang::prelude::*;
 
 use crate::constants::{
     EXECUTION_QUEUE_ITEM_V1_SEED, GOVERNANCE_CONFIG_V1_SEED, MAX_EXECUTION_DELAY_SECONDS,
-    MIN_EXECUTION_DELAY_SECONDS, PROPOSAL_DECISION_V1_SEED,
+    MIN_EXECUTION_DELAY_SECONDS, PROPOSAL_DECISION_V1_SEED, PROTOCOL_AUTHORITY_CONTROL_V1_SEED,
 };
 use crate::error::CustomError;
+use crate::instructions::protocol_authority_control_v1::validate_legacy_security_authority_allowed_v1;
 use crate::state::{
     ActionType, ExecutionQueueItemV1, ExecutionStatus, GovernanceConfigV1, ProposalDecision,
-    ProposalDecisionV1, ProposalType,
+    ProposalDecisionV1, ProposalType, ProtocolAuthorityControlV1,
 };
 
 #[derive(Accounts)]
@@ -38,6 +39,15 @@ pub struct CreateProposalDecision<'info> {
     pub governance_config: Account<'info, GovernanceConfigV1>,
 
     #[account(
+        seeds = [
+            PROTOCOL_AUTHORITY_CONTROL_V1_SEED,
+            governance_config.key().as_ref()
+        ],
+        bump = authority_control.bump
+    )]
+    pub authority_control: Account<'info, ProtocolAuthorityControlV1>,
+
+    #[account(
         init,
         payer = authority,
         space = 8 + ProposalDecisionV1::INIT_SPACE,
@@ -63,6 +73,15 @@ pub struct QueueExecution<'info> {
         bump = governance_config.bump
     )]
     pub governance_config: Account<'info, GovernanceConfigV1>,
+
+    #[account(
+        seeds = [
+            PROTOCOL_AUTHORITY_CONTROL_V1_SEED,
+            governance_config.key().as_ref()
+        ],
+        bump = authority_control.bump
+    )]
+    pub authority_control: Account<'info, ProtocolAuthorityControlV1>,
 
     #[account(
         seeds = [
@@ -159,6 +178,15 @@ pub struct UnpauseSecurityLayer<'info> {
     )]
     pub governance_config: Account<'info, GovernanceConfigV1>,
 
+    #[account(
+        seeds = [
+            PROTOCOL_AUTHORITY_CONTROL_V1_SEED,
+            governance_config.key().as_ref()
+        ],
+        bump = authority_control.bump
+    )]
+    pub authority_control: Account<'info, ProtocolAuthorityControlV1>,
+
     pub authority: Signer<'info>,
 }
 
@@ -190,6 +218,7 @@ pub fn create_proposal_decision_handler(
 
     create_proposal_decision_state(
         &mut ctx.accounts.governance_config,
+        &ctx.accounts.authority_control,
         &mut ctx.accounts.proposal_decision,
         ctx.accounts.authority.key(),
         expected_proposal_id,
@@ -216,6 +245,7 @@ pub fn queue_execution_handler(
 
     queue_execution_state(
         &ctx.accounts.governance_config,
+        &ctx.accounts.authority_control,
         &ctx.accounts.proposal_decision,
         &mut ctx.accounts.execution_queue_item,
         ctx.accounts.authority.key(),
@@ -267,6 +297,7 @@ pub fn pause_security_layer_handler(ctx: Context<PauseSecurityLayer>) -> Result<
 pub fn unpause_security_layer_handler(ctx: Context<UnpauseSecurityLayer>) -> Result<()> {
     unpause_security_layer_state(
         &mut ctx.accounts.governance_config,
+        &ctx.accounts.authority_control,
         ctx.accounts.authority.key(),
     )
 }
@@ -296,6 +327,7 @@ pub fn initialize_governance_config_state(
 
 pub fn create_proposal_decision_state(
     governance_config: &mut GovernanceConfigV1,
+    authority_control: &ProtocolAuthorityControlV1,
     proposal_decision: &mut ProposalDecisionV1,
     authority: Pubkey,
     expected_proposal_id: u64,
@@ -308,11 +340,7 @@ pub fn create_proposal_decision_state(
     finalized_ts: i64,
     bump: u8,
 ) -> Result<()> {
-    require_keys_eq!(
-        authority,
-        governance_config.authority,
-        CustomError::UnauthorizedSecurityAuthority
-    );
+    validate_legacy_security_authority_allowed_v1(governance_config, authority_control, authority)?;
 
     let next_proposal_id = governance_config
         .proposal_count
@@ -345,6 +373,7 @@ pub fn create_proposal_decision_state(
 
 pub fn queue_execution_state(
     governance_config: &GovernanceConfigV1,
+    authority_control: &ProtocolAuthorityControlV1,
     proposal_decision: &ProposalDecisionV1,
     execution_queue_item: &mut ExecutionQueueItemV1,
     authority: Pubkey,
@@ -356,11 +385,7 @@ pub fn queue_execution_state(
     now_ts: i64,
     bump: u8,
 ) -> Result<()> {
-    require_keys_eq!(
-        authority,
-        governance_config.authority,
-        CustomError::UnauthorizedSecurityAuthority
-    );
+    validate_legacy_security_authority_allowed_v1(governance_config, authority_control, authority)?;
     require!(
         proposal_decision.proposal_id == proposal_id,
         CustomError::InvalidProposalId
@@ -471,13 +496,10 @@ pub fn pause_security_layer_state(
 
 pub fn unpause_security_layer_state(
     governance_config: &mut GovernanceConfigV1,
+    authority_control: &ProtocolAuthorityControlV1,
     authority: Pubkey,
 ) -> Result<()> {
-    require_keys_eq!(
-        authority,
-        governance_config.authority,
-        CustomError::UnauthorizedSecurityAuthority
-    );
+    validate_legacy_security_authority_allowed_v1(governance_config, authority_control, authority)?;
 
     governance_config.is_paused = false;
 
@@ -593,6 +615,14 @@ pub fn is_action_valid_for_proposal_type(
                 ActionType::VictimReliefUnpause
             )
             | (
+                ProposalType::ProtocolActivateDaoControl,
+                ActionType::ProtocolActivateDaoControl
+            )
+            | (
+                ProposalType::ProtocolUnpauseSecurity,
+                ActionType::ProtocolUnpauseSecurity
+            )
+            | (
                 ProposalType::ScamRegistryPublishReport,
                 ActionType::ScamRegistryPublishReport
             )
@@ -622,6 +652,7 @@ pub fn is_action_valid_for_proposal_type(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::ProtocolAuthorityModeV1;
 
     const AUTHORITY: Pubkey = Pubkey::new_from_array([1; 32]);
     const GUARDIAN: Pubkey = Pubkey::new_from_array([2; 32]);
@@ -639,6 +670,22 @@ mod tests {
             emergency_guardian: GUARDIAN,
             is_paused: false,
             bump: 250,
+        }
+    }
+
+    fn authority_control(mode: ProtocolAuthorityModeV1) -> ProtocolAuthorityControlV1 {
+        ProtocolAuthorityControlV1 {
+            governance_config: Pubkey::new_from_array([7; 32]),
+            mode,
+            bootstrap_authority: AUTHORITY,
+            emergency_guardian: GUARDIAN,
+            activation_governance_proposal: Pubkey::default(),
+            activation_proposal_decision: Pubkey::default(),
+            activation_execution_queue_item: Pubkey::default(),
+            activated_at: 0,
+            schema_version: crate::instructions::protocol_authority_control_v1::PROTOCOL_AUTHORITY_SCHEMA_VERSION_V1,
+            bump: 1,
+            reserved: [0u8; 64],
         }
     }
 
@@ -745,6 +792,7 @@ mod tests {
 
         create_proposal_decision_state(
             &mut config,
+            &authority_control(ProtocolAuthorityModeV1::Bootstrap),
             &mut decision,
             AUTHORITY,
             1,
@@ -772,6 +820,7 @@ mod tests {
             proposal_decision(0, ProposalType::PayrollPayout, ProposalDecision::Rejected);
         let err = create_proposal_decision_state(
             &mut config,
+            &authority_control(ProtocolAuthorityModeV1::Bootstrap),
             &mut decision,
             AUTHORITY,
             2,
@@ -799,6 +848,7 @@ mod tests {
 
         create_proposal_decision_state(
             &mut config,
+            &authority_control(ProtocolAuthorityModeV1::Bootstrap),
             &mut first,
             AUTHORITY,
             1,
@@ -814,6 +864,7 @@ mod tests {
         .unwrap();
         create_proposal_decision_state(
             &mut config,
+            &authority_control(ProtocolAuthorityModeV1::Bootstrap),
             &mut second,
             AUTHORITY,
             2,
@@ -840,6 +891,7 @@ mod tests {
             proposal_decision(0, ProposalType::PayrollPayout, ProposalDecision::Rejected);
         let err = create_proposal_decision_state(
             &mut config,
+            &authority_control(ProtocolAuthorityModeV1::Bootstrap),
             &mut decision,
             AUTHORITY,
             1,
@@ -864,6 +916,7 @@ mod tests {
             proposal_decision(0, ProposalType::PayrollPayout, ProposalDecision::Rejected);
         let err = create_proposal_decision_state(
             &mut config,
+            &authority_control(ProtocolAuthorityModeV1::Bootstrap),
             &mut decision,
             AUTHORITY,
             1,
@@ -889,6 +942,7 @@ mod tests {
         let mut item = execution_queue_item(0);
         let err = queue_execution_state(
             &config,
+            &authority_control(ProtocolAuthorityModeV1::Bootstrap),
             &decision,
             &mut item,
             AUTHORITY,
@@ -912,6 +966,7 @@ mod tests {
         let mut item = execution_queue_item(0);
         let err = queue_execution_state(
             &config,
+            &authority_control(ProtocolAuthorityModeV1::Bootstrap),
             &decision,
             &mut item,
             AUTHORITY,
@@ -937,6 +992,7 @@ mod tests {
 
         queue_execution_state(
             &config,
+            &authority_control(ProtocolAuthorityModeV1::Bootstrap),
             &decision,
             &mut item,
             AUTHORITY,
@@ -965,6 +1021,7 @@ mod tests {
 
         queue_execution_state(
             &config,
+            &authority_control(ProtocolAuthorityModeV1::Bootstrap),
             &decision,
             &mut item,
             AUTHORITY,
@@ -989,6 +1046,7 @@ mod tests {
         let mut item = execution_queue_item(0);
         let err = queue_execution_state(
             &config,
+            &authority_control(ProtocolAuthorityModeV1::Bootstrap),
             &decision,
             &mut item,
             AUTHORITY,
@@ -1014,6 +1072,7 @@ mod tests {
 
         queue_execution_state(
             &config,
+            &authority_control(ProtocolAuthorityModeV1::Bootstrap),
             &decision,
             &mut item,
             AUTHORITY,
@@ -1097,7 +1156,12 @@ mod tests {
     fn guardian_cannot_unpause() {
         let mut config = governance_config();
         pause_security_layer_state(&mut config, GUARDIAN).unwrap();
-        let err = unpause_security_layer_state(&mut config, GUARDIAN).unwrap_err();
+        let err = unpause_security_layer_state(
+            &mut config,
+            &authority_control(ProtocolAuthorityModeV1::Bootstrap),
+            GUARDIAN,
+        )
+        .unwrap_err();
 
         assert_error_contains(err, "UnauthorizedSecurityAuthority");
     }
@@ -1107,7 +1171,12 @@ mod tests {
         let mut config = governance_config();
         pause_security_layer_state(&mut config, GUARDIAN).unwrap();
 
-        unpause_security_layer_state(&mut config, AUTHORITY).unwrap();
+        unpause_security_layer_state(
+            &mut config,
+            &authority_control(ProtocolAuthorityModeV1::Bootstrap),
+            AUTHORITY,
+        )
+        .unwrap();
 
         assert!(!config.is_paused);
     }
@@ -1141,6 +1210,7 @@ mod tests {
 
         queue_execution_state(
             &config,
+            &authority_control(ProtocolAuthorityModeV1::Bootstrap),
             &decision,
             &mut item,
             AUTHORITY,
@@ -1173,6 +1243,7 @@ mod tests {
 
         queue_execution_state(
             &config,
+            &authority_control(ProtocolAuthorityModeV1::Bootstrap),
             &decision,
             &mut item,
             AUTHORITY,
@@ -1205,6 +1276,7 @@ mod tests {
 
         let err = queue_execution_state(
             &config,
+            &authority_control(ProtocolAuthorityModeV1::Bootstrap),
             &decision,
             &mut item,
             AUTHORITY,
@@ -1239,6 +1311,94 @@ mod tests {
             ProposalType::VictimReliefUnpause,
             ActionType::VictimReliefPause
         ));
+    }
+
+    #[test]
+    fn protocol_authority_actions_require_matching_security_type() {
+        assert!(is_action_valid_for_proposal_type(
+            ProposalType::ProtocolActivateDaoControl,
+            ActionType::ProtocolActivateDaoControl
+        ));
+        assert!(is_action_valid_for_proposal_type(
+            ProposalType::ProtocolUnpauseSecurity,
+            ActionType::ProtocolUnpauseSecurity
+        ));
+        assert!(!is_action_valid_for_proposal_type(
+            ProposalType::ProtocolActivateDaoControl,
+            ActionType::ProtocolUnpauseSecurity
+        ));
+        assert!(!is_action_valid_for_proposal_type(
+            ProposalType::ProtocolUnpauseSecurity,
+            ActionType::ProtocolActivateDaoControl
+        ));
+    }
+
+    #[test]
+    fn dao_controlled_mode_fail_closes_legacy_create_decision() {
+        let mut config = governance_config();
+        let mut decision =
+            proposal_decision(0, ProposalType::EmergencyPause, ProposalDecision::Rejected);
+
+        let err = create_proposal_decision_state(
+            &mut config,
+            &authority_control(ProtocolAuthorityModeV1::DaoControlled),
+            &mut decision,
+            AUTHORITY,
+            1,
+            ProposalType::EmergencyPause,
+            ProposalDecision::Approved,
+            100,
+            12,
+            10,
+            20,
+            21,
+            99,
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "ProtocolAuthorityControlNotBootstrap");
+    }
+
+    #[test]
+    fn dao_controlled_mode_fail_closes_legacy_queue() {
+        let config = governance_config();
+        let decision =
+            proposal_decision(1, ProposalType::EmergencyPause, ProposalDecision::Approved);
+        let mut item = execution_queue_item(0);
+
+        let err = queue_execution_state(
+            &config,
+            &authority_control(ProtocolAuthorityModeV1::DaoControlled),
+            &decision,
+            &mut item,
+            AUTHORITY,
+            1,
+            ActionType::EmergencyPause,
+            TARGET_PROGRAM,
+            TARGET_ACCOUNT,
+            HASH_ONE,
+            100,
+            44,
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "ProtocolAuthorityControlNotBootstrap");
+    }
+
+    #[test]
+    fn dao_controlled_mode_fail_closes_legacy_unpause() {
+        let mut config = governance_config();
+        pause_security_layer_state(&mut config, GUARDIAN).unwrap();
+
+        let err = unpause_security_layer_state(
+            &mut config,
+            &authority_control(ProtocolAuthorityModeV1::DaoControlled),
+            AUTHORITY,
+        )
+        .unwrap_err();
+
+        assert_error_contains(err, "ProtocolAuthorityControlNotBootstrap");
+        assert!(config.is_paused);
     }
 
     #[test]

@@ -760,4 +760,40 @@ pub enum CustomError {
 
     #[msg("Invalid Victim Relief pause schema")]
     InvalidVictimReliefPauseSchema,
+
+    #[msg("Invalid protocol authority mode")]
+    InvalidProtocolAuthorityMode,
+
+    #[msg("Invalid protocol authority mode transition")]
+    InvalidProtocolAuthorityModeTransition,
+
+    #[msg("Protocol authority control mismatch")]
+    ProtocolAuthorityControlMismatch,
+
+    #[msg("Protocol authority control is already activated")]
+    ProtocolAuthorityControlAlreadyActivated,
+
+    #[msg("Protocol authority control is not DAO controlled")]
+    ProtocolAuthorityControlNotDaoControlled,
+
+    #[msg("Protocol authority control is not in bootstrap mode")]
+    ProtocolAuthorityControlNotBootstrap,
+
+    #[msg("Protocol authority parameters mismatch")]
+    ProtocolAuthorityParametersMismatch,
+
+    #[msg("Protocol authority action mismatch")]
+    ProtocolAuthorityActionMismatch,
+
+    #[msg("Protocol authority target mismatch")]
+    ProtocolAuthorityTargetMismatch,
+
+    #[msg("Protocol authority receipt already exists")]
+    ProtocolAuthorityReceiptAlreadyExists,
+
+    #[msg("Invalid protocol authority schema")]
+    InvalidProtocolAuthoritySchema,
+
+    #[msg("Protocol security unpause is not eligible")]
+    ProtocolSecurityUnpauseNotEligible,
 }

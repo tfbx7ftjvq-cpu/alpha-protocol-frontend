@@ -314,6 +314,8 @@ pub fn security_action_type_from_u8(action_type: u8) -> Result<ActionType> {
         29 => Ok(ActionType::VictimReliefCancelPayout),
         30 => Ok(ActionType::VictimReliefPause),
         31 => Ok(ActionType::VictimReliefUnpause),
+        32 => Ok(ActionType::ProtocolActivateDaoControl),
+        33 => Ok(ActionType::ProtocolUnpauseSecurity),
         _ => err!(CustomError::InvalidActionForProposalType),
     }
 }
@@ -356,6 +358,8 @@ pub fn security_proposal_type_for_action(action_type: ActionType) -> Result<Prop
         ActionType::VictimReliefCancelPayout => Ok(ProposalType::VictimReliefCancelPayout),
         ActionType::VictimReliefPause => Ok(ProposalType::VictimReliefPause),
         ActionType::VictimReliefUnpause => Ok(ProposalType::VictimReliefUnpause),
+        ActionType::ProtocolActivateDaoControl => Ok(ProposalType::ProtocolActivateDaoControl),
+        ActionType::ProtocolUnpauseSecurity => Ok(ProposalType::ProtocolUnpauseSecurity),
         ActionType::ScamRegistryPublishReport => Ok(ProposalType::ScamRegistryPublishReport),
         ActionType::ScamRegistryRemoveReport => Ok(ProposalType::ScamRegistryRemoveReport),
         ActionType::ScamRegistryAppealDecision => Ok(ProposalType::ScamRegistryAppealDecision),
@@ -652,12 +656,28 @@ mod tests {
             ActionType::VictimReliefUnpause
         );
         assert_eq!(
+            security_action_type_from_u8(32).unwrap(),
+            ActionType::ProtocolActivateDaoControl
+        );
+        assert_eq!(
+            security_action_type_from_u8(33).unwrap(),
+            ActionType::ProtocolUnpauseSecurity
+        );
+        assert_eq!(
             security_proposal_type_for_action(ActionType::VictimReliefPause).unwrap(),
             ProposalType::VictimReliefPause
         );
         assert_eq!(
             security_proposal_type_for_action(ActionType::VictimReliefUnpause).unwrap(),
             ProposalType::VictimReliefUnpause
+        );
+        assert_eq!(
+            security_proposal_type_for_action(ActionType::ProtocolActivateDaoControl).unwrap(),
+            ProposalType::ProtocolActivateDaoControl
+        );
+        assert_eq!(
+            security_proposal_type_for_action(ActionType::ProtocolUnpauseSecurity).unwrap(),
+            ProposalType::ProtocolUnpauseSecurity
         );
     }
 

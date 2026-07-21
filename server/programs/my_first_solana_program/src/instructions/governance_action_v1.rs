@@ -47,6 +47,8 @@ pub fn governance_action_stable_code_v1(action_type: GovernanceActionTypeV1) -> 
         GovernanceActionTypeV1::VictimReliefCancelPayout => 24,
         GovernanceActionTypeV1::VictimReliefPause => 25,
         GovernanceActionTypeV1::VictimReliefUnpause => 26,
+        GovernanceActionTypeV1::ProtocolActivateDaoControl => 27,
+        GovernanceActionTypeV1::ProtocolUnpauseSecurity => 28,
     }
 }
 
@@ -79,6 +81,8 @@ pub fn governance_action_from_stable_code_v1(code: u8) -> Result<GovernanceActio
         24 => Ok(GovernanceActionTypeV1::VictimReliefCancelPayout),
         25 => Ok(GovernanceActionTypeV1::VictimReliefPause),
         26 => Ok(GovernanceActionTypeV1::VictimReliefUnpause),
+        27 => Ok(GovernanceActionTypeV1::ProtocolActivateDaoControl),
+        28 => Ok(GovernanceActionTypeV1::ProtocolUnpauseSecurity),
         _ => err!(CustomError::InvalidGovernanceActionCode),
     }
 }
@@ -144,6 +148,10 @@ pub fn map_governance_action_to_security_action(
         }
         GovernanceActionTypeV1::VictimReliefPause => Ok(ActionType::VictimReliefPause),
         GovernanceActionTypeV1::VictimReliefUnpause => Ok(ActionType::VictimReliefUnpause),
+        GovernanceActionTypeV1::ProtocolActivateDaoControl => {
+            Ok(ActionType::ProtocolActivateDaoControl)
+        }
+        GovernanceActionTypeV1::ProtocolUnpauseSecurity => Ok(ActionType::ProtocolUnpauseSecurity),
     }
 }
 
@@ -181,7 +189,9 @@ pub fn map_governance_action_to_governance_proposal_type_v1(
         | GovernanceActionTypeV1::ContributorApprovePayout => GovernanceProposalTypeV1::Contributor,
         GovernanceActionTypeV1::ProtocolUpdateParameter => GovernanceProposalTypeV1::Parameter,
         GovernanceActionTypeV1::ProtocolUpgradeProgram => GovernanceProposalTypeV1::Upgrade,
-        GovernanceActionTypeV1::ProtocolEmergencyAction => GovernanceProposalTypeV1::Emergency,
+        GovernanceActionTypeV1::ProtocolEmergencyAction
+        | GovernanceActionTypeV1::ProtocolActivateDaoControl
+        | GovernanceActionTypeV1::ProtocolUnpauseSecurity => GovernanceProposalTypeV1::Emergency,
     }
 }
 
@@ -213,7 +223,9 @@ pub fn map_governance_action_to_module(action_type: GovernanceActionTypeV1) -> P
         | GovernanceActionTypeV1::ContributorApprovePayout => ProtocolModuleIdV1::Contributor,
         GovernanceActionTypeV1::ProtocolUpdateParameter
         | GovernanceActionTypeV1::ProtocolUpgradeProgram
-        | GovernanceActionTypeV1::ProtocolEmergencyAction => ProtocolModuleIdV1::Protocol,
+        | GovernanceActionTypeV1::ProtocolEmergencyAction
+        | GovernanceActionTypeV1::ProtocolActivateDaoControl
+        | GovernanceActionTypeV1::ProtocolUnpauseSecurity => ProtocolModuleIdV1::Protocol,
     }
 }
 
@@ -318,7 +330,7 @@ mod tests {
     const PARAMETERS_HASH: [u8; 32] = [3; 32];
     const EVIDENCE_HASH: [u8; 32] = [4; 32];
 
-    const ALL_ACTIONS: [GovernanceActionTypeV1; 27] = [
+    const ALL_ACTIONS: [GovernanceActionTypeV1; 29] = [
         GovernanceActionTypeV1::TreasuryUpdateRevenueSplit,
         GovernanceActionTypeV1::TreasuryApproveSpending,
         GovernanceActionTypeV1::TreasuryApproveBuilderPayout,
@@ -346,6 +358,8 @@ mod tests {
         GovernanceActionTypeV1::VictimReliefCancelPayout,
         GovernanceActionTypeV1::VictimReliefPause,
         GovernanceActionTypeV1::VictimReliefUnpause,
+        GovernanceActionTypeV1::ProtocolActivateDaoControl,
+        GovernanceActionTypeV1::ProtocolUnpauseSecurity,
     ];
 
     fn payload(action_type: GovernanceActionTypeV1) -> GovernancePayloadV1 {
@@ -372,7 +386,7 @@ mod tests {
             ALL_ACTIONS.map(governance_action_stable_code_v1),
             [
                 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
-                23, 24, 25, 26,
+                23, 24, 25, 26, 27, 28,
             ]
         );
     }
@@ -483,6 +497,18 @@ mod tests {
             ),
             GovernanceProposalTypeV1::Emergency
         );
+        assert_eq!(
+            map_governance_action_to_governance_proposal_type_v1(
+                GovernanceActionTypeV1::ProtocolActivateDaoControl
+            ),
+            GovernanceProposalTypeV1::Emergency
+        );
+        assert_eq!(
+            map_governance_action_to_governance_proposal_type_v1(
+                GovernanceActionTypeV1::ProtocolUnpauseSecurity
+            ),
+            GovernanceProposalTypeV1::Emergency
+        );
     }
 
     #[test]
@@ -517,6 +543,14 @@ mod tests {
         );
         assert_eq!(
             map_governance_action_to_module(GovernanceActionTypeV1::ProtocolEmergencyAction),
+            ProtocolModuleIdV1::Protocol
+        );
+        assert_eq!(
+            map_governance_action_to_module(GovernanceActionTypeV1::ProtocolActivateDaoControl),
+            ProtocolModuleIdV1::Protocol
+        );
+        assert_eq!(
+            map_governance_action_to_module(GovernanceActionTypeV1::ProtocolUnpauseSecurity),
             ProtocolModuleIdV1::Protocol
         );
     }
@@ -586,6 +620,20 @@ mod tests {
             map_governance_action_to_security_action(GovernanceActionTypeV1::VictimReliefUnpause)
                 .unwrap(),
             ActionType::VictimReliefUnpause
+        );
+        assert_eq!(
+            map_governance_action_to_security_action(
+                GovernanceActionTypeV1::ProtocolActivateDaoControl
+            )
+            .unwrap(),
+            ActionType::ProtocolActivateDaoControl
+        );
+        assert_eq!(
+            map_governance_action_to_security_action(
+                GovernanceActionTypeV1::ProtocolUnpauseSecurity
+            )
+            .unwrap(),
+            ActionType::ProtocolUnpauseSecurity
         );
     }
 

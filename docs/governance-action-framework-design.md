@@ -127,6 +127,8 @@ The framework currently covers:
 - Victim Relief appeal uphold / overturn
 - Victim Relief payout cancellation
 - Victim Relief module pause / unpause
+- Protocol DAO control activation
+- Protocol global Security unpause
 - Scam Registry publish / remove / appeal
 - Contributor add / remove / update role / milestone / payout approval
 - Protocol parameter update / upgrade / emergency action
@@ -182,6 +184,15 @@ Stage 6B-1 adds Victim Relief foundation accounts:
 The Victim Relief governance actions remain future execution actions. Stage 6B-1 does not approve claims, reject claims, transfer relief USDC, create payout requests, or connect cases to DAO decisions.
 
 Stage 6B-2 implements `VictimReliefApproveCompensation` and `VictimReliefRejectClaim`. Stage 6B-3 implements `VictimReliefUpholdAppeal` and `VictimReliefOverturnAppeal`. None of these Victim Relief governance paths transfers USDC; Stage 6B-4 must add payout execution.
+
+Stage 6B-4B-4C-B2 appends two protocol-level authority actions:
+
+- `ProtocolActivateDaoControl`
+- `ProtocolUnpauseSecurity`
+
+Both map to the `Protocol` module and the `Emergency` governance proposal category. `ProtocolActivateDaoControl` targets `ProtocolAuthorityControlV1` and switches the sidecar from Bootstrap to DaoControlled. `ProtocolUnpauseSecurity` targets `GovernanceConfigV1` and is the only DAO-controlled recovery path that can unpause global Security while normal queue execution is paused.
+
+These actions do not create a universal DAO signer, do not migrate program upgrade authority, and do not authorize arbitrary execution.
 
 ## 8. Typed Proposal Action Binding
 

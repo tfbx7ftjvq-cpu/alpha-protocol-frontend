@@ -172,7 +172,7 @@ The emergency guardian is pause-only.
 
 Vault authority PDA does not participate in pause lifecycle.
 
-The existing Security global unpause authority remains unchanged and is still a Mainnet blocker until DAO-controlled authority migration is complete.
+Phase 2E-6B-4B-4C-B2 adds `ProtocolAuthorityControlV1` and the DAO-controlled `ProtocolUnpauseSecurity` recovery path for Security global unpause. Program upgrade authority, Treasury / Green Label / Staking authorities, and Devnet strict E2E still remain outside this module-pause stage.
 
 ## Compatibility
 
@@ -196,7 +196,7 @@ Existing enums are append-only. No generated IDL is committed by this stage.
 
 This stage does not implement:
 
-- global Security unpause authority migration
+- full protocol authority migration beyond Security global unpause
 - program upgrade authority migration
 - Treasury / Green Label / Staking pause
 - generic pause setter

@@ -258,3 +258,18 @@ Phase 2E-6B-4B-4C-B1 consumes the same `VictimRelief` registry for DAO-controlle
 The canonical target is `VictimReliefConfigV1`. The strict wrappers validate that the registry is enabled, bound to the current Alpha Protocol program id, and tied to the same Security governance config before trusting the adapter, proposal decision, and execution queue.
 
 Guardian emergency pause does not use the registry because it is an immediate pause-only emergency path. Guardian unpause is not implemented. DAO pause/unpause writes `VictimReliefPauseExecutionRecordV1` and transfers no USDC.
+
+## Stage 6B-4B-4C-B2 Protocol Authority Usage
+
+Phase 2E-6B-4B-4C-B2 consumes the `Protocol` module registry for protocol-level authority hardening:
+
+- `ProtocolActivateDaoControl`
+- `ProtocolUnpauseSecurity`
+
+`ProtocolActivateDaoControl` targets `ProtocolAuthorityControlV1` and switches the protocol authority sidecar from `Bootstrap` to `DaoControlled`.
+
+`ProtocolUnpauseSecurity` targets `GovernanceConfigV1` and is the dedicated DAO recovery path for global Security unpause after normal queue execution is blocked by `GovernanceConfigV1.is_paused`.
+
+Both wrappers validate that the `Protocol` registry is enabled, bound to the current Alpha Protocol program id, and tied to the same Security governance config before trusting the adapter, proposal decision, and execution queue.
+
+This registry usage does not migrate program upgrade authority, Treasury authority, Green Label authority, Staking authority, or vault authority.

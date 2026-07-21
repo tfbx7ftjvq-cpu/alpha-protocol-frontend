@@ -298,6 +298,26 @@ pub mod my_first_solana_program {
         )
     }
 
+    pub fn initialize_protocol_authority_control_v1(
+        ctx: Context<InitializeProtocolAuthorityControlV1>,
+    ) -> Result<()> {
+        instructions::protocol_authority_control_v1::initialize_protocol_authority_control_v1_handler(ctx)
+    }
+
+    pub fn execute_activate_protocol_dao_control_v1(
+        ctx: Context<ExecuteActivateProtocolDaoControlV1>,
+    ) -> Result<()> {
+        instructions::protocol_authority_control_v1::execute_activate_protocol_dao_control_v1_handler(ctx)
+    }
+
+    pub fn execute_protocol_unpause_security_v1(
+        ctx: Context<ExecuteProtocolUnpauseSecurityV1>,
+    ) -> Result<()> {
+        instructions::protocol_authority_control_v1::execute_protocol_unpause_security_v1_handler(
+            ctx,
+        )
+    }
+
     pub fn initialize_governance_proposal_v1(
         ctx: Context<InitializeGovernanceProposalV1>,
         proposal_id: u64,

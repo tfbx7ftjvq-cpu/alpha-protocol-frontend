@@ -255,6 +255,8 @@ pub enum ProposalType {
     VictimReliefCancelPayout,
     VictimReliefPause,
     VictimReliefUnpause,
+    ProtocolActivateDaoControl,
+    ProtocolUnpauseSecurity,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -306,6 +308,8 @@ pub enum ActionType {
     VictimReliefCancelPayout,
     VictimReliefPause,
     VictimReliefUnpause,
+    ProtocolActivateDaoControl,
+    ProtocolUnpauseSecurity,
 }
 
 #[account]
@@ -481,6 +485,8 @@ pub enum GovernanceActionTypeV1 {
     VictimReliefCancelPayout,
     VictimReliefPause,
     VictimReliefUnpause,
+    ProtocolActivateDaoControl,
+    ProtocolUnpauseSecurity,
 }
 
 /// Stable identifier for the protocol module targeted by a governance action.
@@ -495,6 +501,111 @@ pub enum ProtocolModuleIdV1 {
     ScamRegistry,
     Contributor,
     Protocol,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProtocolAuthorityModeV1 {
+    Bootstrap,
+    DaoControlled,
+}
+
+#[account]
+pub struct ProtocolAuthorityControlV1 {
+    pub governance_config: Pubkey,
+    pub mode: ProtocolAuthorityModeV1,
+    pub bootstrap_authority: Pubkey,
+    pub emergency_guardian: Pubkey,
+    pub activation_governance_proposal: Pubkey,
+    pub activation_proposal_decision: Pubkey,
+    pub activation_execution_queue_item: Pubkey,
+    pub activated_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+    pub reserved: [u8; 64],
+}
+
+impl ProtocolAuthorityControlV1 {
+    pub const INIT_SPACE: usize = (32 * 6) + 1 + 8 + 2 + 1 + 64;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProtocolActivateDaoControlParametersV1 {
+    pub schema_version: u16,
+    pub authority_control: Pubkey,
+    pub governance_config: Pubkey,
+    pub expected_mode: ProtocolAuthorityModeV1,
+    pub next_mode: ProtocolAuthorityModeV1,
+    pub current_authority: Pubkey,
+    pub emergency_guardian: Pubkey,
+    pub governance_proposal: Pubkey,
+    pub governance_proposal_action: Pubkey,
+    pub proposal_decision: Pubkey,
+    pub execution_queue_item: Pubkey,
+    pub action_type: GovernanceActionTypeV1,
+}
+
+#[account]
+pub struct ProtocolDaoControlActivationRecordV1 {
+    pub authority_control: Pubkey,
+    pub governance_config: Pubkey,
+    pub governance_proposal: Pubkey,
+    pub proposal_decision: Pubkey,
+    pub execution_queue_item: Pubkey,
+    pub governance_proposal_action: Pubkey,
+    pub current_authority: Pubkey,
+    pub emergency_guardian: Pubkey,
+    pub mode_before: ProtocolAuthorityModeV1,
+    pub mode_after: ProtocolAuthorityModeV1,
+    pub parameters_hash: [u8; 32],
+    pub canonical_governance_payload_hash: [u8; 32],
+    pub executor: Pubkey,
+    pub executed_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+    pub reserved: [u8; 64],
+}
+
+impl ProtocolDaoControlActivationRecordV1 {
+    pub const INIT_SPACE: usize = (32 * 9) + 2 + (32 * 2) + 8 + 2 + 1 + 64;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProtocolUnpauseSecurityParametersV1 {
+    pub schema_version: u16,
+    pub authority_control: Pubkey,
+    pub governance_config: Pubkey,
+    pub expected_mode: ProtocolAuthorityModeV1,
+    pub expected_paused: bool,
+    pub next_paused: bool,
+    pub action_type: GovernanceActionTypeV1,
+    pub governance_proposal: Pubkey,
+    pub governance_proposal_action: Pubkey,
+    pub proposal_decision: Pubkey,
+    pub execution_queue_item: Pubkey,
+    pub proposal_id: u64,
+}
+
+#[account]
+pub struct ProtocolSecurityUnpauseExecutionRecordV1 {
+    pub authority_control: Pubkey,
+    pub governance_config: Pubkey,
+    pub governance_proposal: Pubkey,
+    pub proposal_decision: Pubkey,
+    pub execution_queue_item: Pubkey,
+    pub governance_proposal_action: Pubkey,
+    pub paused_before: bool,
+    pub paused_after: bool,
+    pub parameters_hash: [u8; 32],
+    pub canonical_governance_payload_hash: [u8; 32],
+    pub executor: Pubkey,
+    pub executed_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+    pub reserved: [u8; 64],
+}
+
+impl ProtocolSecurityUnpauseExecutionRecordV1 {
+    pub const INIT_SPACE: usize = (32 * 7) + 2 + (32 * 2) + 8 + 2 + 1 + 64;
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -1718,6 +1829,30 @@ mod tests {
         let minimum = 32 + 1 + 1 + 32 + 1 + 2 + 8 + 8 + 1;
         assert_eq!(ProtocolModuleRegistryV1::INIT_SPACE, minimum);
         assert_eq!(ProtocolModuleRegistryV1::INIT_SPACE, 86);
+    }
+
+    #[test]
+    fn protocol_authority_control_space_is_exact() {
+        let minimum = (32 * 6) + 1 + 8 + 2 + 1 + 64;
+        assert_eq!(ProtocolAuthorityControlV1::INIT_SPACE, minimum);
+        assert_eq!(ProtocolAuthorityControlV1::INIT_SPACE, 268);
+    }
+
+    #[test]
+    fn protocol_dao_control_activation_record_space_is_exact() {
+        let minimum = (32 * 9) + 2 + (32 * 2) + 8 + 2 + 1 + 64;
+        assert_eq!(ProtocolDaoControlActivationRecordV1::INIT_SPACE, minimum);
+        assert_eq!(ProtocolDaoControlActivationRecordV1::INIT_SPACE, 429);
+    }
+
+    #[test]
+    fn protocol_security_unpause_execution_record_space_is_exact() {
+        let minimum = (32 * 7) + 2 + (32 * 2) + 8 + 2 + 1 + 64;
+        assert_eq!(
+            ProtocolSecurityUnpauseExecutionRecordV1::INIT_SPACE,
+            minimum
+        );
+        assert_eq!(ProtocolSecurityUnpauseExecutionRecordV1::INIT_SPACE, 365);
     }
 
     #[test]

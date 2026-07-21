@@ -52,7 +52,19 @@ Victim Relief now has module-level pause lifecycle:
 - Module pause blocks Victim Relief submissions, evidence changes, decisions, appeals, and payouts.
 - Already-executed strict payout cancellation remains allowed while paused because it transfers no USDC and reduces unpaid-request risk.
 
-This narrows Victim Relief operational risk, but it does not solve Security global unpause authority migration, Devnet strict E2E, liquidity policy, recipient migration, reservation / FIFO, or Mainnet readiness. Token launch remains NO-GO.
+This narrows Victim Relief operational risk, but it does not solve full protocol authority migration, Devnet strict E2E, liquidity policy, recipient migration, reservation / FIFO, or Mainnet readiness. Token launch remains NO-GO.
+
+## Protocol Authority Hardening Update
+
+Phase 2E-6B-4B-4C-B2 adds the first protocol authority-control sidecar for Security global pause recovery:
+
+- `ProtocolAuthorityControlV1` binds the Security `GovernanceConfigV1`, bootstrap authority, emergency guardian, current authority mode, and DAO activation references.
+- `ProtocolActivateDaoControl` switches the sidecar one way from `Bootstrap` to `DaoControlled` after a passed DAO proposal, Protocol module registry validation, adapter-created approved Security decision, and executed queue.
+- `ProtocolUnpauseSecurity` is the dedicated DAO recovery path for global Security unpause when normal queue execution is blocked by `GovernanceConfigV1.is_paused`.
+- In `DaoControlled`, legacy authority paths for Security decision creation, queue creation, and global unpause fail closed.
+- The emergency guardian remains risk-reducing only and cannot global-unpause, activate DAO control, transfer funds, or unpause Victim Relief.
+
+This narrows the Security global pause recovery gap. It does not migrate program upgrade authority, Treasury / Green Label / Staking authorities, vault authority, or frontend/scripts. Mainnet remains NO-GO until Devnet strict E2E, final authority policy, audit, and operational readiness are complete.
 
 ## 1. Executive Summary
 

@@ -41,6 +41,7 @@ The Devnet report only records Devnet health. It is not Mainnet approval. Before
 - Victim Relief appeal uphold creates no payout; appeal overturn is payable only through `execute_victim_relief_overturn_payout_v1` and cannot be treated as paid from queue execution alone.
 - Victim Relief payout cancellation exists only for approved-but-unpaid requests through strict DAO/Security governance; cancellation is not a guardian shortcut, recipient migration, or USDC transfer.
 - Victim Relief module pause exists separately from Security global pause. Guardian emergency module pause is pause-only; DAO + Security module unpause requires the strict governance chain and is blocked while Security global pause is active.
+- Protocol authority control exists as `ProtocolAuthorityControlV1`: Bootstrap mode preserves setup compatibility, DaoControlled mode fail-closes legacy Security authority decision / queue / global unpause paths, and `ProtocolUnpauseSecurity` is the dedicated DAO recovery path for global Security unpause.
 
 ## 5. Go/No-Go Decision Table
 
@@ -80,6 +81,7 @@ Any one of the following means NO-GO:
 - Victim Relief relief-vault payout transfer / receipt path is missing for any payout origin that public messaging claims is paid live.
 - Victim Relief payout cancellation, appeal cancel / expiry, or payout completion is claimed live beyond the implemented strict paths.
 - Victim Relief or Security pause / unpause authority is presented as DAO-controlled before authority migration and Devnet strict E2E prove that path.
+- Protocol authority control sidecar, activation receipt, global unpause receipt, and legacy authority fail-close behavior are not verified on Devnet.
 
 ## 7. Manual Review Required
 
@@ -89,6 +91,7 @@ The following items must be manually confirmed before any Mainnet GO decision:
 - `GreenLabelConfig` authority.
 - Security governance authority.
 - Emergency guardian is pause-only.
+- `ProtocolAuthorityControlV1` mode, bootstrap authority, emergency guardian, activation receipt, and global unpause receipt model.
 - Victim Relief guardian can module-pause only and cannot module-unpause.
 - Victim Relief DAO module pause/unpause receipt and Security queue linkage.
 - Treasury vault authority is the expected PDA or governance-controlled authority.
@@ -295,13 +298,23 @@ Manual review notes:
 - Stage 6B-4B-4B adds `execute_cancel_original_victim_relief_payout_v1` and `execute_cancel_overturn_victim_relief_payout_v1` for strict governance cancellation of approved-but-unpaid requests. Cancellation creates an immutable receipt, marks the request and case `Cancelled`, and does not transfer USDC or mutate Treasury revenue accounting.
 - Stage 6B-4B-4C-B1 adds module-level pause governance: `VictimReliefPause`, `VictimReliefUnpause`, guardian emergency pause-only, strict DAO + Security pause/unpause wrappers, and immutable `VictimReliefPauseExecutionRecordV1`.
 - Module pause blocks Victim Relief submissions, evidence changes, decisions, appeals, and payout transfer wrappers. Already-executed strict payout cancellation remains allowed while paused because it transfers no USDC and closes an unpaid request.
-- Security global pause and Victim Relief module pause are distinct. Global unpause still depends on existing authority control and remains a Mainnet BLOCKER until migration is reviewed.
+- Security global pause and Victim Relief module pause are distinct. Stage 6B-4B-4C-B2 adds `ProtocolAuthorityControlV1`, one-way `Bootstrap -> DaoControlled`, legacy authority fail-close for Security decision / queue / global unpause paths, and DAO-controlled `ProtocolUnpauseSecurity` recovery.
 - `PayoutQueued`, `PayoutRequest Approved`, and `Queue Executed` must not be presented as funds paid unless the relevant strict payout wrapper has executed and written `ReliefPayoutExecutionRecordV1`.
 - Original approve and appeal overturn use separate strict payout wrappers; no generic payout path exists.
 - Appeal cancel / expiry is not implemented; unresolved appeals can remain `AppealPending`.
 - DAO decisions are not legal judgments, insurance determinations, credit ratings, or investment advice.
 - Token launch and Mainnet production remain NO-GO until Victim Relief Devnet strict E2E, payout/cancellation policy review, authority migration, sanity checks, and final build/test are complete.
 
-## 23. Current Conclusion
+## 23. Protocol Authority Hardening
+
+- Review `docs/protocol-authority-hardening-and-dao-global-unpause-v1.md` before any Mainnet authority readiness decision.
+- `ProtocolActivateDaoControl` and `ProtocolUnpauseSecurity` are append-only typed governance actions mapped to the `Protocol` module and `Emergency` governance category.
+- `ProtocolAuthorityControlV1` is a sidecar; it does not modify `GovernanceConfigV1` layout and does not migrate program upgrade authority.
+- In `Bootstrap`, legacy Security authority decision / queue / global unpause paths remain available for setup but require the sidecar.
+- In `DaoControlled`, those legacy authority paths fail closed.
+- `ProtocolUnpauseSecurity` can recover from global Security pause through a strict DAO + registry + adapter + approved decision + timelocked queue path.
+- Mainnet remains NO-GO until Devnet strict E2E proves activation, global pause, DAO unpause recovery, and legacy fail-close behavior.
+
+## 24. Current Conclusion
 
 NO-GO for Mainnet production until Mainnet parameters, authorities, vaults, staking pool, and mainnet sanity check are completed and reviewed.
