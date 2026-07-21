@@ -108,6 +108,8 @@ Payout is not a protocol revenue reversal.
 
 If paused, underfunded, or the recipient token account is invalid, execution fails before state changes. The request remains `Approved`, the case remains `PayoutQueued`, the appeal remains `Overturned`, and the payout can be retried after the blocking condition is fixed.
 
+Stage 6B-4B-4C-B1 adds governed module pause lifecycle in [victim-relief-module-pause-governance-v1.md](victim-relief-module-pause-governance-v1.md). Module pause blocks this appeal overturn payout wrapper before token transfer. Guardian can pause only; DAO + Security can pause or unpause through distinct typed actions; module unpause is blocked while Security global pause is active.
+
 The original approve payout wrapper remains separate and accepts only `OriginalApprove` / `VictimReliefApproveCompensation`. The appeal wrapper accepts only `AppealOverturn` / `VictimReliefOverturnAppeal`. There is no generic payout wrapper.
 
 Local tests are not Devnet or Mainnet verification. Mainnet production and token launch remain NO-GO.

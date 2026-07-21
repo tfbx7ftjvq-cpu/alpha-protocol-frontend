@@ -11,8 +11,8 @@ use crate::constants::{
     VAULT_AUTHORITY_V2_SEED, VICTIM_RELIEF_APPEAL_DECISION_EXECUTION_RECORD_V1_SEED,
     VICTIM_RELIEF_APPEAL_V1_SEED, VICTIM_RELIEF_CASE_V1_SEED, VICTIM_RELIEF_CLAIMANT_STATE_V1_SEED,
     VICTIM_RELIEF_CONFIG_V1_SEED, VICTIM_RELIEF_DECISION_EXECUTION_RECORD_V1_SEED,
-    VICTIM_RELIEF_EVIDENCE_SNAPSHOT_V1_SEED, VICTIM_RELIEF_POLICY_V1_SEED,
-    VICTIM_RELIEF_POLICY_VERSION_V1, VICTIM_RELIEF_SCHEMA_VERSION_V1,
+    VICTIM_RELIEF_EVIDENCE_SNAPSHOT_V1_SEED, VICTIM_RELIEF_PAUSE_EXECUTION_RECORD_V1_SEED,
+    VICTIM_RELIEF_POLICY_V1_SEED, VICTIM_RELIEF_POLICY_VERSION_V1, VICTIM_RELIEF_SCHEMA_VERSION_V1,
 };
 use crate::error::CustomError;
 use crate::instructions::contributor_v1::hash_contributor_payload;
@@ -36,7 +36,8 @@ use crate::state::{
     VictimReliefCaseStatusV1, VictimReliefCaseV1, VictimReliefClaimantStateV1,
     VictimReliefConfigV1, VictimReliefDecisionExecutionRecordV1,
     VictimReliefDecisionExecutionTypeV1, VictimReliefDecisionParametersV1,
-    VictimReliefEvidenceSnapshotV1, VictimReliefPayoutCancellationParametersV1,
+    VictimReliefEvidenceSnapshotV1, VictimReliefPauseExecutionRecordV1,
+    VictimReliefPauseParametersV1, VictimReliefPayoutCancellationParametersV1,
     VictimReliefPayoutCancellationRecordV1, VictimReliefPayoutOriginV1,
     VictimReliefPayoutParametersV1, VictimReliefPayoutStatusV1, VictimReliefPolicyV1,
 };
@@ -50,6 +51,8 @@ pub const VICTIM_RELIEF_PAYOUT_PARAMETERS_V1_DOMAIN_BYTES: [u8; 40] =
     *b"alpha_victim_relief_payout_parameters_v1";
 pub const VICTIM_RELIEF_PAYOUT_CANCELLATION_PARAMETERS_V1_DOMAIN_BYTES: [u8; 53] =
     *b"alpha_victim_relief_payout_cancellation_parameters_v1";
+pub const VICTIM_RELIEF_PAUSE_PARAMETERS_V1_DOMAIN_BYTES: [u8; 39] =
+    *b"alpha_victim_relief_pause_parameters_v1";
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct VictimReliefDecisionParametersHashEnvelopeV1 {
@@ -73,6 +76,20 @@ pub struct VictimReliefPayoutParametersHashEnvelopeV1 {
 pub struct VictimReliefPayoutCancellationParametersHashEnvelopeV1 {
     pub domain_separator: [u8; 53],
     pub parameters: VictimReliefPayoutCancellationParametersV1,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VictimReliefPauseParametersHashEnvelopeV1 {
+    pub domain_separator: [u8; 39],
+    pub parameters: VictimReliefPauseParametersV1,
+}
+
+#[event]
+pub struct VictimReliefGuardianPausedV1 {
+    pub victim_relief_config: Pubkey,
+    pub security_governance_config: Pubkey,
+    pub guardian: Pubkey,
+    pub paused_at: i64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -120,6 +137,171 @@ pub struct InitializeVictimReliefConfigV1<'info> {
     pub payer: Signer<'info>,
 
     pub bootstrap_authority: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct GuardianPauseVictimReliefV1<'info> {
+    #[account(seeds = [GOVERNANCE_CONFIG_V1_SEED], bump = security_governance_config.bump)]
+    pub security_governance_config: Box<Account<'info, GovernanceConfigV1>>,
+
+    #[account(
+        mut,
+        seeds = [VICTIM_RELIEF_CONFIG_V1_SEED],
+        bump = victim_relief_config.bump
+    )]
+    pub victim_relief_config: Box<Account<'info, VictimReliefConfigV1>>,
+
+    pub emergency_guardian: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct ExecutePauseVictimReliefV1<'info> {
+    #[account(seeds = [GOVERNANCE_CONFIG_V1_SEED], bump = security_governance_config.bump)]
+    pub security_governance_config: Box<Account<'info, GovernanceConfigV1>>,
+
+    #[account(
+        seeds = [
+            PROTOCOL_MODULE_REGISTRY_V1_SEED,
+            &[protocol_module_stable_code_v1(ProtocolModuleIdV1::VictimRelief)]
+        ],
+        bump = protocol_module_registry.bump
+    )]
+    pub protocol_module_registry: Box<Account<'info, ProtocolModuleRegistryV1>>,
+
+    #[account(
+        seeds = [GOVERNANCE_PROPOSAL_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
+        bump = governance_proposal.bump
+    )]
+    pub governance_proposal: Box<Account<'info, GovernanceProposalV1>>,
+
+    #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_proposal_action.bump
+    )]
+    pub governance_proposal_action: Box<Account<'info, GovernanceProposalActionV1>>,
+
+    #[account(
+        seeds = [
+            UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_decision_adapter.bump
+    )]
+    pub governance_decision_adapter: Box<Account<'info, UniversalGovernanceDecisionAdapterV1>>,
+
+    #[account(
+        seeds = [PROPOSAL_DECISION_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
+        bump = proposal_decision.bump
+    )]
+    pub proposal_decision: Box<Account<'info, ProposalDecisionV1>>,
+
+    #[account(
+        seeds = [EXECUTION_QUEUE_ITEM_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
+        bump = execution_queue_item.bump
+    )]
+    pub execution_queue_item: Box<Account<'info, ExecutionQueueItemV1>>,
+
+    #[account(
+        mut,
+        seeds = [VICTIM_RELIEF_CONFIG_V1_SEED],
+        bump = victim_relief_config.bump
+    )]
+    pub victim_relief_config: Box<Account<'info, VictimReliefConfigV1>>,
+
+    #[account(
+        init,
+        payer = executor,
+        space = 8 + VictimReliefPauseExecutionRecordV1::INIT_SPACE,
+        seeds = [
+            VICTIM_RELIEF_PAUSE_EXECUTION_RECORD_V1_SEED,
+            execution_queue_item.key().as_ref()
+        ],
+        bump
+    )]
+    pub pause_execution_record: Box<Account<'info, VictimReliefPauseExecutionRecordV1>>,
+
+    #[account(mut)]
+    pub executor: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ExecuteUnpauseVictimReliefV1<'info> {
+    #[account(seeds = [GOVERNANCE_CONFIG_V1_SEED], bump = security_governance_config.bump)]
+    pub security_governance_config: Box<Account<'info, GovernanceConfigV1>>,
+
+    #[account(
+        seeds = [
+            PROTOCOL_MODULE_REGISTRY_V1_SEED,
+            &[protocol_module_stable_code_v1(ProtocolModuleIdV1::VictimRelief)]
+        ],
+        bump = protocol_module_registry.bump
+    )]
+    pub protocol_module_registry: Box<Account<'info, ProtocolModuleRegistryV1>>,
+
+    #[account(
+        seeds = [GOVERNANCE_PROPOSAL_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
+        bump = governance_proposal.bump
+    )]
+    pub governance_proposal: Box<Account<'info, GovernanceProposalV1>>,
+
+    #[account(
+        seeds = [
+            GOVERNANCE_PROPOSAL_ACTION_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_proposal_action.bump
+    )]
+    pub governance_proposal_action: Box<Account<'info, GovernanceProposalActionV1>>,
+
+    #[account(
+        seeds = [
+            UNIVERSAL_GOVERNANCE_DECISION_ADAPTER_V1_SEED,
+            governance_proposal.key().as_ref()
+        ],
+        bump = governance_decision_adapter.bump
+    )]
+    pub governance_decision_adapter: Box<Account<'info, UniversalGovernanceDecisionAdapterV1>>,
+
+    #[account(
+        seeds = [PROPOSAL_DECISION_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
+        bump = proposal_decision.bump
+    )]
+    pub proposal_decision: Box<Account<'info, ProposalDecisionV1>>,
+
+    #[account(
+        seeds = [EXECUTION_QUEUE_ITEM_V1_SEED, &governance_proposal.proposal_id.to_le_bytes()],
+        bump = execution_queue_item.bump
+    )]
+    pub execution_queue_item: Box<Account<'info, ExecutionQueueItemV1>>,
+
+    #[account(
+        mut,
+        seeds = [VICTIM_RELIEF_CONFIG_V1_SEED],
+        bump = victim_relief_config.bump
+    )]
+    pub victim_relief_config: Box<Account<'info, VictimReliefConfigV1>>,
+
+    #[account(
+        init,
+        payer = executor,
+        space = 8 + VictimReliefPauseExecutionRecordV1::INIT_SPACE,
+        seeds = [
+            VICTIM_RELIEF_PAUSE_EXECUTION_RECORD_V1_SEED,
+            execution_queue_item.key().as_ref()
+        ],
+        bump
+    )]
+    pub pause_execution_record: Box<Account<'info, VictimReliefPauseExecutionRecordV1>>,
+
+    #[account(mut)]
+    pub executor: Signer<'info>,
 
     pub system_program: Program<'info, System>,
 }
@@ -1576,6 +1758,112 @@ pub fn initialize_victim_relief_config_v1_handler(
     )
 }
 
+pub fn guardian_pause_victim_relief_v1_handler(
+    ctx: Context<GuardianPauseVictimReliefV1>,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    record_victim_relief_guardian_pause_state_v1(
+        &ctx.accounts.security_governance_config,
+        ctx.accounts.security_governance_config.key(),
+        &mut ctx.accounts.victim_relief_config,
+        ctx.accounts.emergency_guardian.key(),
+    )?;
+    emit!(VictimReliefGuardianPausedV1 {
+        victim_relief_config: ctx.accounts.victim_relief_config.key(),
+        security_governance_config: ctx.accounts.security_governance_config.key(),
+        guardian: ctx.accounts.emergency_guardian.key(),
+        paused_at: now,
+    });
+
+    Ok(())
+}
+
+pub fn execute_pause_victim_relief_v1_handler(
+    ctx: Context<ExecutePauseVictimReliefV1>,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let (parameters, parameters_hash, canonical_governance_payload_hash) =
+        validate_victim_relief_pause_governance_v1(
+            &ctx.accounts.security_governance_config,
+            ctx.accounts.security_governance_config.key(),
+            &ctx.accounts.protocol_module_registry,
+            ctx.accounts.protocol_module_registry.key(),
+            &ctx.accounts.governance_proposal,
+            ctx.accounts.governance_proposal.key(),
+            &ctx.accounts.governance_proposal_action,
+            ctx.accounts.governance_proposal_action.key(),
+            &ctx.accounts.governance_decision_adapter,
+            &ctx.accounts.proposal_decision,
+            ctx.accounts.proposal_decision.key(),
+            &ctx.accounts.execution_queue_item,
+            ctx.accounts.execution_queue_item.key(),
+            ctx.accounts.victim_relief_config.key(),
+            &ctx.accounts.victim_relief_config,
+            ctx.accounts.pause_execution_record.key(),
+            &ctx.accounts.pause_execution_record,
+            GovernanceActionTypeV1::VictimReliefPause,
+            false,
+            true,
+            false,
+        )?;
+
+    ctx.accounts.victim_relief_config.paused = true;
+    record_victim_relief_pause_execution_v1(
+        &mut ctx.accounts.pause_execution_record,
+        parameters,
+        ctx.accounts.proposal_decision.key(),
+        ctx.accounts.execution_queue_item.key(),
+        parameters_hash,
+        canonical_governance_payload_hash,
+        ctx.accounts.executor.key(),
+        now,
+        ctx.bumps.pause_execution_record,
+    )
+}
+
+pub fn execute_unpause_victim_relief_v1_handler(
+    ctx: Context<ExecuteUnpauseVictimReliefV1>,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let (parameters, parameters_hash, canonical_governance_payload_hash) =
+        validate_victim_relief_pause_governance_v1(
+            &ctx.accounts.security_governance_config,
+            ctx.accounts.security_governance_config.key(),
+            &ctx.accounts.protocol_module_registry,
+            ctx.accounts.protocol_module_registry.key(),
+            &ctx.accounts.governance_proposal,
+            ctx.accounts.governance_proposal.key(),
+            &ctx.accounts.governance_proposal_action,
+            ctx.accounts.governance_proposal_action.key(),
+            &ctx.accounts.governance_decision_adapter,
+            &ctx.accounts.proposal_decision,
+            ctx.accounts.proposal_decision.key(),
+            &ctx.accounts.execution_queue_item,
+            ctx.accounts.execution_queue_item.key(),
+            ctx.accounts.victim_relief_config.key(),
+            &ctx.accounts.victim_relief_config,
+            ctx.accounts.pause_execution_record.key(),
+            &ctx.accounts.pause_execution_record,
+            GovernanceActionTypeV1::VictimReliefUnpause,
+            true,
+            false,
+            true,
+        )?;
+
+    ctx.accounts.victim_relief_config.paused = false;
+    record_victim_relief_pause_execution_v1(
+        &mut ctx.accounts.pause_execution_record,
+        parameters,
+        ctx.accounts.proposal_decision.key(),
+        ctx.accounts.execution_queue_item.key(),
+        parameters_hash,
+        canonical_governance_payload_hash,
+        ctx.accounts.executor.key(),
+        now,
+        ctx.bumps.pause_execution_record,
+    )
+}
+
 pub fn initialize_victim_relief_policy_v1_handler(
     ctx: Context<InitializeVictimReliefPolicyV1>,
     min_claim_amount_usdc: u64,
@@ -2614,6 +2902,31 @@ pub fn record_victim_relief_config_init_v1(
     config.bump = bump;
     config.reserved = [0; 32];
 
+    Ok(())
+}
+
+fn record_victim_relief_guardian_pause_state_v1(
+    security_governance_config: &GovernanceConfigV1,
+    security_governance_config_key: Pubkey,
+    victim_relief_config: &mut VictimReliefConfigV1,
+    emergency_guardian: Pubkey,
+) -> Result<()> {
+    require_keys_eq!(
+        emergency_guardian,
+        security_governance_config.emergency_guardian,
+        CustomError::UnauthorizedEmergencyGuardian
+    );
+    require_keys_eq!(
+        victim_relief_config.security_governance_config,
+        security_governance_config_key,
+        CustomError::ProtocolModuleGovernanceConfigMismatch
+    );
+    require!(
+        !victim_relief_config.paused,
+        CustomError::VictimReliefPauseStatusMismatch
+    );
+
+    victim_relief_config.paused = true;
     Ok(())
 }
 
@@ -4586,6 +4899,46 @@ pub fn hash_victim_relief_payout_parameters_v1(
     })
 }
 
+pub fn hash_victim_relief_pause_parameters_v1(
+    parameters: &VictimReliefPauseParametersV1,
+) -> Result<[u8; 32]> {
+    require!(
+        parameters.schema_version == VICTIM_RELIEF_DECISION_SCHEMA_VERSION,
+        CustomError::InvalidVictimReliefPauseSchema
+    );
+    require!(
+        matches!(
+            parameters.action_type,
+            GovernanceActionTypeV1::VictimReliefPause | GovernanceActionTypeV1::VictimReliefUnpause
+        ),
+        CustomError::VictimReliefPauseActionMismatch
+    );
+    match parameters.action_type {
+        GovernanceActionTypeV1::VictimReliefPause => require!(
+            !parameters.expected_paused && parameters.next_paused,
+            CustomError::VictimReliefPauseStatusMismatch
+        ),
+        GovernanceActionTypeV1::VictimReliefUnpause => require!(
+            parameters.expected_paused && !parameters.next_paused,
+            CustomError::VictimReliefPauseStatusMismatch
+        ),
+        _ => unreachable!(),
+    }
+    require!(
+        parameters.victim_relief_config != Pubkey::default()
+            && parameters.security_governance_config != Pubkey::default()
+            && parameters.governance_proposal != Pubkey::default()
+            && parameters.governance_proposal_action != Pubkey::default()
+            && parameters.proposal_id > 0,
+        CustomError::VictimReliefPauseParametersMismatch
+    );
+
+    hash_contributor_payload(&VictimReliefPauseParametersHashEnvelopeV1 {
+        domain_separator: VICTIM_RELIEF_PAUSE_PARAMETERS_V1_DOMAIN_BYTES,
+        parameters: *parameters,
+    })
+}
+
 fn validate_victim_relief_payout_origin_action_v1(
     origin: VictimReliefPayoutOriginV1,
     action: GovernanceActionTypeV1,
@@ -4716,6 +5069,32 @@ pub fn hash_victim_relief_payout_cancellation_parameters_v1(
         domain_separator: VICTIM_RELIEF_PAYOUT_CANCELLATION_PARAMETERS_V1_DOMAIN_BYTES,
         parameters: *parameters,
     })
+}
+
+#[allow(dead_code)]
+fn build_victim_relief_pause_parameters_v1(
+    victim_relief_config_key: Pubkey,
+    security_governance_config_key: Pubkey,
+    action_type: GovernanceActionTypeV1,
+    expected_paused: bool,
+    next_paused: bool,
+    governance_proposal_key: Pubkey,
+    governance_proposal_action_key: Pubkey,
+    proposal_id: u64,
+) -> Result<VictimReliefPauseParametersV1> {
+    let parameters = VictimReliefPauseParametersV1 {
+        schema_version: VICTIM_RELIEF_DECISION_SCHEMA_VERSION,
+        victim_relief_config: victim_relief_config_key,
+        security_governance_config: security_governance_config_key,
+        action_type,
+        expected_paused,
+        next_paused,
+        governance_proposal: governance_proposal_key,
+        governance_proposal_action: governance_proposal_action_key,
+        proposal_id,
+    };
+    hash_victim_relief_pause_parameters_v1(&parameters)?;
+    Ok(parameters)
 }
 
 #[allow(dead_code)]
@@ -5884,6 +6263,181 @@ fn validate_victim_relief_payout_cancellation_common_v1(
 
 #[allow(dead_code)]
 #[allow(clippy::too_many_arguments)]
+fn validate_victim_relief_pause_governance_v1(
+    security_governance_config: &GovernanceConfigV1,
+    security_governance_config_key: Pubkey,
+    protocol_module_registry: &ProtocolModuleRegistryV1,
+    protocol_module_registry_key: Pubkey,
+    governance_proposal: &GovernanceProposalV1,
+    governance_proposal_key: Pubkey,
+    governance_proposal_action: &GovernanceProposalActionV1,
+    governance_proposal_action_key: Pubkey,
+    governance_decision_adapter: &UniversalGovernanceDecisionAdapterV1,
+    proposal_decision: &ProposalDecisionV1,
+    proposal_decision_key: Pubkey,
+    execution_queue_item: &ExecutionQueueItemV1,
+    execution_queue_item_key: Pubkey,
+    victim_relief_config_key: Pubkey,
+    victim_relief_config: &VictimReliefConfigV1,
+    pause_receipt_key: Pubkey,
+    pause_receipt: &VictimReliefPauseExecutionRecordV1,
+    expected_action: GovernanceActionTypeV1,
+    expected_paused: bool,
+    next_paused: bool,
+    require_global_unpaused: bool,
+) -> Result<(VictimReliefPauseParametersV1, [u8; 32], [u8; 32])> {
+    require!(
+        matches!(
+            expected_action,
+            GovernanceActionTypeV1::VictimReliefPause | GovernanceActionTypeV1::VictimReliefUnpause
+        ),
+        CustomError::VictimReliefPauseActionMismatch
+    );
+    if require_global_unpaused {
+        require!(
+            !security_governance_config.is_paused,
+            CustomError::SecurityLayerPaused
+        );
+    }
+    require!(
+        victim_relief_config.paused == expected_paused,
+        CustomError::VictimReliefPauseStatusMismatch
+    );
+    require_keys_eq!(
+        victim_relief_config.security_governance_config,
+        security_governance_config_key,
+        CustomError::ProtocolModuleGovernanceConfigMismatch
+    );
+    require!(
+        victim_relief_config.schema_version == VICTIM_RELIEF_SCHEMA_VERSION_V1,
+        CustomError::InvalidVictimReliefConfig
+    );
+    require!(
+        governance_proposal.status == GovernanceProposalStatusV1::Passed,
+        CustomError::InvalidGovernanceProposal
+    );
+    validate_governance_proposal_action_v1(
+        governance_proposal,
+        governance_proposal_action,
+        governance_proposal_key,
+    )?;
+    require!(
+        governance_proposal_action.action_type == expected_action,
+        CustomError::VictimReliefPauseActionMismatch
+    );
+    require!(
+        governance_proposal_action.module_id == ProtocolModuleIdV1::VictimRelief,
+        CustomError::VictimReliefPauseActionMismatch
+    );
+    require_keys_eq!(
+        governance_proposal_action.target_program,
+        crate::ID,
+        CustomError::VictimReliefPauseTargetMismatch
+    );
+    require_keys_eq!(
+        governance_proposal_action.target_account,
+        victim_relief_config_key,
+        CustomError::VictimReliefPauseTargetMismatch
+    );
+    validate_protocol_module_registry_v1(
+        protocol_module_registry,
+        protocol_module_registry_key,
+        security_governance_config_key,
+        ProtocolModuleIdV1::VictimRelief,
+        crate::ID,
+    )?;
+
+    let parameters = build_victim_relief_pause_parameters_v1(
+        victim_relief_config_key,
+        security_governance_config_key,
+        expected_action,
+        expected_paused,
+        next_paused,
+        governance_proposal_key,
+        governance_proposal_action_key,
+        governance_proposal.proposal_id,
+    )?;
+    let parameters_hash = hash_victim_relief_pause_parameters_v1(&parameters)?;
+    require!(
+        governance_proposal_action.parameters_hash == parameters_hash,
+        CustomError::VictimReliefPauseParametersMismatch
+    );
+
+    let governance_payload = GovernancePayloadV1 {
+        schema_version: GOVERNANCE_PAYLOAD_V1_SCHEMA_VERSION,
+        action_type: governance_proposal_action.action_type,
+        module_id: governance_proposal_action.module_id,
+        target_program: governance_proposal_action.target_program,
+        target_account: governance_proposal_action.target_account,
+        parameters_hash: governance_proposal_action.parameters_hash,
+        evidence_hash: governance_proposal_action.evidence_hash,
+        created_at: governance_proposal_action.created_at,
+    };
+    let canonical_governance_payload_hash = hash_governance_payload_v1(&governance_payload)?;
+    require!(
+        canonical_governance_payload_hash == governance_proposal_action.canonical_payload_hash
+            && governance_proposal.payload_hash == canonical_governance_payload_hash,
+        CustomError::VictimReliefPauseParametersMismatch
+    );
+
+    let expected_security_action = map_governance_action_to_security_action(expected_action)?;
+    require!(
+        governance_decision_adapter.governance_proposal == governance_proposal_key
+            && governance_decision_adapter.proposal_decision == proposal_decision_key
+            && governance_decision_adapter.action_type == expected_security_action
+            && governance_decision_adapter.target_program == crate::ID
+            && governance_decision_adapter.target_account == victim_relief_config_key
+            && governance_decision_adapter.payload_hash == canonical_governance_payload_hash
+            && governance_decision_adapter.executed,
+        CustomError::InvalidGovernanceDecisionAdapter
+    );
+    require!(
+        proposal_decision.proposal_id == governance_proposal.proposal_id
+            && proposal_decision.proposer == governance_proposal.proposer
+            && proposal_decision.proposal_type
+                == security_proposal_type_for_action(expected_security_action)?
+            && proposal_decision.decision == ProposalDecision::Approved,
+        CustomError::ProposalNotApproved
+    );
+    require!(
+        execution_queue_item.proposal_id == governance_proposal.proposal_id
+            && execution_queue_item.proposer == governance_proposal.proposer
+            && execution_queue_item.action_type == expected_security_action
+            && execution_queue_item.target_program == crate::ID
+            && execution_queue_item.target_account == victim_relief_config_key
+            && execution_queue_item.decision == ProposalDecision::Approved
+            && execution_queue_item.status == ExecutionStatus::Executed
+            && execution_queue_item.payload_hash == canonical_governance_payload_hash
+            && execution_queue_item_key != Pubkey::default(),
+        CustomError::InvalidExecutionStatus
+    );
+
+    let (expected_receipt, _) = Pubkey::find_program_address(
+        &[
+            VICTIM_RELIEF_PAUSE_EXECUTION_RECORD_V1_SEED,
+            execution_queue_item_key.as_ref(),
+        ],
+        &crate::ID,
+    );
+    require_keys_eq!(
+        pause_receipt_key,
+        expected_receipt,
+        CustomError::VictimReliefPauseTargetMismatch
+    );
+    require!(
+        pause_receipt.victim_relief_config == Pubkey::default() && pause_receipt.bump == 0,
+        CustomError::VictimReliefPauseReceiptAlreadyExists
+    );
+
+    Ok((
+        parameters,
+        parameters_hash,
+        canonical_governance_payload_hash,
+    ))
+}
+
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
 fn validate_victim_relief_payout_cancellation_governance_v1(
     security_governance_config: &GovernanceConfigV1,
     security_governance_config_key: Pubkey,
@@ -6061,6 +6615,49 @@ fn validate_victim_relief_payout_cancellation_governance_v1(
 }
 
 #[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
+fn record_victim_relief_pause_execution_v1(
+    receipt: &mut VictimReliefPauseExecutionRecordV1,
+    parameters: VictimReliefPauseParametersV1,
+    proposal_decision_key: Pubkey,
+    execution_queue_item_key: Pubkey,
+    parameters_hash: [u8; 32],
+    canonical_governance_payload_hash: [u8; 32],
+    executor: Pubkey,
+    executed_at: i64,
+    bump: u8,
+) -> Result<()> {
+    require!(
+        receipt.victim_relief_config == Pubkey::default() && receipt.bump == 0,
+        CustomError::VictimReliefPauseReceiptAlreadyExists
+    );
+    require!(
+        parameters_hash == hash_victim_relief_pause_parameters_v1(&parameters)?
+            && parameters_hash != [0; 32]
+            && canonical_governance_payload_hash != [0; 32],
+        CustomError::VictimReliefPauseParametersMismatch
+    );
+    require!(executed_at > 0, CustomError::InvalidVictimReliefPauseSchema);
+
+    receipt.victim_relief_config = parameters.victim_relief_config;
+    receipt.security_governance_config = parameters.security_governance_config;
+    receipt.action_type = parameters.action_type;
+    receipt.paused_before = parameters.expected_paused;
+    receipt.paused_after = parameters.next_paused;
+    receipt.governance_proposal = parameters.governance_proposal;
+    receipt.proposal_decision = proposal_decision_key;
+    receipt.execution_queue_item = execution_queue_item_key;
+    receipt.governance_proposal_action = parameters.governance_proposal_action;
+    receipt.parameters_hash = parameters_hash;
+    receipt.canonical_governance_payload_hash = canonical_governance_payload_hash;
+    receipt.executor = executor;
+    receipt.executed_at = executed_at;
+    receipt.schema_version = VICTIM_RELIEF_DECISION_SCHEMA_VERSION;
+    receipt.bump = bump;
+    receipt.reserved = [0; 32];
+    Ok(())
+}
+
 fn record_victim_relief_payout_cancellation_receipt_v1(
     receipt: &mut VictimReliefPayoutCancellationRecordV1,
     parameters: VictimReliefPayoutCancellationParametersV1,
@@ -6823,6 +7420,27 @@ mod tests {
         }
     }
 
+    fn empty_pause_execution_record() -> VictimReliefPauseExecutionRecordV1 {
+        VictimReliefPauseExecutionRecordV1 {
+            victim_relief_config: Pubkey::default(),
+            security_governance_config: Pubkey::default(),
+            action_type: GovernanceActionTypeV1::VictimReliefPause,
+            paused_before: false,
+            paused_after: false,
+            governance_proposal: Pubkey::default(),
+            proposal_decision: Pubkey::default(),
+            execution_queue_item: Pubkey::default(),
+            governance_proposal_action: Pubkey::default(),
+            parameters_hash: [0; 32],
+            canonical_governance_payload_hash: [0; 32],
+            executor: Pubkey::default(),
+            executed_at: 0,
+            schema_version: 0,
+            bump: 0,
+            reserved: [0; 32],
+        }
+    }
+
     fn victim_relief_module_registry_fixture(
         security_config: Pubkey,
     ) -> (ProtocolModuleRegistryV1, Pubkey) {
@@ -6863,6 +7481,112 @@ mod tests {
         adapter: UniversalGovernanceDecisionAdapterV1,
         parameters_hash: [u8; 32],
         canonical_payload_hash: [u8; 32],
+    }
+
+    struct PauseGovernanceFixture {
+        governance_proposal_key: Pubkey,
+        governance_proposal: GovernanceProposalV1,
+        governance_proposal_action_key: Pubkey,
+        governance_proposal_action: GovernanceProposalActionV1,
+        proposal_decision_key: Pubkey,
+        proposal_decision: ProposalDecisionV1,
+        execution_queue_item_key: Pubkey,
+        execution_queue_item: ExecutionQueueItemV1,
+        adapter: UniversalGovernanceDecisionAdapterV1,
+        receipt_key: Pubkey,
+        receipt: VictimReliefPauseExecutionRecordV1,
+        parameters: VictimReliefPauseParametersV1,
+        parameters_hash: [u8; 32],
+        canonical_payload_hash: [u8; 32],
+    }
+
+    fn pause_governance_fixture(
+        action_type: GovernanceActionTypeV1,
+        config_key: Pubkey,
+        security_config_key: Pubkey,
+        expected_paused: bool,
+        next_paused: bool,
+    ) -> PauseGovernanceFixture {
+        let proposer = Pubkey::new_unique();
+        let proposal_id = 188;
+        let created_at = 7_000;
+        let governance_proposal_key = Pubkey::new_unique();
+        let governance_proposal_action_key = Pubkey::new_unique();
+        let proposal_decision_key = Pubkey::new_unique();
+        let execution_queue_item_key = Pubkey::new_unique();
+        let (
+            mut governance_proposal,
+            mut governance_proposal_action,
+            proposal_decision,
+            mut execution_queue_item,
+        ) = governance_accounts_fixture(action_type, config_key, proposer, proposal_id, created_at);
+        governance_proposal_action.governance_proposal = governance_proposal_key;
+
+        let parameters = build_victim_relief_pause_parameters_v1(
+            config_key,
+            security_config_key,
+            action_type,
+            expected_paused,
+            next_paused,
+            governance_proposal_key,
+            governance_proposal_action_key,
+            proposal_id,
+        )
+        .unwrap();
+        let parameters_hash = hash_victim_relief_pause_parameters_v1(&parameters).unwrap();
+        governance_proposal_action.parameters_hash = parameters_hash;
+
+        let payload = GovernancePayloadV1 {
+            schema_version: GOVERNANCE_PAYLOAD_V1_SCHEMA_VERSION,
+            action_type: governance_proposal_action.action_type,
+            module_id: governance_proposal_action.module_id,
+            target_program: governance_proposal_action.target_program,
+            target_account: governance_proposal_action.target_account,
+            parameters_hash: governance_proposal_action.parameters_hash,
+            evidence_hash: governance_proposal_action.evidence_hash,
+            created_at: governance_proposal_action.created_at,
+        };
+        let canonical_payload_hash = hash_governance_payload_v1(&payload).unwrap();
+        governance_proposal_action.canonical_payload_hash = canonical_payload_hash;
+        governance_proposal.payload_hash = canonical_payload_hash;
+        execution_queue_item.payload_hash = canonical_payload_hash;
+
+        let security_action = map_governance_action_to_security_action(action_type).unwrap();
+        let adapter = UniversalGovernanceDecisionAdapterV1 {
+            governance_proposal: governance_proposal_key,
+            proposal_decision: proposal_decision_key,
+            action_type: security_action,
+            target_program: crate::ID,
+            target_account: config_key,
+            payload_hash: canonical_payload_hash,
+            created_at,
+            executed: true,
+            bump: 5,
+        };
+        let (receipt_key, _) = Pubkey::find_program_address(
+            &[
+                VICTIM_RELIEF_PAUSE_EXECUTION_RECORD_V1_SEED,
+                execution_queue_item_key.as_ref(),
+            ],
+            &crate::ID,
+        );
+
+        PauseGovernanceFixture {
+            governance_proposal_key,
+            governance_proposal,
+            governance_proposal_action_key,
+            governance_proposal_action,
+            proposal_decision_key,
+            proposal_decision,
+            execution_queue_item_key,
+            execution_queue_item,
+            adapter,
+            receipt_key,
+            receipt: empty_pause_execution_record(),
+            parameters,
+            parameters_hash,
+            canonical_payload_hash,
+        }
     }
 
     fn cancellation_fixture_for_request(
@@ -10316,6 +11040,522 @@ mod tests {
             )
             .unwrap_err(),
             CustomError::VictimReliefPayoutStatusMismatch.into()
+        );
+    }
+
+    #[test]
+    fn pause_parameters_hash_binds_domain_action_config_state_and_governance() {
+        let config_key = Pubkey::new_unique();
+        let security_config_key = Pubkey::new_unique();
+        let proposal_key = Pubkey::new_unique();
+        let action_key = Pubkey::new_unique();
+        let params = build_victim_relief_pause_parameters_v1(
+            config_key,
+            security_config_key,
+            GovernanceActionTypeV1::VictimReliefPause,
+            false,
+            true,
+            proposal_key,
+            action_key,
+            7,
+        )
+        .unwrap();
+        let hash = hash_victim_relief_pause_parameters_v1(&params).unwrap();
+        assert_eq!(
+            hash_victim_relief_pause_parameters_v1(&params).unwrap(),
+            hash
+        );
+
+        let no_domain_hash = hash_contributor_payload(&params).unwrap();
+        assert_ne!(hash, no_domain_hash);
+
+        let mut changed = params;
+        changed.action_type = GovernanceActionTypeV1::VictimReliefUnpause;
+        changed.expected_paused = true;
+        changed.next_paused = false;
+        assert_ne!(
+            hash,
+            hash_victim_relief_pause_parameters_v1(&changed).unwrap()
+        );
+
+        let mut changed = params;
+        changed.victim_relief_config = Pubkey::new_unique();
+        assert_ne!(
+            hash,
+            hash_victim_relief_pause_parameters_v1(&changed).unwrap()
+        );
+
+        let mut changed = params;
+        changed.security_governance_config = Pubkey::new_unique();
+        assert_ne!(
+            hash,
+            hash_victim_relief_pause_parameters_v1(&changed).unwrap()
+        );
+
+        let mut changed = params;
+        changed.expected_paused = true;
+        assert_eq!(
+            hash_victim_relief_pause_parameters_v1(&changed).unwrap_err(),
+            CustomError::VictimReliefPauseStatusMismatch.into()
+        );
+
+        let mut changed = params;
+        changed.governance_proposal = Pubkey::new_unique();
+        assert_ne!(
+            hash,
+            hash_victim_relief_pause_parameters_v1(&changed).unwrap()
+        );
+
+        let mut changed = params;
+        changed.governance_proposal_action = Pubkey::new_unique();
+        assert_ne!(
+            hash,
+            hash_victim_relief_pause_parameters_v1(&changed).unwrap()
+        );
+    }
+
+    #[test]
+    fn guardian_pause_requires_emergency_guardian_and_allows_global_paused() {
+        let security_config_key = Pubkey::new_unique();
+        let mut security_config = security_config_fixture();
+        let policy_key = Pubkey::new_unique();
+        let mut config = config_fixture(policy_key);
+        config.security_governance_config = security_config_key;
+
+        record_victim_relief_guardian_pause_state_v1(
+            &security_config,
+            security_config_key,
+            &mut config,
+            security_config.emergency_guardian,
+        )
+        .unwrap();
+        assert!(config.paused);
+
+        let mut already_paused = config_fixture(policy_key);
+        already_paused.security_governance_config = security_config_key;
+        already_paused.paused = true;
+        assert_eq!(
+            record_victim_relief_guardian_pause_state_v1(
+                &security_config,
+                security_config_key,
+                &mut already_paused,
+                security_config.emergency_guardian,
+            )
+            .unwrap_err(),
+            CustomError::VictimReliefPauseStatusMismatch.into()
+        );
+
+        let mut wrong_guardian_config = config_fixture(policy_key);
+        wrong_guardian_config.security_governance_config = security_config_key;
+        assert_eq!(
+            record_victim_relief_guardian_pause_state_v1(
+                &security_config,
+                security_config_key,
+                &mut wrong_guardian_config,
+                security_config.authority,
+            )
+            .unwrap_err(),
+            CustomError::UnauthorizedEmergencyGuardian.into()
+        );
+
+        security_config.is_paused = true;
+        let mut globally_paused_config = config_fixture(policy_key);
+        globally_paused_config.security_governance_config = security_config_key;
+        record_victim_relief_guardian_pause_state_v1(
+            &security_config,
+            security_config_key,
+            &mut globally_paused_config,
+            security_config.emergency_guardian,
+        )
+        .unwrap();
+        assert!(globally_paused_config.paused);
+    }
+
+    #[test]
+    fn dao_pause_validation_allows_global_pause_after_executed_queue_and_records_receipt() {
+        let (security_config_key, _) =
+            Pubkey::find_program_address(&[GOVERNANCE_CONFIG_V1_SEED], &crate::ID);
+        let (config_key, _) =
+            Pubkey::find_program_address(&[VICTIM_RELIEF_CONFIG_V1_SEED], &crate::ID);
+        let mut security_config = security_config_fixture();
+        security_config.is_paused = true;
+        let mut config = config_fixture(Pubkey::new_unique());
+        config.security_governance_config = security_config_key;
+        config.paused = false;
+        let (registry, registry_key) = victim_relief_module_registry_fixture(security_config_key);
+        let mut f = pause_governance_fixture(
+            GovernanceActionTypeV1::VictimReliefPause,
+            config_key,
+            security_config_key,
+            false,
+            true,
+        );
+
+        let (params, params_hash, canonical_hash) = validate_victim_relief_pause_governance_v1(
+            &security_config,
+            security_config_key,
+            &registry,
+            registry_key,
+            &f.governance_proposal,
+            f.governance_proposal_key,
+            &f.governance_proposal_action,
+            f.governance_proposal_action_key,
+            &f.adapter,
+            &f.proposal_decision,
+            f.proposal_decision_key,
+            &f.execution_queue_item,
+            f.execution_queue_item_key,
+            config_key,
+            &config,
+            f.receipt_key,
+            &f.receipt,
+            GovernanceActionTypeV1::VictimReliefPause,
+            false,
+            true,
+            false,
+        )
+        .unwrap();
+        assert_eq!(params, f.parameters);
+        assert_eq!(params_hash, f.parameters_hash);
+        assert_eq!(canonical_hash, f.canonical_payload_hash);
+
+        let executor = Pubkey::new_unique();
+        record_victim_relief_pause_execution_v1(
+            &mut f.receipt,
+            params,
+            f.proposal_decision_key,
+            f.execution_queue_item_key,
+            params_hash,
+            canonical_hash,
+            executor,
+            12_000,
+            9,
+        )
+        .unwrap();
+        assert_eq!(f.receipt.victim_relief_config, config_key);
+        assert_eq!(f.receipt.security_governance_config, security_config_key);
+        assert_eq!(
+            f.receipt.action_type,
+            GovernanceActionTypeV1::VictimReliefPause
+        );
+        assert_eq!(f.receipt.paused_before, false);
+        assert_eq!(f.receipt.paused_after, true);
+        assert_eq!(f.receipt.executor, executor);
+        assert_eq!(f.receipt.executed_at, 12_000);
+
+        assert_eq!(
+            record_victim_relief_pause_execution_v1(
+                &mut f.receipt,
+                params,
+                f.proposal_decision_key,
+                f.execution_queue_item_key,
+                params_hash,
+                canonical_hash,
+                executor,
+                12_001,
+                10,
+            )
+            .unwrap_err(),
+            CustomError::VictimReliefPauseReceiptAlreadyExists.into()
+        );
+    }
+
+    #[test]
+    fn dao_unpause_validation_requires_global_unpaused_and_matching_action() {
+        let (security_config_key, _) =
+            Pubkey::find_program_address(&[GOVERNANCE_CONFIG_V1_SEED], &crate::ID);
+        let (config_key, _) =
+            Pubkey::find_program_address(&[VICTIM_RELIEF_CONFIG_V1_SEED], &crate::ID);
+        let mut security_config = security_config_fixture();
+        let mut config = config_fixture(Pubkey::new_unique());
+        config.security_governance_config = security_config_key;
+        config.paused = true;
+        let (registry, registry_key) = victim_relief_module_registry_fixture(security_config_key);
+        let mut f = pause_governance_fixture(
+            GovernanceActionTypeV1::VictimReliefUnpause,
+            config_key,
+            security_config_key,
+            true,
+            false,
+        );
+
+        security_config.is_paused = true;
+        assert_eq!(
+            validate_victim_relief_pause_governance_v1(
+                &security_config,
+                security_config_key,
+                &registry,
+                registry_key,
+                &f.governance_proposal,
+                f.governance_proposal_key,
+                &f.governance_proposal_action,
+                f.governance_proposal_action_key,
+                &f.adapter,
+                &f.proposal_decision,
+                f.proposal_decision_key,
+                &f.execution_queue_item,
+                f.execution_queue_item_key,
+                config_key,
+                &config,
+                f.receipt_key,
+                &f.receipt,
+                GovernanceActionTypeV1::VictimReliefUnpause,
+                true,
+                false,
+                true,
+            )
+            .unwrap_err(),
+            CustomError::SecurityLayerPaused.into()
+        );
+
+        security_config.is_paused = false;
+        validate_victim_relief_pause_governance_v1(
+            &security_config,
+            security_config_key,
+            &registry,
+            registry_key,
+            &f.governance_proposal,
+            f.governance_proposal_key,
+            &f.governance_proposal_action,
+            f.governance_proposal_action_key,
+            &f.adapter,
+            &f.proposal_decision,
+            f.proposal_decision_key,
+            &f.execution_queue_item,
+            f.execution_queue_item_key,
+            config_key,
+            &config,
+            f.receipt_key,
+            &f.receipt,
+            GovernanceActionTypeV1::VictimReliefUnpause,
+            true,
+            false,
+            true,
+        )
+        .unwrap();
+
+        f.governance_proposal_action.action_type = GovernanceActionTypeV1::VictimReliefPause;
+        assert_eq!(
+            validate_victim_relief_pause_governance_v1(
+                &security_config,
+                security_config_key,
+                &registry,
+                registry_key,
+                &f.governance_proposal,
+                f.governance_proposal_key,
+                &f.governance_proposal_action,
+                f.governance_proposal_action_key,
+                &f.adapter,
+                &f.proposal_decision,
+                f.proposal_decision_key,
+                &f.execution_queue_item,
+                f.execution_queue_item_key,
+                config_key,
+                &config,
+                f.receipt_key,
+                &f.receipt,
+                GovernanceActionTypeV1::VictimReliefUnpause,
+                true,
+                false,
+                true,
+            )
+            .unwrap_err(),
+            CustomError::InvalidGovernanceActionCode.into()
+        );
+    }
+
+    #[test]
+    fn dao_pause_validation_rejects_wrong_target_hash_registry_queue_and_status() {
+        let (security_config_key, _) =
+            Pubkey::find_program_address(&[GOVERNANCE_CONFIG_V1_SEED], &crate::ID);
+        let (config_key, _) =
+            Pubkey::find_program_address(&[VICTIM_RELIEF_CONFIG_V1_SEED], &crate::ID);
+        let security_config = security_config_fixture();
+        let mut config = config_fixture(Pubkey::new_unique());
+        config.security_governance_config = security_config_key;
+        let (mut registry, registry_key) =
+            victim_relief_module_registry_fixture(security_config_key);
+        let mut f = pause_governance_fixture(
+            GovernanceActionTypeV1::VictimReliefPause,
+            config_key,
+            security_config_key,
+            false,
+            true,
+        );
+
+        f.governance_proposal_action.target_account = Pubkey::new_unique();
+        assert_eq!(
+            validate_victim_relief_pause_governance_v1(
+                &security_config,
+                security_config_key,
+                &registry,
+                registry_key,
+                &f.governance_proposal,
+                f.governance_proposal_key,
+                &f.governance_proposal_action,
+                f.governance_proposal_action_key,
+                &f.adapter,
+                &f.proposal_decision,
+                f.proposal_decision_key,
+                &f.execution_queue_item,
+                f.execution_queue_item_key,
+                config_key,
+                &config,
+                f.receipt_key,
+                &f.receipt,
+                GovernanceActionTypeV1::VictimReliefPause,
+                false,
+                true,
+                false,
+            )
+            .unwrap_err(),
+            CustomError::GovernanceActionTargetMismatch.into()
+        );
+
+        let mut f = pause_governance_fixture(
+            GovernanceActionTypeV1::VictimReliefPause,
+            config_key,
+            security_config_key,
+            false,
+            true,
+        );
+        f.governance_proposal_action.parameters_hash = [99; 32];
+        assert_eq!(
+            validate_victim_relief_pause_governance_v1(
+                &security_config,
+                security_config_key,
+                &registry,
+                registry_key,
+                &f.governance_proposal,
+                f.governance_proposal_key,
+                &f.governance_proposal_action,
+                f.governance_proposal_action_key,
+                &f.adapter,
+                &f.proposal_decision,
+                f.proposal_decision_key,
+                &f.execution_queue_item,
+                f.execution_queue_item_key,
+                config_key,
+                &config,
+                f.receipt_key,
+                &f.receipt,
+                GovernanceActionTypeV1::VictimReliefPause,
+                false,
+                true,
+                false,
+            )
+            .unwrap_err(),
+            CustomError::GovernanceProposalActionMismatch.into()
+        );
+
+        let f = pause_governance_fixture(
+            GovernanceActionTypeV1::VictimReliefPause,
+            config_key,
+            security_config_key,
+            false,
+            true,
+        );
+        registry.enabled = false;
+        assert_eq!(
+            validate_victim_relief_pause_governance_v1(
+                &security_config,
+                security_config_key,
+                &registry,
+                registry_key,
+                &f.governance_proposal,
+                f.governance_proposal_key,
+                &f.governance_proposal_action,
+                f.governance_proposal_action_key,
+                &f.adapter,
+                &f.proposal_decision,
+                f.proposal_decision_key,
+                &f.execution_queue_item,
+                f.execution_queue_item_key,
+                config_key,
+                &config,
+                f.receipt_key,
+                &f.receipt,
+                GovernanceActionTypeV1::VictimReliefPause,
+                false,
+                true,
+                false,
+            )
+            .unwrap_err(),
+            CustomError::ProtocolModuleDisabled.into()
+        );
+
+        let (registry, registry_key) = victim_relief_module_registry_fixture(security_config_key);
+        let mut f = pause_governance_fixture(
+            GovernanceActionTypeV1::VictimReliefPause,
+            config_key,
+            security_config_key,
+            false,
+            true,
+        );
+        f.execution_queue_item.status = ExecutionStatus::Queued;
+        assert_eq!(
+            validate_victim_relief_pause_governance_v1(
+                &security_config,
+                security_config_key,
+                &registry,
+                registry_key,
+                &f.governance_proposal,
+                f.governance_proposal_key,
+                &f.governance_proposal_action,
+                f.governance_proposal_action_key,
+                &f.adapter,
+                &f.proposal_decision,
+                f.proposal_decision_key,
+                &f.execution_queue_item,
+                f.execution_queue_item_key,
+                config_key,
+                &config,
+                f.receipt_key,
+                &f.receipt,
+                GovernanceActionTypeV1::VictimReliefPause,
+                false,
+                true,
+                false,
+            )
+            .unwrap_err(),
+            CustomError::InvalidExecutionStatus.into()
+        );
+
+        let mut already_paused = config;
+        already_paused.paused = true;
+        let f = pause_governance_fixture(
+            GovernanceActionTypeV1::VictimReliefPause,
+            config_key,
+            security_config_key,
+            false,
+            true,
+        );
+        assert_eq!(
+            validate_victim_relief_pause_governance_v1(
+                &security_config,
+                security_config_key,
+                &registry,
+                registry_key,
+                &f.governance_proposal,
+                f.governance_proposal_key,
+                &f.governance_proposal_action,
+                f.governance_proposal_action_key,
+                &f.adapter,
+                &f.proposal_decision,
+                f.proposal_decision_key,
+                &f.execution_queue_item,
+                f.execution_queue_item_key,
+                config_key,
+                &already_paused,
+                f.receipt_key,
+                &f.receipt,
+                GovernanceActionTypeV1::VictimReliefPause,
+                false,
+                true,
+                false,
+            )
+            .unwrap_err(),
+            CustomError::VictimReliefPauseStatusMismatch.into()
         );
     }
 

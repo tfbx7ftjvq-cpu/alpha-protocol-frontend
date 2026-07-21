@@ -312,6 +312,8 @@ pub fn security_action_type_from_u8(action_type: u8) -> Result<ActionType> {
         27 => Ok(ActionType::VictimReliefUpholdAppeal),
         28 => Ok(ActionType::VictimReliefOverturnAppeal),
         29 => Ok(ActionType::VictimReliefCancelPayout),
+        30 => Ok(ActionType::VictimReliefPause),
+        31 => Ok(ActionType::VictimReliefUnpause),
         _ => err!(CustomError::InvalidActionForProposalType),
     }
 }
@@ -352,6 +354,8 @@ pub fn security_proposal_type_for_action(action_type: ActionType) -> Result<Prop
         ActionType::VictimReliefUpholdAppeal => Ok(ProposalType::VictimReliefUpholdAppeal),
         ActionType::VictimReliefOverturnAppeal => Ok(ProposalType::VictimReliefOverturnAppeal),
         ActionType::VictimReliefCancelPayout => Ok(ProposalType::VictimReliefCancelPayout),
+        ActionType::VictimReliefPause => Ok(ProposalType::VictimReliefPause),
+        ActionType::VictimReliefUnpause => Ok(ProposalType::VictimReliefUnpause),
         ActionType::ScamRegistryPublishReport => Ok(ProposalType::ScamRegistryPublishReport),
         ActionType::ScamRegistryRemoveReport => Ok(ProposalType::ScamRegistryRemoveReport),
         ActionType::ScamRegistryAppealDecision => Ok(ProposalType::ScamRegistryAppealDecision),
@@ -635,6 +639,26 @@ mod tests {
         assert_eq!(decision.decision, ProposalDecision::Approved);
         assert_eq!(decision.yes_weight, proposal.yes_weight);
         assert_eq!(security_config.proposal_count, proposal.proposal_id);
+    }
+
+    #[test]
+    fn victim_relief_pause_security_codes_and_proposal_types_are_append_only() {
+        assert_eq!(
+            security_action_type_from_u8(30).unwrap(),
+            ActionType::VictimReliefPause
+        );
+        assert_eq!(
+            security_action_type_from_u8(31).unwrap(),
+            ActionType::VictimReliefUnpause
+        );
+        assert_eq!(
+            security_proposal_type_for_action(ActionType::VictimReliefPause).unwrap(),
+            ProposalType::VictimReliefPause
+        );
+        assert_eq!(
+            security_proposal_type_for_action(ActionType::VictimReliefUnpause).unwrap(),
+            ProposalType::VictimReliefUnpause
+        );
     }
 
     #[test]

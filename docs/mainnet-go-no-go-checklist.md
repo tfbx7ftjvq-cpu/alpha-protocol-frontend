@@ -40,6 +40,7 @@ The Devnet report only records Devnet health. It is not Mainnet approval. Before
 - Victim Relief original approve and appeal overturn now have separate strict payout execution and receipt paths, but Mainnet must not present `PayoutQueued` as paid unless request `Executed`, case `Paid`, actual relief-vault transfer, and payout receipt are all present.
 - Victim Relief appeal uphold creates no payout; appeal overturn is payable only through `execute_victim_relief_overturn_payout_v1` and cannot be treated as paid from queue execution alone.
 - Victim Relief payout cancellation exists only for approved-but-unpaid requests through strict DAO/Security governance; cancellation is not a guardian shortcut, recipient migration, or USDC transfer.
+- Victim Relief module pause exists separately from Security global pause. Guardian emergency module pause is pause-only; DAO + Security module unpause requires the strict governance chain and is blocked while Security global pause is active.
 
 ## 5. Go/No-Go Decision Table
 
@@ -78,6 +79,7 @@ Any one of the following means NO-GO:
 - Final `cargo test`, `anchor build --ignore-keys`, and `npm run build` are not complete.
 - Victim Relief relief-vault payout transfer / receipt path is missing for any payout origin that public messaging claims is paid live.
 - Victim Relief payout cancellation, appeal cancel / expiry, or payout completion is claimed live beyond the implemented strict paths.
+- Victim Relief or Security pause / unpause authority is presented as DAO-controlled before authority migration and Devnet strict E2E prove that path.
 
 ## 7. Manual Review Required
 
@@ -87,6 +89,8 @@ The following items must be manually confirmed before any Mainnet GO decision:
 - `GreenLabelConfig` authority.
 - Security governance authority.
 - Emergency guardian is pause-only.
+- Victim Relief guardian can module-pause only and cannot module-unpause.
+- Victim Relief DAO module pause/unpause receipt and Security queue linkage.
 - Treasury vault authority is the expected PDA or governance-controlled authority.
 - Mainnet USDC mint.
 - ALPHA mint.
@@ -289,6 +293,9 @@ Manual review notes:
 - Stage 6B-4B-2 adds `execute_victim_relief_approved_payout_v1` for original approve only: exact relief-vault USDC transfer, request `Executed`, case `Paid`, active count decrement, and immutable payout receipt.
 - Stage 6B-4B-3 adds `execute_victim_relief_overturn_payout_v1` for appeal overturn only: original reject receipt + appeal overturn receipt validation, exact relief-vault USDC transfer, request `Executed`, case `Paid`, active count decrement, appeal remains `Overturned`, and immutable payout receipt.
 - Stage 6B-4B-4B adds `execute_cancel_original_victim_relief_payout_v1` and `execute_cancel_overturn_victim_relief_payout_v1` for strict governance cancellation of approved-but-unpaid requests. Cancellation creates an immutable receipt, marks the request and case `Cancelled`, and does not transfer USDC or mutate Treasury revenue accounting.
+- Stage 6B-4B-4C-B1 adds module-level pause governance: `VictimReliefPause`, `VictimReliefUnpause`, guardian emergency pause-only, strict DAO + Security pause/unpause wrappers, and immutable `VictimReliefPauseExecutionRecordV1`.
+- Module pause blocks Victim Relief submissions, evidence changes, decisions, appeals, and payout transfer wrappers. Already-executed strict payout cancellation remains allowed while paused because it transfers no USDC and closes an unpaid request.
+- Security global pause and Victim Relief module pause are distinct. Global unpause still depends on existing authority control and remains a Mainnet BLOCKER until migration is reviewed.
 - `PayoutQueued`, `PayoutRequest Approved`, and `Queue Executed` must not be presented as funds paid unless the relevant strict payout wrapper has executed and written `ReliefPayoutExecutionRecordV1`.
 - Original approve and appeal overturn use separate strict payout wrappers; no generic payout path exists.
 - Appeal cancel / expiry is not implemented; unresolved appeals can remain `AppealPending`.

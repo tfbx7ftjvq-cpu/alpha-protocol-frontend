@@ -196,6 +196,10 @@ Stage 6B-4B-4B adds strict DAO + Security cancellation for unpaid approved payou
 
 See [victim-relief-payout-cancellation-governance-v1.md](victim-relief-payout-cancellation-governance-v1.md).
 
+Stage 6B-4B-4C-B1 adds Victim Relief module pause governance. Guardian emergency pause is pause-only; DAO + Security can pause or unpause through distinct typed actions targeting `VictimReliefConfigV1`; DAO pause/unpause writes `VictimReliefPauseExecutionRecordV1`. Module pause blocks submissions, evidence changes, DAO decisions, appeals, and payouts, while already-executed strict payout cancellation remains allowed as a risk-reducing no-transfer path.
+
+See [victim-relief-module-pause-governance-v1.md](victim-relief-module-pause-governance-v1.md).
+
 Still not implemented:
 
 - partial payout
@@ -208,6 +212,7 @@ Still not implemented:
 - Devnet or Mainnet deployment
 
 Authority and guardian wallets cannot bypass DAO authorization to pay claims through these instructions.
+Authority wallets cannot directly change Victim Relief module pause state through the new pause lifecycle, and guardian wallets cannot unpause. The existing Security global unpause authority remains unchanged and is still a Mainnet blocker.
 
 ## Compatibility
 

@@ -45,6 +45,8 @@ pub fn governance_action_stable_code_v1(action_type: GovernanceActionTypeV1) -> 
         GovernanceActionTypeV1::VictimReliefUpholdAppeal => 22,
         GovernanceActionTypeV1::VictimReliefOverturnAppeal => 23,
         GovernanceActionTypeV1::VictimReliefCancelPayout => 24,
+        GovernanceActionTypeV1::VictimReliefPause => 25,
+        GovernanceActionTypeV1::VictimReliefUnpause => 26,
     }
 }
 
@@ -75,6 +77,8 @@ pub fn governance_action_from_stable_code_v1(code: u8) -> Result<GovernanceActio
         22 => Ok(GovernanceActionTypeV1::VictimReliefUpholdAppeal),
         23 => Ok(GovernanceActionTypeV1::VictimReliefOverturnAppeal),
         24 => Ok(GovernanceActionTypeV1::VictimReliefCancelPayout),
+        25 => Ok(GovernanceActionTypeV1::VictimReliefPause),
+        26 => Ok(GovernanceActionTypeV1::VictimReliefUnpause),
         _ => err!(CustomError::InvalidGovernanceActionCode),
     }
 }
@@ -138,6 +142,8 @@ pub fn map_governance_action_to_security_action(
         GovernanceActionTypeV1::VictimReliefCancelPayout => {
             Ok(ActionType::VictimReliefCancelPayout)
         }
+        GovernanceActionTypeV1::VictimReliefPause => Ok(ActionType::VictimReliefPause),
+        GovernanceActionTypeV1::VictimReliefUnpause => Ok(ActionType::VictimReliefUnpause),
     }
 }
 
@@ -160,9 +166,9 @@ pub fn map_governance_action_to_governance_proposal_type_v1(
         | GovernanceActionTypeV1::VictimReliefUpdatePolicy
         | GovernanceActionTypeV1::VictimReliefUpholdAppeal
         | GovernanceActionTypeV1::VictimReliefOverturnAppeal
-        | GovernanceActionTypeV1::VictimReliefCancelPayout => {
-            GovernanceProposalTypeV1::VictimRelief
-        }
+        | GovernanceActionTypeV1::VictimReliefCancelPayout
+        | GovernanceActionTypeV1::VictimReliefPause
+        | GovernanceActionTypeV1::VictimReliefUnpause => GovernanceProposalTypeV1::VictimRelief,
         GovernanceActionTypeV1::ScamRegistryPublishReport
         | GovernanceActionTypeV1::ScamRegistryRemoveReport
         | GovernanceActionTypeV1::ScamRegistryAppealDecision => {
@@ -194,7 +200,9 @@ pub fn map_governance_action_to_module(action_type: GovernanceActionTypeV1) -> P
         | GovernanceActionTypeV1::VictimReliefUpdatePolicy
         | GovernanceActionTypeV1::VictimReliefUpholdAppeal
         | GovernanceActionTypeV1::VictimReliefOverturnAppeal
-        | GovernanceActionTypeV1::VictimReliefCancelPayout => ProtocolModuleIdV1::VictimRelief,
+        | GovernanceActionTypeV1::VictimReliefCancelPayout
+        | GovernanceActionTypeV1::VictimReliefPause
+        | GovernanceActionTypeV1::VictimReliefUnpause => ProtocolModuleIdV1::VictimRelief,
         GovernanceActionTypeV1::ScamRegistryPublishReport
         | GovernanceActionTypeV1::ScamRegistryRemoveReport
         | GovernanceActionTypeV1::ScamRegistryAppealDecision => ProtocolModuleIdV1::ScamRegistry,
@@ -310,7 +318,7 @@ mod tests {
     const PARAMETERS_HASH: [u8; 32] = [3; 32];
     const EVIDENCE_HASH: [u8; 32] = [4; 32];
 
-    const ALL_ACTIONS: [GovernanceActionTypeV1; 25] = [
+    const ALL_ACTIONS: [GovernanceActionTypeV1; 27] = [
         GovernanceActionTypeV1::TreasuryUpdateRevenueSplit,
         GovernanceActionTypeV1::TreasuryApproveSpending,
         GovernanceActionTypeV1::TreasuryApproveBuilderPayout,
@@ -336,6 +344,8 @@ mod tests {
         GovernanceActionTypeV1::VictimReliefUpholdAppeal,
         GovernanceActionTypeV1::VictimReliefOverturnAppeal,
         GovernanceActionTypeV1::VictimReliefCancelPayout,
+        GovernanceActionTypeV1::VictimReliefPause,
+        GovernanceActionTypeV1::VictimReliefUnpause,
     ];
 
     fn payload(action_type: GovernanceActionTypeV1) -> GovernancePayloadV1 {
@@ -362,7 +372,7 @@ mod tests {
             ALL_ACTIONS.map(governance_action_stable_code_v1),
             [
                 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
-                23, 24,
+                23, 24, 25, 26,
             ]
         );
     }
@@ -439,6 +449,18 @@ mod tests {
         );
         assert_eq!(
             map_governance_action_to_governance_proposal_type_v1(
+                GovernanceActionTypeV1::VictimReliefPause
+            ),
+            GovernanceProposalTypeV1::VictimRelief
+        );
+        assert_eq!(
+            map_governance_action_to_governance_proposal_type_v1(
+                GovernanceActionTypeV1::VictimReliefUnpause
+            ),
+            GovernanceProposalTypeV1::VictimRelief
+        );
+        assert_eq!(
+            map_governance_action_to_governance_proposal_type_v1(
                 GovernanceActionTypeV1::ScamRegistryPublishReport
             ),
             GovernanceProposalTypeV1::ScamRegistry
@@ -475,6 +497,14 @@ mod tests {
         );
         assert_eq!(
             map_governance_action_to_module(GovernanceActionTypeV1::VictimReliefRejectClaim),
+            ProtocolModuleIdV1::VictimRelief
+        );
+        assert_eq!(
+            map_governance_action_to_module(GovernanceActionTypeV1::VictimReliefPause),
+            ProtocolModuleIdV1::VictimRelief
+        );
+        assert_eq!(
+            map_governance_action_to_module(GovernanceActionTypeV1::VictimReliefUnpause),
             ProtocolModuleIdV1::VictimRelief
         );
         assert_eq!(
@@ -546,6 +576,16 @@ mod tests {
             )
             .unwrap(),
             ActionType::ProtocolUpgradeProgram
+        );
+        assert_eq!(
+            map_governance_action_to_security_action(GovernanceActionTypeV1::VictimReliefPause)
+                .unwrap(),
+            ActionType::VictimReliefPause
+        );
+        assert_eq!(
+            map_governance_action_to_security_action(GovernanceActionTypeV1::VictimReliefUnpause)
+                .unwrap(),
+            ActionType::VictimReliefUnpause
         );
     }
 

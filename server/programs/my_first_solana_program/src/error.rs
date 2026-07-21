@@ -742,4 +742,22 @@ pub enum CustomError {
 
     #[msg("Invalid Victim Relief payout cancellation schema")]
     InvalidVictimReliefPayoutCancellationSchema,
+
+    #[msg("Victim Relief pause action mismatch")]
+    VictimReliefPauseActionMismatch,
+
+    #[msg("Victim Relief pause target mismatch")]
+    VictimReliefPauseTargetMismatch,
+
+    #[msg("Victim Relief pause parameters mismatch")]
+    VictimReliefPauseParametersMismatch,
+
+    #[msg("Victim Relief pause status mismatch")]
+    VictimReliefPauseStatusMismatch,
+
+    #[msg("Victim Relief pause receipt already exists")]
+    VictimReliefPauseReceiptAlreadyExists,
+
+    #[msg("Invalid Victim Relief pause schema")]
+    InvalidVictimReliefPauseSchema,
 }

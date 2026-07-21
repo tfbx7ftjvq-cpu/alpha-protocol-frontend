@@ -36,6 +36,8 @@ Phase 2E-6B-3 appends `VictimReliefUpholdAppeal` and `VictimReliefOverturnAppeal
 
 Phase 2E-6B-4B-4B appends `VictimReliefCancelPayout`. This is a terminal DAO + Security action for unpaid approved `ReliefPayoutRequestV1` accounts. It does not transfer USDC and does not reuse reject/uphold actions.
 
+Phase 2E-6B-4B-4C-B1 appends `VictimReliefPause` and `VictimReliefUnpause`. They are separate typed actions because pause is risk-reducing and unpause is risk-increasing. There is no generic `set_pause(bool)` action.
+
 ## 3. Mapping Model
 
 The mapping is intentionally centralized:
@@ -59,6 +61,8 @@ For initial Victim Relief approve/reject, the canonical governance target is the
 For appeal uphold/overturn, the canonical governance target is `VictimReliefAppealV1`. The program recomputes the appeal decision parameters hash from the case, appeal, original snapshot, original reject receipt, policy, Treasury config, relief vault, action, and proposal id.
 
 For payout cancellation, the canonical governance target is `ReliefPayoutRequestV1`. The program recomputes the cancellation parameters hash from the payout request, original authorization source, frozen amount and recipient, cancellation proposal/decision/queue/action, expected statuses, and original authorization hash. Authority or guardian wallets cannot single-sign cancellation, and there is no generic cancel action.
+
+For Victim Relief module pause and unpause, the canonical governance target is `VictimReliefConfigV1`. The program recomputes `VictimReliefPauseParametersV1` from the config, Security governance config, action, before/after paused states, governance proposal, action sidecar, and proposal id. Guardian emergency pause is pause-only and does not create a DAO execution receipt. DAO unpause requires Security global pause to be false.
 
 ## 4. ProtocolModuleIdV1
 
@@ -121,6 +125,8 @@ The framework currently covers:
 - Green Label refund / slash
 - Victim Relief compensation approval / rejection / policy update
 - Victim Relief appeal uphold / overturn
+- Victim Relief payout cancellation
+- Victim Relief module pause / unpause
 - Scam Registry publish / remove / appeal
 - Contributor add / remove / update role / milestone / payout approval
 - Protocol parameter update / upgrade / emergency action

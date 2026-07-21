@@ -247,3 +247,14 @@ Phase 2E-6B-4B-4B consumes the same `VictimRelief` registry for strict payout ca
 - `VictimReliefCancelPayout`
 
 The canonical target is `ReliefPayoutRequestV1`. The cancel wrappers validate that the registry is enabled, bound to the current Alpha Protocol program id, and tied to the same Security governance config before trusting the adapter, proposal decision, and execution queue. Cancellation writes an immutable cancellation receipt and transfers no USDC.
+
+## Stage 6B-4B-4C-B1 Victim Relief Pause Usage
+
+Phase 2E-6B-4B-4C-B1 consumes the same `VictimRelief` registry for DAO-controlled module pause and unpause:
+
+- `VictimReliefPause`
+- `VictimReliefUnpause`
+
+The canonical target is `VictimReliefConfigV1`. The strict wrappers validate that the registry is enabled, bound to the current Alpha Protocol program id, and tied to the same Security governance config before trusting the adapter, proposal decision, and execution queue.
+
+Guardian emergency pause does not use the registry because it is an immediate pause-only emergency path. Guardian unpause is not implemented. DAO pause/unpause writes `VictimReliefPauseExecutionRecordV1` and transfers no USDC.

@@ -40,6 +40,20 @@ Victim Relief now has a one-time appeal governance layer for rejected cases:
 
 This improves DAO review completeness, but it still does not make Victim Relief paid end-to-end. Overturn creates a payout request only; Stage 6B-4 must add the relief-vault transfer and payout execution receipt. Appeal cancel / expiry is also intentionally missing, so unresolved appeals can remain `AppealPending`.
 
+## Phase 2E-6B-4B-4C-B1 Addendum
+
+Victim Relief now has module-level pause lifecycle:
+
+- `VictimReliefPause` and `VictimReliefUnpause` are append-only typed DAO actions.
+- The canonical target is `VictimReliefConfigV1`.
+- Guardian emergency pause can only set the module to paused.
+- DAO + Security can pause or unpause through a strict registry / adapter / decision / executed queue chain.
+- DAO pause/unpause writes immutable `VictimReliefPauseExecutionRecordV1`.
+- Module pause blocks Victim Relief submissions, evidence changes, decisions, appeals, and payouts.
+- Already-executed strict payout cancellation remains allowed while paused because it transfers no USDC and reduces unpaid-request risk.
+
+This narrows Victim Relief operational risk, but it does not solve Security global unpause authority migration, Devnet strict E2E, liquidity policy, recipient migration, reservation / FIFO, or Mainnet readiness. Token launch remains NO-GO.
+
 ## 1. Executive Summary
 
 Alpha Protocol has a credible Devnet foundation for Treasury V2 accounting, USDC four-pool revenue routing, staking reward funding, Green Label refund / slash E2E, and Security Layer execution gating.

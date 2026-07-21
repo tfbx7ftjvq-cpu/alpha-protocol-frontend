@@ -175,6 +175,15 @@ Stage 6B-4B-4B implements strict cancellation governance for unpaid approved pay
 - immutable cancellation receipt is written
 - no USDC transfer and no Treasury accounting mutation
 
+Stage 6B-4B-4C-B1 implements Victim Relief module pause governance:
+
+- guardian emergency pause is pause-only
+- DAO + Security pause/unpause uses distinct typed actions
+- canonical target is `VictimReliefConfigV1`
+- DAO pause/unpause writes `VictimReliefPauseExecutionRecordV1`
+- module pause blocks both strict payout wrappers before any token transfer
+- already-executed payout cancellation remains allowed as a no-transfer risk-reducing path
+
 Deferred beyond this phase:
 
 - partial payouts
@@ -189,3 +198,4 @@ For both original approve and appeal overturn, `PayoutRequest Approved`, `Payout
 Mainnet and token launch remain NO-GO.
 
 See [victim-relief-payout-cancellation-governance-v1.md](victim-relief-payout-cancellation-governance-v1.md).
+See [victim-relief-module-pause-governance-v1.md](victim-relief-module-pause-governance-v1.md).

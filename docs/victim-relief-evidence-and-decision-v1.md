@@ -163,6 +163,14 @@ Stage 6B-4B-4B adds strict cancellation governance for unpaid approved payout re
 
 See [victim-relief-payout-cancellation-governance-v1.md](victim-relief-payout-cancellation-governance-v1.md).
 
+## Module Pause Governance
+
+Stage 6B-4B-4C-B1 adds [Victim Relief Module Pause Governance V1](victim-relief-module-pause-governance-v1.md).
+
+`VictimReliefPause` and `VictimReliefUnpause` are separate typed DAO actions. Their canonical target is `VictimReliefConfigV1`, not a case, appeal, payout request, relief vault, or arbitrary account.
+
+When module pause is active, case submission, evidence update, evidence freeze, approve/reject execution, appeal actions, and payout execution are blocked by the Victim Relief module pause check. Already-executed payout cancellation remains allowed because it is a no-transfer risk-reducing terminal closure path.
+
 ## Review Deadline Residual Risk
 
 `review_deadline` is an audit field in this phase. There is no permissionless `UnderReview` expiry because the case is not yet linked to an active governance proposal lifecycle. Adding expiry before reliable proposal linkage could allow a case to be expired during DAO voting or timelock.

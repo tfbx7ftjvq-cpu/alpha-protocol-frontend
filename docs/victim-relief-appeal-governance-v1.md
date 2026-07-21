@@ -249,3 +249,9 @@ DAO decisions are not court judgments, insurance determinations, credit ratings,
 Stage 6B-4B-4B adds strict cancellation for appeal-overturn payout requests that are approved but unpaid. The cancel path targets `ReliefPayoutRequestV1`, requires `VictimReliefCancelPayout` through DAO + Security, preserves the appeal as `Overturned`, marks request and case `Cancelled`, writes an immutable cancellation receipt, and transfers no USDC.
 
 See [victim-relief-payout-cancellation-governance-v1.md](victim-relief-payout-cancellation-governance-v1.md).
+
+## Module Pause Governance
+
+Stage 6B-4B-4C-B1 adds [Victim Relief Module Pause Governance V1](victim-relief-module-pause-governance-v1.md).
+
+When `VictimReliefConfigV1.paused` is true, opening appeals and executing DAO uphold / overturn wrappers are blocked. DAO module unpause requires the full Governance Proposal Action, Module Registry, Adapter, Security Decision, and executed queue chain, and it is blocked while Security global pause is active.

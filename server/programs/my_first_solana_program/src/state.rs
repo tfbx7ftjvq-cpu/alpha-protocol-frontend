@@ -253,6 +253,8 @@ pub enum ProposalType {
     VictimReliefUpholdAppeal,
     VictimReliefOverturnAppeal,
     VictimReliefCancelPayout,
+    VictimReliefPause,
+    VictimReliefUnpause,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -302,6 +304,8 @@ pub enum ActionType {
     VictimReliefUpholdAppeal,
     VictimReliefOverturnAppeal,
     VictimReliefCancelPayout,
+    VictimReliefPause,
+    VictimReliefUnpause,
 }
 
 #[account]
@@ -475,6 +479,8 @@ pub enum GovernanceActionTypeV1 {
     VictimReliefUpholdAppeal,
     VictimReliefOverturnAppeal,
     VictimReliefCancelPayout,
+    VictimReliefPause,
+    VictimReliefUnpause,
 }
 
 /// Stable identifier for the protocol module targeted by a governance action.
@@ -1041,6 +1047,43 @@ pub struct VictimReliefPayoutCancellationRecordV1 {
 
 impl VictimReliefPayoutCancellationRecordV1 {
     pub const INIT_SPACE: usize = (32 * 20) + (8 * 3) + 3 + 2 + 1 + (32 * 4);
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VictimReliefPauseParametersV1 {
+    pub schema_version: u16,
+    pub victim_relief_config: Pubkey,
+    pub security_governance_config: Pubkey,
+    pub action_type: GovernanceActionTypeV1,
+    pub expected_paused: bool,
+    pub next_paused: bool,
+    pub governance_proposal: Pubkey,
+    pub governance_proposal_action: Pubkey,
+    pub proposal_id: u64,
+}
+
+#[account]
+pub struct VictimReliefPauseExecutionRecordV1 {
+    pub victim_relief_config: Pubkey,
+    pub security_governance_config: Pubkey,
+    pub action_type: GovernanceActionTypeV1,
+    pub paused_before: bool,
+    pub paused_after: bool,
+    pub governance_proposal: Pubkey,
+    pub proposal_decision: Pubkey,
+    pub execution_queue_item: Pubkey,
+    pub governance_proposal_action: Pubkey,
+    pub parameters_hash: [u8; 32],
+    pub canonical_governance_payload_hash: [u8; 32],
+    pub executor: Pubkey,
+    pub executed_at: i64,
+    pub schema_version: u16,
+    pub bump: u8,
+    pub reserved: [u8; 32],
+}
+
+impl VictimReliefPauseExecutionRecordV1 {
+    pub const INIT_SPACE: usize = (32 * 7) + (32 * 3) + 1 + 2 + 8 + 2 + 1;
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -1799,6 +1842,13 @@ mod tests {
         let minimum = (32 * 20) + (8 * 3) + 3 + 2 + 1 + (32 * 4);
         assert_eq!(VictimReliefPayoutCancellationRecordV1::INIT_SPACE, minimum);
         assert_eq!(VictimReliefPayoutCancellationRecordV1::INIT_SPACE, 798);
+    }
+
+    #[test]
+    fn victim_relief_pause_execution_record_space_is_exact() {
+        let minimum = (32 * 7) + (32 * 3) + 1 + 2 + 8 + 2 + 1;
+        assert_eq!(VictimReliefPauseExecutionRecordV1::INIT_SPACE, minimum);
+        assert_eq!(VictimReliefPauseExecutionRecordV1::INIT_SPACE, 334);
     }
 
     #[test]

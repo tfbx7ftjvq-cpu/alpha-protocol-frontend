@@ -116,6 +116,8 @@ Payout is not a revenue reversal. Current available funds are represented by the
 
 If Victim Relief config or Security governance config is paused, payout fails before transfer.
 
+Stage 6B-4B-4C-B1 adds governed module pause lifecycle in [victim-relief-module-pause-governance-v1.md](victim-relief-module-pause-governance-v1.md). Guardian emergency pause can only set the Victim Relief module to paused. DAO + Security can pause or unpause with distinct typed actions. Module unpause is blocked while Security global pause is active.
+
 If relief vault balance is insufficient, payout fails before transfer. The request remains `Approved`, the case remains `PayoutQueued`, and the payout may be retried when the vault has sufficient USDC.
 
 If the recipient token account is invalid or closed, payout fails without recipient migration. The frozen recipient account must be restored or a future recipient-migration design must be implemented.

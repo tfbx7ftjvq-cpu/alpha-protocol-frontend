@@ -585,6 +585,14 @@ pub fn is_action_valid_for_proposal_type(
                 ActionType::VictimReliefCancelPayout
             )
             | (
+                ProposalType::VictimReliefPause,
+                ActionType::VictimReliefPause
+            )
+            | (
+                ProposalType::VictimReliefUnpause,
+                ActionType::VictimReliefUnpause
+            )
+            | (
                 ProposalType::ScamRegistryPublishReport,
                 ActionType::ScamRegistryPublishReport
             )
@@ -1211,6 +1219,26 @@ mod tests {
         .unwrap_err();
 
         assert_error_contains(err, "InvalidActionForProposalType");
+    }
+
+    #[test]
+    fn victim_relief_pause_actions_require_matching_security_type() {
+        assert!(is_action_valid_for_proposal_type(
+            ProposalType::VictimReliefPause,
+            ActionType::VictimReliefPause
+        ));
+        assert!(is_action_valid_for_proposal_type(
+            ProposalType::VictimReliefUnpause,
+            ActionType::VictimReliefUnpause
+        ));
+        assert!(!is_action_valid_for_proposal_type(
+            ProposalType::VictimReliefPause,
+            ActionType::VictimReliefUnpause
+        ));
+        assert!(!is_action_valid_for_proposal_type(
+            ProposalType::VictimReliefUnpause,
+            ActionType::VictimReliefPause
+        ));
     }
 
     #[test]

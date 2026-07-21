@@ -125,6 +125,8 @@ Payout wrappers still fail while Victim Relief or Security governance is paused 
 
 Cancellation is non-fund-moving and risk-reducing. If the cancellation queue has already been executed by the Security Layer, the strict cancellation wrapper can complete even while payout execution is paused. A Security pause can still prevent a not-yet-executed cancellation queue from progressing; that governance hardening remains a future phase.
 
+Stage 6B-4B-4C-B1 formalizes Victim Relief module pause governance in [victim-relief-module-pause-governance-v1.md](victim-relief-module-pause-governance-v1.md). The cancellation pause exception remains intentional: module pause blocks new risk-increasing activity and payouts, but does not block an already-authorized cancellation that transfers no USDC and closes an unpaid request.
+
 ## Race Model
 
 Payout and cancellation are mutually exclusive through `ReliefPayoutRequestV1.status` and atomic account writes:
