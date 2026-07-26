@@ -31,10 +31,10 @@ async function main(): Promise<void> {
 
   const tx = new Transaction().add(
     buildIx(ctx.idl, "initialize_protocol_authority_control_v1", [
-      meta(governanceConfig),
-      meta(authorityControl, false, true),
-      meta(ctx.wallet, true, true),
-      meta(SYS),
+      meta("governance_config", governanceConfig),
+      meta("authority_control", authorityControl, false, true),
+      meta("authority", ctx.wallet, true, true),
+      meta("system_program", SYS),
     ]),
   );
   await sendOrPlan(ctx, "initialize_protocol_authority_control_v1", tx);

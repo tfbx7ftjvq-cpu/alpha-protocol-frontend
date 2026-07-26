@@ -35,6 +35,7 @@
     "devnet:authority:activate-dao-control": "tsx scripts/protocol-authority/activate-dao-control.ts",
     "devnet:authority:recovery-unpause-e2e": "tsx scripts/protocol-authority/recovery-unpause-e2e.ts",
     "devnet:authority:verify-legacy-fail-close": "tsx scripts/protocol-authority/verify-legacy-fail-close.ts",
+    "tooling:test": "ts-node --transpile-only scripts/devnet/alpha-v1/common.test.ts",
     "devnet:prelaunch:sanity": "tsx scripts/sanity/mainnet-prelaunch-readonly-check.ts",
     "mainnet:prelaunch:sanity": "tsx scripts/sanity/mainnet-prelaunch-readonly-check.ts"
   },

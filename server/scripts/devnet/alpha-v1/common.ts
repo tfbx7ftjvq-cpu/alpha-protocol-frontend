@@ -68,8 +68,23 @@ export const MODULE_CODES = {
 export type RuntimeIdl = anchor.Idl & {
   address?: string;
   metadata?: { address?: string };
-  instructions: Array<{ name: string; discriminator?: number[] }>;
+  instructions: Array<{
+    name: string;
+    discriminator?: number[];
+    accounts?: IdlAccountSchema[];
+  }>;
   accounts?: Array<{ name: string }>;
+};
+
+export type IdlAccountSchema = {
+  name: string;
+  signer?: boolean;
+  writable?: boolean;
+  accounts?: IdlAccountSchema[];
+};
+
+export type NamedAccountMeta = AccountMeta & {
+  name?: string;
 };
 
 export type DevnetContext = {
@@ -78,6 +93,10 @@ export type DevnetContext = {
   rpcUrl: string;
   idl: RuntimeIdl;
 };
+
+export const U64_MAX = (1n << 64n) - 1n;
+export const DAO_CONTROL_ACTIVATION_CONFIRMATION_ENV = "CONFIRM_DAO_CONTROL_ACTIVATION";
+export const DAO_CONTROL_ACTIVATION_CONFIRMATION_VALUE = "I_UNDERSTAND_DAO_CONTROL_IS_IRREVERSIBLE";
 
 export function isDryRun(): boolean {
   return (process.env.DRY_RUN ?? "false").toLowerCase() === "true";
@@ -141,11 +160,98 @@ export function requireFreshIdl(idl: RuntimeIdl, requiredInstructions: string[])
   }
 }
 
-export function instructionDiscriminator(idl: RuntimeIdl, name: string): Buffer {
+function getIdlInstruction(idl: RuntimeIdl, name: string): RuntimeIdl["instructions"][number] {
   const instruction = idl.instructions.find((ix) => ix.name === name);
   if (!instruction) {
     throw new Error(`Instruction ${name} is missing from the generated IDL.`);
   }
+  return instruction;
+}
+
+function flattenIdlAccounts(accounts: IdlAccountSchema[] | undefined): IdlAccountSchema[] {
+  const flattened: IdlAccountSchema[] = [];
+  for (const account of accounts ?? []) {
+    if (account.accounts?.length) {
+      flattened.push(...flattenIdlAccounts(account.accounts));
+      continue;
+    }
+    flattened.push({
+      name: account.name,
+      signer: Boolean(account.signer),
+      writable: Boolean(account.writable),
+    });
+  }
+  return flattened;
+}
+
+export function idlInstructionAccountSchema(idl: RuntimeIdl, name: string): IdlAccountSchema[] {
+  return flattenIdlAccounts(getIdlInstruction(idl, name).accounts);
+}
+
+export function assertInstructionAccountSchema(
+  idl: RuntimeIdl,
+  name: string,
+  expectedAccounts: IdlAccountSchema[],
+): void {
+  const actualAccounts = idlInstructionAccountSchema(idl, name);
+  if (actualAccounts.length !== expectedAccounts.length) {
+    throw new Error(
+      `IDL account schema mismatch for ${name}: expected ${expectedAccounts.length} accounts, got ${actualAccounts.length}.`,
+    );
+  }
+  for (let index = 0; index < actualAccounts.length; index += 1) {
+    const actual = actualAccounts[index];
+    const expected = expectedAccounts[index];
+    if (
+      actual.name !== expected.name ||
+      Boolean(actual.signer) !== Boolean(expected.signer) ||
+      Boolean(actual.writable) !== Boolean(expected.writable)
+    ) {
+      throw new Error(
+        `IDL account schema mismatch for ${name}[${index}]: expected ` +
+          `${expected.name} signer=${Boolean(expected.signer)} writable=${Boolean(expected.writable)}, got ` +
+          `${actual.name} signer=${Boolean(actual.signer)} writable=${Boolean(actual.writable)}.`,
+      );
+    }
+  }
+}
+
+export function assertInstructionKeysMatchSchema(idl: RuntimeIdl, name: string, keys: NamedAccountMeta[]): void {
+  const schema = idlInstructionAccountSchema(idl, name);
+  if (schema.length !== keys.length) {
+    throw new Error(`Instruction ${name} account count mismatch: IDL has ${schema.length}, script provided ${keys.length}.`);
+  }
+  for (let index = 0; index < schema.length; index += 1) {
+    const expected = schema[index];
+    const provided = keys[index];
+    if (!provided?.pubkey) {
+      throw new Error(`Instruction ${name}[${index}] is missing an account pubkey.`);
+    }
+    if (!provided.name) {
+      throw new Error(`Instruction ${name}[${index}] is missing script account name ${expected.name}.`);
+    }
+    if (provided.name !== expected.name) {
+      throw new Error(`Instruction ${name}[${index}] account order/name mismatch: IDL expects ${expected.name}, script provided ${provided.name}.`);
+    }
+    if (Boolean(provided.isSigner) !== Boolean(expected.signer)) {
+      throw new Error(
+        `Instruction ${name}[${index}] signer mismatch for ${expected.name}: IDL expects ${Boolean(
+          expected.signer,
+        )}, script provided ${Boolean(provided.isSigner)}.`,
+      );
+    }
+    if (Boolean(provided.isWritable) !== Boolean(expected.writable)) {
+      throw new Error(
+        `Instruction ${name}[${index}] writable mismatch for ${expected.name}: IDL expects ${Boolean(
+          expected.writable,
+        )}, script provided ${Boolean(provided.isWritable)}.`,
+      );
+    }
+  }
+}
+
+export function instructionDiscriminator(idl: RuntimeIdl, name: string): Buffer {
+  const instruction = getIdlInstruction(idl, name);
   if (instruction.discriminator) {
     const discriminator = Buffer.from(instruction.discriminator);
     if (discriminator.length !== 8) {
@@ -194,9 +300,13 @@ export function optionalPk(value: string | undefined): PublicKey | null {
 export function readU64(name: string): bigint {
   const raw = process.env[name];
   if (!raw || !/^\d+$/.test(raw)) {
-    throw new Error(`${name} must be a positive integer string.`);
+    throw new Error(`${name} must be a non-negative integer string.`);
   }
-  return BigInt(raw);
+  const value = BigInt(raw);
+  if (value > U64_MAX) {
+    throw new Error(`${name} must fit in u64.`);
+  }
+  return value;
 }
 
 export function readU64Default(name: string, defaultValue: bigint): bigint {
@@ -207,7 +317,11 @@ export function readU64Default(name: string, defaultValue: bigint): bigint {
   if (!/^\d+$/.test(raw)) {
     throw new Error(`${name} must be a non-negative integer string.`);
   }
-  return BigInt(raw);
+  const value = BigInt(raw);
+  if (value > U64_MAX) {
+    throw new Error(`${name} must fit in u64.`);
+  }
+  return value;
 }
 
 export function readI64Default(name: string, defaultValue: bigint): bigint {
@@ -357,8 +471,30 @@ export function deriveTreasuryPdas(): Record<string, PublicKey> {
   };
 }
 
-export function meta(pubkey: PublicKey, isSigner = false, isWritable = false): AccountMeta {
-  return { pubkey, isSigner, isWritable };
+export function meta(pubkey: PublicKey, isSigner?: boolean, isWritable?: boolean): NamedAccountMeta;
+export function meta(name: string, pubkey: PublicKey, isSigner?: boolean, isWritable?: boolean): NamedAccountMeta;
+export function meta(
+  nameOrPubkey: string | PublicKey,
+  pubkeyOrIsSigner?: PublicKey | boolean,
+  isSignerOrIsWritable = false,
+  maybeIsWritable = false,
+): NamedAccountMeta {
+  if (typeof nameOrPubkey === "string") {
+    if (!(pubkeyOrIsSigner instanceof PublicKey)) {
+      throw new Error(`Missing pubkey for account ${nameOrPubkey}.`);
+    }
+    return {
+      name: nameOrPubkey,
+      pubkey: pubkeyOrIsSigner,
+      isSigner: Boolean(isSignerOrIsWritable),
+      isWritable: Boolean(maybeIsWritable),
+    };
+  }
+  return {
+    pubkey: nameOrPubkey,
+    isSigner: Boolean(pubkeyOrIsSigner),
+    isWritable: Boolean(isSignerOrIsWritable),
+  };
 }
 
 export async function assertDevnet(connection: Connection): Promise<string> {
@@ -437,7 +573,18 @@ export async function sendOrPlan(ctx: DevnetContext, label: string, tx: Transact
   return sig;
 }
 
-export function buildIx(idl: RuntimeIdl, name: string, keys: AccountMeta[], payload: Uint8Array = Buffer.alloc(0)): TransactionInstruction {
+export function requireDaoControlActivationConfirmation(env: NodeJS.ProcessEnv = process.env): void {
+  const actual = env[DAO_CONTROL_ACTIVATION_CONFIRMATION_ENV];
+  if (actual !== DAO_CONTROL_ACTIVATION_CONFIRMATION_VALUE) {
+    throw new Error(
+      `${DAO_CONTROL_ACTIVATION_CONFIRMATION_ENV} must be exactly ` +
+        `${DAO_CONTROL_ACTIVATION_CONFIRMATION_VALUE} before DaoControlled activation.`,
+    );
+  }
+}
+
+export function buildIx(idl: RuntimeIdl, name: string, keys: NamedAccountMeta[], payload: Uint8Array = Buffer.alloc(0)): TransactionInstruction {
+  assertInstructionKeysMatchSchema(idl, name, keys);
   return new TransactionInstruction({
     programId: PROGRAM_ID,
     keys,

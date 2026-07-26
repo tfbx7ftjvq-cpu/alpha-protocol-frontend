@@ -162,6 +162,16 @@ The guardian cannot:
 - transfer Treasury funds
 - change protocol authority mode
 
+## Devnet Tooling Safety
+
+The Devnet activation wrapper is intentionally harder to run than ordinary Devnet transaction scripts. In addition to `DRY_RUN=false` and `CONFIRM_DEVNET_TX=true`, it requires:
+
+```bash
+CONFIRM_DAO_CONTROL_ACTIVATION=I_UNDERSTAND_DAO_CONTROL_IS_IRREVERSIBLE
+```
+
+The check is performed before the script builds the activation transaction. This is a local operator guard only; it does not mean Authority Control has been initialized or activated on Devnet.
+
 ## Non-Goals
 
 This stage does not implement:

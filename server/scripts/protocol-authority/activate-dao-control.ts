@@ -14,11 +14,13 @@ import {
   deriveProtocolModuleRegistry,
   loadDevnetContext,
   meta,
+  requireDaoControlActivationConfirmation,
   readU64,
   sendOrPlan,
 } from "../devnet/alpha-v1/common";
 
 async function main(): Promise<void> {
+  requireDaoControlActivationConfirmation();
   const ctx = await loadDevnetContext({
     scriptName: "protocol-authority-activate-dao-control",
     sendsTransactions: true,
@@ -34,18 +36,18 @@ async function main(): Promise<void> {
 
   const tx = new Transaction().add(
     buildIx(ctx.idl, "execute_activate_protocol_dao_control_v1", [
-      meta(ctx.wallet, true, true),
-      meta(ctx.wallet, true),
-      meta(governanceConfig),
-      meta(authorityControl, false, true),
-      meta(deriveProtocolModuleRegistry(MODULE_CODES.Protocol)),
-      meta(deriveGovernanceProposalAction(proposal)),
-      meta(proposal),
-      meta(deriveGovernanceAdapter(proposal)),
-      meta(deriveProposalDecision(proposalId)),
-      meta(queue),
-      meta(deriveProtocolActivationRecord(authorityControl), false, true),
-      meta(SYS),
+      meta("executor", ctx.wallet, true, true),
+      meta("current_authority", ctx.wallet, true),
+      meta("governance_config", governanceConfig),
+      meta("authority_control", authorityControl, false, true),
+      meta("protocol_module_registry", deriveProtocolModuleRegistry(MODULE_CODES.Protocol)),
+      meta("governance_proposal_action", deriveGovernanceProposalAction(proposal)),
+      meta("governance_proposal", proposal),
+      meta("governance_decision_adapter", deriveGovernanceAdapter(proposal)),
+      meta("proposal_decision", deriveProposalDecision(proposalId)),
+      meta("execution_queue_item", queue),
+      meta("activation_record", deriveProtocolActivationRecord(authorityControl), false, true),
+      meta("system_program", SYS),
     ]),
   );
   await sendOrPlan(ctx, "execute_activate_protocol_dao_control_v1", tx);

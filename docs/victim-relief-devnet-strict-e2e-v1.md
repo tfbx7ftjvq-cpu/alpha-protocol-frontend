@@ -24,7 +24,9 @@ The scripts must run only against Devnet. They verify:
 - Program ID equals `HrLBQxUD3XHkB3KABjHXTiBHuAe6jVP2UPqiwmpmH8EY`.
 - Local IDL address matches the fixed Program ID.
 - Transaction scripts refuse to proceed unless required instruction names exist in the generated IDL.
+- Transaction scripts assert the generated IDL account schema before building instructions: account count, name, order, signer flag, and writable flag must match.
 - Transaction scripts are dry-run or locked unless `CONFIRM_DEVNET_TX=true` is explicitly set.
+- DAO control activation additionally requires `CONFIRM_DAO_CONTROL_ACTIVATION=I_UNDERSTAND_DAO_CONTROL_IS_IRREVERSIBLE`.
 
 The scripts never create a wallet, never overwrite a keypair, never run `anchor keys sync`, and never target Mainnet.
 
@@ -79,17 +81,25 @@ Real Devnet sends require:
 DRY_RUN=false CONFIRM_DEVNET_TX=true
 ```
 
+DAO control activation has a second irreversible-action gate:
+
+```bash
+CONFIRM_DAO_CONTROL_ACTIVATION=I_UNDERSTAND_DAO_CONTROL_IS_IRREVERSIBLE
+```
+
 ## Upgrade Stop Point
 
-This phase only prepares for a Devnet program upgrade. It must stop before deployment until the user explicitly confirms:
+This phase prepared for a Devnet program upgrade. A later upgrade attempt did not complete, so recovery must begin with read-only RPC health and buffer inspection before any retry.
 
 ```text
-È·ÈÏÖ´ÐÐDevnet program upgrade
+ç¡®è®¤æ‰§è¡ŒDevnet program upgrade
 ```
 
 ## Status
 
 - Devnet scripts: prepared.
-- Devnet program upgrade: pending explicit confirmation.
+- Devnet program upgrade: NOT COMPLETED; recovery inspection required before retry.
+- Authority Control initialization: NOT EXECUTED.
+- Victim Relief strict E2E: NOT EXECUTED.
 - Mainnet production: NO-GO.
 - Token launch: NO-GO.

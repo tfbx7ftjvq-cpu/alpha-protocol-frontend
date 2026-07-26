@@ -39,6 +39,14 @@ This manifest was prepared after local script additions, `cargo test`, a tempora
 - artifact SHA-256: `0a6e92625dd48641c4ea2bceb22d696e64068087f99b36a1bd768590e00ddd35`
 - rent-exempt minimum for new binary size: `24.10008576 SOL`
 
+## Local Tooling Hardening
+
+- Devnet transaction scripts assert generated IDL account schema before instruction construction.
+- The schema assertion checks instruction name, account count, account name, account order, signer flag, and writable flag.
+- `execute_activate_protocol_dao_control_v1` requires both the common Devnet transaction gate and `CONFIRM_DAO_CONTROL_ACTIVATION=I_UNDERSTAND_DAO_CONTROL_IS_IRREVERSIBLE`.
+- The package commands do not hardcode either confirmation value.
+- The added tooling tests are local-only and do not access Devnet RPC.
+
 ## Failed Devnet Upgrade Attempt / Recovery Required
 
 - Program ID: `HrLBQxUD3XHkB3KABjHXTiBHuAe6jVP2UPqiwmpmH8EY`
