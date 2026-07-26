@@ -20,8 +20,8 @@ interface Props {
 }
 
 const TREASURY_STATE_PDA = getTreasuryStatePda();
-const DAILY_POOL_TOTAL = 25_000;
-const DAO_RELIEF_POOL = 150_000;
+const DAILY_POOL_TOTAL = 0;
+const DAO_RELIEF_POOL = 0;
 const DAO_OTHER_VICTIM_SCORE = 500_000;
 
 const STAKING_TIERS = [
@@ -176,10 +176,10 @@ export default function VictimRelief({ lang }: Props) {
   const { connection } = useConnection();
   const wallet = useWallet();
   const { publicKey, connected, signAllTransactions, signTransaction } = wallet;
-  const [stakeAmount, setStakeAmount] = useState('5000');
-  const [lockDays, setLockDays] = useState(90);
-  const [lossAmount, setLossAmount] = useState(12_500);
-  const [victimStakeAmount, setVictimStakeAmount] = useState('8000');
+  const [stakeAmount, setStakeAmount] = useState('0');
+  const [lockDays, setLockDays] = useState(30);
+  const [lossAmount, setLossAmount] = useState(0);
+  const [victimStakeAmount, setVictimStakeAmount] = useState('0');
   const [chainStakingPool, setChainStakingPool] = useState<string | null>(null);
   const [stakingPoolStatus, setStakingPoolStatus] = useState<'idle' | 'loading' | 'ready' | 'missing' | 'error'>('idle');
   const [stakingPoolError, setStakingPoolError] = useState<string | null>(null);
@@ -256,7 +256,7 @@ export default function VictimRelief({ lang }: Props) {
     if (dailyStake <= 0 || lockDays <= 0) return 0;
     return dailyStake * lockDays;
   }, [dailyStake, lockDays]);
-  const dailyTotalPoints = 20_000_000 + dailyPoints;
+  const dailyTotalPoints = dailyPoints > 0 ? 20_000_000 + dailyPoints : 0;
   const dailyRewards = useMemo(() => {
     if (dailyPoints <= 0 || dailyTotalPoints <= 0) return 0;
     const ratio = Math.min(1, dailyPoints / dailyTotalPoints);
@@ -299,7 +299,7 @@ export default function VictimRelief({ lang }: Props) {
       <div className="flex items-center gap-3">
         <Zap className="text-green-400 w-6 h-6" />
         <h2 className="text-2xl font-bold text-green-400 tracking-widest uppercase font-mono">
-          Devnet Alpha 估算演示
+          零资金状态 · 资金模型演示
         </h2>
       </div>
 
@@ -358,7 +358,7 @@ export default function VictimRelief({ lang }: Props) {
               持币者未来质押 ALPHA 后，将根据质押时间长短和权重等级自动获得分红。
             </p>
             <p className="mt-2 text-yellow-300 font-bold">
-              质押分红不需要 DAO 逐笔投票。分红由质押规则和链上合约自动计算。DAO 最多参与未来质押规则或协议参数调整。
+              当前真实奖励池为0，质押与赔付均未开放。以下计算器只用于研究未来资金到位后的规则，不代表链上服务已经运行。
             </p>
           </div>
         </div>
@@ -587,7 +587,7 @@ export default function VictimRelief({ lang }: Props) {
       <div className="border border-yellow-400/30 bg-yellow-400/5 rounded-lg px-4 py-3 flex items-start gap-2">
         <Calculator className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
         <p className="text-yellow-300 font-mono text-xs leading-relaxed">
-          当前版本不涉及真实主网资金、真实质押收益或正式赔付执行。后续功能将通过合约升级、测试、安全审查和社区治理逐步开放。
+          零初始国库下，演示池余额固定为0。只有真实Creator Rewards完成确认、兑换和5/2/2/1分账后，才会启用真实质押奖励或赔付。
         </p>
       </div>
 

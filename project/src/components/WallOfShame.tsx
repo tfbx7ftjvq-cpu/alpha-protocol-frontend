@@ -3,10 +3,8 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import {
   ArrowRight,
   BadgeCheck,
-  Banknote,
   ExternalLink,
   FileText,
-  Flag,
   Gavel,
   HandHeart,
   PlusCircle,
@@ -34,49 +32,14 @@ interface ExposureProject {
   status: 'exposed' | 'hearing' | 'dao_pending';
 }
 
-const INITIAL_EXPOSURES: ExposureProject[] = [
-  {
-    id: 'proj-x',
-    project: 'Project X',
-    rugDate: '2026-05',
-    amountUsd: '$12,000,000',
-    coSigners: 1240,
-    chain: 'SOL',
-    status: 'dao_pending',
-  },
-  {
-    id: 'shadow-swap',
-    project: 'ShadowSwap Finance',
-    rugDate: '2024-01',
-    amountUsd: '$2,340,000',
-    coSigners: 892,
-    chain: 'ETH',
-    status: 'hearing',
-  },
-  {
-    id: 'invisible-vault',
-    project: 'InvisibleVault DAO',
-    rugDate: '2024-03',
-    amountUsd: '$4,100,000',
-    coSigners: 2103,
-    chain: 'SOL',
-    status: 'exposed',
-  },
-  {
-    id: 'moon-rug',
-    project: 'MoonRug Protocol',
-    rugDate: '2024-02',
-    amountUsd: '$890,000',
-    coSigners: 456,
-    chain: 'BSC',
-    status: 'exposed',
-  },
-];
+const INITIAL_EXPOSURES: ExposureProject[] = [];
 
-const certifiedData = [
-  { name: 'SolNexus Matrix', chain: 'SOL', contribution: '2,500', date: '2026-05-20', rating: 'AAA', ratingZh: '优秀' },
-  { name: 'Aegis Liquidity', chain: 'SOL', contribution: '1,800', date: '2026-05-24', rating: 'AA', ratingZh: '良好' },
-];
+const certifiedData: Array<{
+  name: string;
+  chain: string;
+  contribution: string;
+  date: string;
+}> = [];
 
 const DAO_USES = [
   '赔付申请审核',
@@ -96,43 +59,13 @@ const PROPOSAL_FLOW = [
   'Executed 已执行',
 ];
 
-const MOCK_DAO_PROPOSALS = [
-  {
-    title: '赔付申请：某项目跑路受害者赔付申请',
-    type: '赔付申请',
-    status: 'Active 投票中',
-    icon: HandHeart,
-    color: 'text-emerald-400 border-emerald-400/25 bg-emerald-400/5',
-  },
-  {
-    title: '绿标认证：某项目申请 Alpha Green Label',
-    type: '绿标认证',
-    status: 'Draft 草案',
-    icon: BadgeCheck,
-    color: 'text-cyan-400 border-cyan-400/25 bg-cyan-400/5',
-  },
-  {
-    title: '风险曝光：某高风险项目社区曝光提案',
-    type: '风险曝光',
-    status: 'Passed 已通过',
-    icon: Flag,
-    color: 'text-red-400 border-red-400/25 bg-red-400/5',
-  },
-  {
-    title: '国库支出：安全审计费用支出提案',
-    type: '国库支出',
-    status: 'Queued 待执行',
-    icon: Banknote,
-    color: 'text-blue-400 border-blue-400/25 bg-blue-400/5',
-  },
-  {
-    title: '贡献者激励：前端开发任务赏金提案',
-    type: '贡献者激励',
-    status: 'Draft 草案',
-    icon: Users,
-    color: 'text-violet-400 border-violet-400/25 bg-violet-400/5',
-  },
-];
+const MOCK_DAO_PROPOSALS: Array<{
+  title: string;
+  type: string;
+  status: string;
+  icon: typeof HandHeart;
+  color: string;
+}> = [];
 
 const BUILDER_USES = [
   '协议开发',
@@ -291,7 +224,7 @@ export default function WallOfShame({ lang }: Props) {
               质押分红是自动机制，不需要 DAO 逐笔投票。DAO 最多负责未来调整质押规则或协议参数。
             </div>
             <div className="rounded-lg border border-cyan-400/25 bg-cyan-400/5 px-4 py-3 text-xs font-mono leading-relaxed text-cyan-100">
-              DAO 链上投票模块将在后续合约版本中开放。
+              Governance V1 已完成本地实现与测试，但最新版本没有升级到 Devnet，也没有部署 Mainnet。
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -306,6 +239,11 @@ export default function WallOfShame({ lang }: Props) {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {MOCK_DAO_PROPOSALS.length === 0 && (
+                <div className="md:col-span-2 rounded-lg border border-zinc-800 bg-zinc-950/70 px-4 py-5 text-xs text-zinc-500">
+                  当前没有公开的真实治理提案。页面不再使用虚构提案填充。
+                </div>
+              )}
               {MOCK_DAO_PROPOSALS.map((proposal) => {
                 const Icon = proposal.icon;
                 return (
@@ -436,6 +374,11 @@ export default function WallOfShame({ lang }: Props) {
             </div>
 
             <div className="md:hidden space-y-3">
+              {exposures.length === 0 && (
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/80 p-4 text-xs text-zinc-500">
+                  当前没有经过公开数据源验证的风险项目记录。
+                </div>
+              )}
               {exposures.map((row) => {
                 const joined = joinedIds.has(row.id);
                 const badge = statusBadge(row.status);
@@ -511,13 +454,20 @@ export default function WallOfShame({ lang }: Props) {
                   </tr>
                 </thead>
                 <tbody>
+                  {certifiedData.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-6 text-center text-xs text-zinc-500">
+                        当前没有正式认证项目。Green Label不是信用评级，页面不展示虚构AAA/AA等级。
+                      </td>
+                    </tr>
+                  )}
                   {certifiedData.map((row) => (
                     <tr key={row.name} className="border-b border-zinc-800/50 hover:bg-green-400/5">
                       <td className="px-4 py-3 text-zinc-200 font-bold">{row.name}</td>
                       <td className="px-4 py-3 text-cyan-400">{row.chain}</td>
                       <td className="px-4 py-3 text-green-400">{row.contribution} USDC</td>
                       <td className="px-4 py-3 text-zinc-500">{row.date}</td>
-                      <td className="px-4 py-3 text-green-400">{row.ratingZh}</td>
+                      <td className="px-4 py-3 text-green-400">Green Label</td>
                     </tr>
                   ))}
                 </tbody>

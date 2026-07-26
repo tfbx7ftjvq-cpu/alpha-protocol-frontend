@@ -15,14 +15,15 @@ import {
   Vote,
 } from 'lucide-react';
 
-export type PublicLandingTarget = 'treasury' | 'shame' | 'greenLabel' | 'tokenRevenue';
+export type PublicLandingTarget = 'launch' | 'treasury' | 'shame' | 'greenLabel' | 'tokenRevenue';
 
 interface PublicLandingPageProps {
   onNavigate: (target: PublicLandingTarget) => void;
 }
 
 const STATUS_BADGES = [
-  { label: 'Devnet Verified', tone: 'emerald' },
+  { label: 'Zero-funded Prelaunch', tone: 'yellow' },
+  { label: 'Selected Devnet Paths Verified', tone: 'emerald' },
   { label: 'Mainnet Not Live', tone: 'red' },
   { label: 'Read-only Public MVP', tone: 'cyan' },
   { label: 'No investment advice', tone: 'zinc' },
@@ -66,7 +67,7 @@ const SOLUTIONS = [
 const MODULES = [
   {
     title: 'DAO Governance',
-    bullets: ['Security Layer V1 execution guard completed', 'Full ALPHA voting layer pending'],
+    bullets: ['Governance V1 completed and locally tested', 'Latest governance build not upgraded on Devnet'],
     icon: Vote,
     tone: 'cyan',
   },
@@ -107,7 +108,8 @@ const COMPLETED = [
 ];
 
 const PENDING = [
-  'Full ALPHA token voting layer',
+  'ALPHA Mainnet token launch',
+  'Public Mainnet revenue wallet configuration',
   'Mainnet deployment / config',
   'Mainnet authority migration',
   'Mainnet sanity check',
@@ -140,7 +142,7 @@ const RISK_DISCLOSURES = [
   'ALPHA does not guarantee profit, yield, dividend, or price appreciation.',
   'Staking rewards are protocol-rule-based incentives, not guaranteed returns.',
   'Relief pool does not mean automatic payout.',
-  'DAO voting layer is not fully launched yet.',
+  'Governance V1 latest build is locally tested but not upgraded on Devnet or deployed on Mainnet.',
   'Current dashboards are read-only Devnet / Public MVP views.',
 ];
 
@@ -200,10 +202,19 @@ function HeroSection({ onNavigate }: PublicLandingPageProps) {
         </p>
         <p className="mt-4 max-w-3xl text-sm leading-relaxed text-zinc-400">
           Alpha Protocol 是一个面向链上风险保护、透明国库分流、Green Label 风险承诺与 DAO 治理执行的协议。
-          当前为 Devnet verified / read-only Public MVP，Mainnet 尚未上线。
+          当前采用零初始国库、收入驱动的混合架构。部分早期模块曾完成Devnet路径验证，
+          但最新完整程序仍未升级到Devnet，ALPHA及自定义程序均未在Mainnet上线。
         </p>
 
         <div className="mt-8 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => onNavigate('launch')}
+            className="inline-flex items-center gap-2 rounded border border-yellow-400/35 bg-yellow-400/10 px-4 py-2 text-xs font-black text-yellow-200 transition-all hover:bg-yellow-400/15"
+          >
+            View Zero-funded Launch
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
           <button
             type="button"
             onClick={() => onNavigate('shame')}
@@ -502,11 +513,12 @@ function ListItem({
   );
 }
 
-function StatusBadge({ label, tone }: { label: string; tone: 'cyan' | 'emerald' | 'red' | 'zinc' }) {
+function StatusBadge({ label, tone }: { label: string; tone: 'cyan' | 'emerald' | 'red' | 'yellow' | 'zinc' }) {
   const className = {
     cyan: 'border-cyan-400/30 bg-cyan-400/10 text-cyan-200',
     emerald: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200',
     red: 'border-red-400/30 bg-red-400/10 text-red-200',
+    yellow: 'border-yellow-400/30 bg-yellow-400/10 text-yellow-200',
     zinc: 'border-zinc-700 bg-zinc-900/70 text-zinc-300',
   }[tone];
 

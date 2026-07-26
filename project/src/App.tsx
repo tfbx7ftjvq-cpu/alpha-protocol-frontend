@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { type WalletError } from '@solana/wallet-adapter-base';
 import { ConnectionProvider, WalletProvider, useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletModalProvider, WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
+import { PhantomWalletAdapter } from '@solana/wallet-adapter-phantom';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import '@solana/wallet-adapter-react-ui/styles.css';
-import { Globe, ShieldCheck, BookOpen, LayoutDashboard, Hexagon, Wallet, Coins, Home } from 'lucide-react';
+import { Globe, ShieldCheck, BookOpen, LayoutDashboard, Hexagon, Wallet, Coins, Home, Rocket } from 'lucide-react';
 import { type Lang } from './translations';
 import TreasuryDashboard from './components/TreasuryDashboard';
 import WallOfShame from './components/WallOfShame';
@@ -13,8 +13,9 @@ import VictimRelief from './components/VictimRelief';
 import GreenLabelDashboard from './components/GreenLabelDashboard';
 import TokenRevenueDashboard from './components/TokenRevenueDashboard';
 import PublicLandingPage from './components/PublicLandingPage';
+import LaunchTransparencyDashboard from './components/LaunchTransparencyDashboard';
 
-type Tab = 'home' | 'treasury' | 'shame' | 'relief' | 'greenLabel' | 'tokenRevenue';
+type Tab = 'home' | 'launch' | 'treasury' | 'shame' | 'relief' | 'greenLabel' | 'tokenRevenue';
 type RpcStatus = 'checking' | 'ok' | 'error';
 
 const endpoint = 'https://api.devnet.solana.com';
@@ -24,19 +25,19 @@ const WALLET_REJECTED_MESSAGE = '用户取消连接';
 
 const HERO = {
   en: {
-    tagline: 'DAO 驱动的链上国库、赔付救济、自动质押分红、项目认证与社区共建协议',
-    sub: '当前版本为 Devnet Alpha 测试网原型，链上国库分流账本已在 Devnet 验证。DAO、赔付、质押、绿标认证和社区共建模块将在后续合约版本中逐步开放。',
+    tagline: '零初始国库、收入透明分账、社区治理与风险协作协议',
+    sub: 'Mainnet launch layer is prelaunch and zero-funded. Existing protocol dashboards remain Devnet technical proofs; the latest full program is not deployed on Mainnet.',
     tabTreasury: '国库分流账本',
     tabShame: '链上法庭与 DAO 治理',
-    tabRelief: '资产质押与分红',
+    tabRelief: '资金模型与启用门槛',
     protocolBadge: 'Alpha Protocol / α 协议',
   },
   zh: {
-    tagline: 'DAO 驱动的链上国库、赔付救济、自动质押分红、项目认证与社区共建协议',
-    sub: '当前版本为 Devnet Alpha 测试网原型，链上国库分流账本已在 Devnet 验证。DAO、赔付、质押、绿标认证和社区共建模块将在后续合约版本中逐步开放。',
+    tagline: '零初始国库、收入透明分账、社区治理与风险协作协议',
+    sub: '当前采用零初始国库、收入驱动路线。Mainnet发射层尚未上线；现有协议页面是Devnet技术证明，最新完整程序未部署Mainnet。',
     tabTreasury: '国库分流账本',
     tabShame: '链上法庭与 DAO 治理',
-    tabRelief: '资产质押与分红',
+    tabRelief: '资金模型与启用门槛',
     protocolBadge: 'Alpha Protocol / α 协议',
   },
 };
@@ -152,6 +153,7 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
     activeBorder: string;
   }[] = [
     { key: 'home', label: '协议首页', icon: Home, activeColor: 'text-cyan-400', activeBorder: 'border-cyan-400' },
+    { key: 'launch', label: '零资金发射', icon: Rocket, activeColor: 'text-yellow-400', activeBorder: 'border-yellow-400' },
     { key: 'treasury', label: h.tabTreasury, icon: BookOpen, activeColor: 'text-green-400', activeBorder: 'border-green-400' },
     { key: 'shame', label: h.tabShame, icon: ShieldCheck, activeColor: 'text-red-400', activeBorder: 'border-red-400' },
     { key: 'relief', label: h.tabRelief, icon: LayoutDashboard, activeColor: 'text-cyan-400', activeBorder: 'border-cyan-400' },
@@ -169,10 +171,10 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
           <div className="flex items-center gap-4 text-zinc-600 text-[10px]">
             <span className="flex items-center gap-1.5 text-cyan-400/80 font-bold">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 inline-block" />
-              DEVNET
+              DEVNET WORKSPACE
             </span>
             <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded border border-emerald-400/20 bg-emerald-400/5 text-emerald-400 font-bold text-[9px]">
-              Devnet Alpha
+              Hybrid Prelaunch
             </span>
             <span className={`flex items-center gap-1 px-2 py-0.5 rounded border font-bold text-[9px] ${rpcStatusMeta[rpcStatus].className}`}>
               <span className={`w-1.5 h-1.5 rounded-full inline-block ${rpcStatusMeta[rpcStatus].dotClassName} ${rpcStatus === 'checking' ? 'animate-pulse' : ''}`} />
@@ -197,7 +199,7 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded border border-zinc-900 text-zinc-500 text-[9px] uppercase tracking-widest font-black">
-              测试网原型
+              Mainnet未发射
             </span>
             <WalletMultiButton className="!bg-green-500 !text-black font-mono hover:!bg-green-400 transition-all rounded-md px-4 py-2 text-sm" />
           </div>
@@ -219,7 +221,7 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-lg font-black text-zinc-100 tracking-tight leading-none">{h.protocolBadge}</h1>
                 <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-green-400/10 border border-green-400/20 text-green-400 uppercase tracking-widest">
-                  Devnet Alpha
+                  Hybrid Prelaunch
                 </span>
               </div>
               <p className="text-green-400 font-mono text-xs font-bold mt-2 leading-snug max-w-lg">{h.tagline}</p>
@@ -265,6 +267,7 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 relative z-10">
         {activeTab === 'home' && <PublicLandingPage onNavigate={(target) => setActiveTab(target)} />}
+        {activeTab === 'launch' && <LaunchTransparencyDashboard />}
         {activeTab === 'treasury' && (
           <TreasuryDashboard
             lang={lang}
@@ -281,21 +284,21 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
       <footer className="border-t border-zinc-900 mt-24 px-6 py-8 text-center space-y-4 bg-zinc-950">
         <div className="max-w-4xl mx-auto rounded-xl border border-red-400/25 bg-red-400/5 px-4 py-3 text-left">
           <p className="text-red-300 text-[10px] font-mono font-bold uppercase tracking-widest mb-1">
-            Devnet Alpha 风险提示
+            Prelaunch 风险提示
           </p>
           <p className="text-red-100/80 text-[11px] font-mono leading-relaxed">
-            当前版本为 Devnet Alpha 测试网原型。
-            当前不涉及真实主网资金、真实赔付、真实质押收益或正式绿标认证。
-            ALPHA 代币相关 creator fee / developer reward 接入协议国库的机制将在后续版本中逐步公开和验证。
+            ALPHA尚未发射，公开收入钱包和Mainnet Mint尚未配置，国库初始资金为0。
+            当前不涉及真实主网赔付、真实质押收益或正式绿标认证。
+            Creator Rewards的资产、接收地址和平台配置必须在发射时核验后才能公开为已接入。
             质押分红不代表固定收益，不承诺固定年化，不保证收益。
             后续功能将通过合约升级、测试、安全审查和社区治理逐步开放。
           </p>
         </div>
         <p className="text-zinc-700 text-[10px] font-mono tracking-wider max-w-3xl mx-auto leading-relaxed">
-          © 2026 Alpha Protocol / α 协议 — Devnet Alpha 测试网原型。链上国库分流账本已在 Devnet 验证。
+          © 2026 Alpha Protocol / α 协议 — Zero-funded hybrid prelaunch。完整最新程序未部署Mainnet。
         </p>
         <div className="flex items-center justify-center gap-2 flex-wrap">
-          {['Solana Devnet', 'Anchor Program', 'TreasuryState PDA', 'React / Vite', 'Phantom Wallet'].map((item) => (
+          {['Mainnet launch: prelaunch', 'Devnet proofs', 'Zero-funded treasury', 'React / Vite', 'Phantom Wallet'].map((item) => (
             <span
               key={item}
               className="text-[9px] text-zinc-600 border border-zinc-900 bg-zinc-950 px-2 py-0.5 rounded font-mono font-bold tracking-tight"

@@ -44,10 +44,10 @@ const DAO_SCOPE = [
 const DAO_ROADMAP = [
   { label: 'Completed', value: 'Security Layer V1 execution guard', tone: 'emerald' },
   { label: 'Completed', value: 'Green Label refund/slash linked to Security Layer', tone: 'emerald' },
-  { label: 'Current', value: 'Read-only DAO Governance Dashboard', tone: 'cyan' },
-  { label: 'Next', value: 'DAO proposal product model', tone: 'yellow' },
-  { label: 'Later', value: 'ALPHA voting power / quorum / threshold / delegation', tone: 'zinc' },
-  { label: 'Later', value: 'DAO-controlled treasury and governance authority', tone: 'zinc' },
+  { label: 'Local only', value: 'Governance V1 voting, quorum, threshold, lock multipliers and action binding', tone: 'yellow' },
+  { label: 'Current Devnet', value: 'Historical Security Layer read-only evidence', tone: 'cyan' },
+  { label: 'Launch path', value: 'Off-chain discussion with publicly auditable decisions', tone: 'zinc' },
+  { label: 'Later', value: 'Realms or minimal governed treasury execution', tone: 'zinc' },
 ] as const;
 
 export default function DAOGovernanceDashboard() {
@@ -193,7 +193,7 @@ function ExecutionLayerCard() {
   const items = [
     'Completed layer: DAO execution / Security Layer V1.',
     'Responsible for proposal decision, queue, timelock, execute, cancel, and pause.',
-    'Full ALPHA token voting layer is not open yet.',
+    'Governance V1 is implemented and locally tested, but its latest build is not on the current Devnet program.',
     'This UI is read-only and does not provide vote, queue, execute, cancel, or pause buttons.',
   ];
 
@@ -202,8 +202,8 @@ function ExecutionLayerCard() {
       <SectionHeader
         icon={LockKeyhole}
         eyebrow="Governance Execution Layer"
-        title="Execution guard, not full voting yet"
-        description="The current Devnet milestone verifies controlled execution paths. Voting product and ALPHA voting power are later phases."
+        title="Historical Devnet execution guard"
+        description="This card reads the older Devnet Security Layer. It does not imply that the latest locally tested Governance V1 build is deployed."
         tone="text-cyan-300"
       />
       <div className="mt-4 space-y-2">
@@ -414,8 +414,8 @@ function DAORoadmapCard() {
       <SectionHeader
         icon={TimerReset}
         eyebrow="DAO Roadmap"
-        title="From execution guard to voting layer"
-        description="The read-only dashboard makes the execution layer visible before the full voting product is opened."
+        title="Separate code completion from deployment"
+        description="Local Governance V1 completion, historical Devnet evidence, and the zero-funded launch path are reported independently."
         tone="text-yellow-300"
       />
       <div className="mt-4 space-y-2">

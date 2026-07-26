@@ -73,7 +73,7 @@ const SPLIT_RULES = [
 ];
 
 const REVENUE_PATH = [
-  'ALPHA 交易产生 creator fee / developer reward',
+  '发射日核验后的 ALPHA Creator Rewards',
   '进入公开协议国库钱包',
   '纳入 Alpha Protocol 国库模型',
   '支持 50/20/20/10 分配机制',
@@ -700,7 +700,7 @@ export default function TreasuryDashboard({ lang, walletConnected, walletBalance
           icon={Coins}
           eyebrow="Roadmap Revenue Module"
           title="Token Revenue / 协议收入来源"
-          description="ALPHA 代币未来通过发币平台或交易平台产生的 creator fee / developer reward，将作为 Alpha Protocol 的协议收入来源之一。"
+          description="ALPHA 发射后，只有经过核验的 Creator Rewards 收款资产、地址和交易才计入 Alpha Protocol 协议收入。"
         />
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -734,7 +734,7 @@ export default function TreasuryDashboard({ lang, walletConnected, walletBalance
         </div>
 
         <div className="rounded border border-cyan-400/20 bg-cyan-400/5 px-4 py-3 text-xs leading-relaxed text-cyan-100">
-          当前 Devnet Alpha 已验证链上国库账本分流逻辑。主网 creator fee / developer reward 接入自动分流将在后续版本开放。
+          当前页面展示历史 Devnet 国库数据。主网 Creator Rewards 尚未接入；其资产、收款地址和分流方式必须在发射日核验。
         </div>
         <div className="rounded border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-xs leading-relaxed text-zinc-400">
           协议收入将优先服务于受害者保护、生态建设、长期持有者激励和社区治理。本页面不提供收益承诺，也不暗示无风险获利。
