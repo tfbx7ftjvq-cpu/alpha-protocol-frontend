@@ -9,7 +9,11 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
-    "operations:test": "node --experimental-strip-types --test tests/*.test.ts"
+    "operations:test": "node --experimental-strip-types --test tests/*.test.ts",
+    "operations:tooling:typecheck": "tsc --noEmit -p tsconfig.operations.json",
+    "operations:staging:preflight": "node --experimental-strip-types scripts/operations-staging/preflight.ts",
+    "operations:staging:e2e": "node --experimental-strip-types scripts/operations-staging/e2e.ts",
+    "operations:verify": "npm run operations:test && npm run operations:tooling:typecheck && npm run typecheck && npm run lint && npm run build"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
@@ -24,8 +28,10 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.3.8",
     "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
     "@eslint/js": "^9.39.5",
+    "@types/node": "^24.3.1",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^5.2.0",

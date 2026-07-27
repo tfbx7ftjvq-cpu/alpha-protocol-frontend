@@ -1,12 +1,19 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { PGlite } from '@electric-sql/pglite';
 
-const migrationUrl = new URL(
+const foundationMigrationUrl = new URL(
   '../../supabase/migrations/202607270001_offchain_operations_foundation.sql',
   import.meta.url,
 );
-const sql = readFileSync(migrationUrl, 'utf8');
+const hardeningMigrationUrl = new URL(
+  '../../supabase/migrations/202607270002_operations_staging_hardening.sql',
+  import.meta.url,
+);
+const foundationSql = readFileSync(foundationMigrationUrl, 'utf8');
+const hardeningSql = readFileSync(hardeningMigrationUrl, 'utf8');
+const sql = `${foundationSql}\n${hardeningSql}`;
 
 const expectedTables = [
   'community_tasks',
@@ -163,6 +170,129 @@ test('migration contains no database network or secret-vault integration', () =>
   assert.doesNotMatch(sql, /\bsend_transaction\b|\bsendtransaction\b/i);
 });
 
+test('staging hardening prevents publication downgrade and gives moderators read scope', () => {
+  assert.match(
+    hardeningSql,
+    /new\.publication_status is distinct from old\.publication_status/,
+  );
+  assert.match(
+    hardeningSql,
+    /published record on % cannot be unpublished/,
+  );
+
+  const policy = extractPolicy(
+    'governance_discussions_moderator_read',
+    hardeningSql,
+  );
+  assert.match(policy, /for select/);
+  assert.match(policy, /'moderator', 'operator', 'governance_admin'/);
+});
+
+test('both migrations create the expected schema, policy, and trigger totals', async () => {
+  const database = await createOperationsDatabase();
+  try {
+    const tableCount = await database.query<{ count: number }>(`
+      select count(*)::integer as count
+      from pg_catalog.pg_tables
+      where schemaname = 'public'
+        and tablename = any(array[${expectedTables.map(quoteSql).join(', ')}]);
+    `);
+    const policyCount = await database.query<{ count: number }>(`
+      select count(*)::integer as count
+      from pg_catalog.pg_policies
+      where schemaname = 'public'
+        and tablename = any(array[${expectedTables.map(quoteSql).join(', ')}]);
+    `);
+    const triggerCount = await database.query<{ count: number }>(`
+      select count(*)::integer as count
+      from pg_catalog.pg_trigger trigger
+      join pg_catalog.pg_class relation on relation.oid = trigger.tgrelid
+      join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+      where not trigger.tgisinternal
+        and namespace.nspname = 'public'
+        and relation.relname = any(array[${expectedTables.map(quoteSql).join(', ')}]);
+    `);
+
+    assert.equal(tableCount.rows[0]?.count, 13);
+    assert.equal(policyCount.rows[0]?.count, 37);
+    assert.equal(triggerCount.rows[0]?.count, 29);
+  } finally {
+    await database.close();
+  }
+});
+
+test('runtime rejects published downgrade and allows moderator private discussion reads', async () => {
+  const database = await createOperationsDatabase();
+  const ownerId = '11111111-1111-4111-8111-111111111111';
+  const moderatorId = '22222222-2222-4222-8222-222222222222';
+
+  try {
+    await database.exec(`
+      insert into auth.users (id) values
+        ('${ownerId}'),
+        ('${moderatorId}');
+
+      insert into public.community_tasks (
+        title,
+        summary,
+        requirements,
+        status,
+        publication_status,
+        published_at
+      ) values (
+        'Runtime staging task',
+        'A sufficiently long staging summary for runtime validation.',
+        'A sufficiently long staging requirement for runtime validation.',
+        'closed',
+        'published',
+        timezone('utc', now())
+      );
+
+      insert into public.governance_discussions (
+        submitted_by,
+        topic,
+        body,
+        moderation_status
+      ) values (
+        '${ownerId}',
+        'Runtime moderation',
+        'A private discussion body that only its owner and moderators may read.',
+        'pending'
+      );
+    `);
+
+    await assert.rejects(
+      database.exec(`
+        update public.community_tasks
+        set publication_status = 'draft'
+        where title = 'Runtime staging task';
+      `),
+      /cannot be unpublished/,
+    );
+
+    await database.exec(`
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${moderatorId}","app_metadata":{"operations_role":"moderator"}}',
+        false
+      );
+      set role authenticated;
+    `);
+    const moderatorRows = await database.query<{ topic: string }>(`
+      select topic
+      from public.governance_discussions
+      where topic = 'Runtime moderation';
+    `);
+    assert.deepEqual(
+      moderatorRows.rows.map((row) => row.topic),
+      ['Runtime moderation'],
+    );
+    await database.exec('reset role;');
+  } finally {
+    await database.close();
+  }
+});
+
 function extractCreateTable(table: string): string {
   const match = sql.match(
     new RegExp(`create table public\\.${table} \\([\\s\\S]*?\\n\\);`),
@@ -171,10 +301,55 @@ function extractCreateTable(table: string): string {
   return match[0];
 }
 
-function extractPolicy(policy: string): string {
-  const match = sql.match(
+function extractPolicy(policy: string, source = sql): string {
+  const match = source.match(
     new RegExp(`create policy ${policy}[\\s\\S]*?;`),
   );
   assert.ok(match, `missing policy ${policy}`);
   return match[0];
+}
+
+async function createOperationsDatabase(): Promise<PGlite> {
+  const database = new PGlite();
+  await database.exec(`
+    create role anon nologin;
+    create role authenticated nologin;
+    create schema auth;
+    create table auth.users (id uuid primary key);
+
+    create function auth.uid()
+    returns uuid
+    language sql
+    stable
+    as $$
+      select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
+    $$;
+
+    create function auth.jwt()
+    returns jsonb
+    language sql
+    stable
+    as $$
+      select coalesce(
+        nullif(current_setting('request.jwt.claims', true), ''),
+        '{}'
+      )::jsonb;
+    $$;
+
+    grant usage on schema auth to anon, authenticated;
+    grant select on table auth.users to authenticated;
+  `);
+
+  await database.exec(
+    foundationSql.replace(
+      'create extension if not exists pgcrypto;',
+      '-- pgcrypto is supplied by Supabase and omitted only in PGlite validation',
+    ),
+  );
+  await database.exec(hardeningSql);
+  return database;
+}
+
+function quoteSql(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
 }
