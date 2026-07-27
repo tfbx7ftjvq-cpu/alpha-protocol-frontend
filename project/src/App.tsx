@@ -5,7 +5,7 @@ import { WalletModalProvider, WalletMultiButton } from '@solana/wallet-adapter-r
 import { PhantomWalletAdapter } from '@solana/wallet-adapter-phantom';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import '@solana/wallet-adapter-react-ui/styles.css';
-import { Globe, ShieldCheck, BookOpen, LayoutDashboard, Hexagon, Wallet, Coins, Home, Rocket } from 'lucide-react';
+import { Globe, ShieldCheck, BookOpen, LayoutDashboard, Hexagon, Wallet, Coins, Home, Rocket, Users } from 'lucide-react';
 import { type Lang } from './translations';
 import TreasuryDashboard from './components/TreasuryDashboard';
 import WallOfShame from './components/WallOfShame';
@@ -14,8 +14,9 @@ import GreenLabelDashboard from './components/GreenLabelDashboard';
 import TokenRevenueDashboard from './components/TokenRevenueDashboard';
 import PublicLandingPage from './components/PublicLandingPage';
 import LaunchTransparencyDashboard from './components/LaunchTransparencyDashboard';
+import OperationsDashboard from './components/OperationsDashboard';
 
-type Tab = 'home' | 'launch' | 'treasury' | 'shame' | 'relief' | 'greenLabel' | 'tokenRevenue';
+type Tab = 'home' | 'launch' | 'operations' | 'treasury' | 'shame' | 'relief' | 'greenLabel' | 'tokenRevenue';
 type RpcStatus = 'checking' | 'ok' | 'error';
 
 const endpoint = 'https://api.devnet.solana.com';
@@ -154,6 +155,7 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
   }[] = [
     { key: 'home', label: '协议首页', icon: Home, activeColor: 'text-cyan-400', activeBorder: 'border-cyan-400' },
     { key: 'launch', label: '零资金发射', icon: Rocket, activeColor: 'text-yellow-400', activeBorder: 'border-yellow-400' },
+    { key: 'operations', label: '社区运营与申请', icon: Users, activeColor: 'text-cyan-400', activeBorder: 'border-cyan-400' },
     { key: 'treasury', label: h.tabTreasury, icon: BookOpen, activeColor: 'text-green-400', activeBorder: 'border-green-400' },
     { key: 'shame', label: h.tabShame, icon: ShieldCheck, activeColor: 'text-red-400', activeBorder: 'border-red-400' },
     { key: 'relief', label: h.tabRelief, icon: LayoutDashboard, activeColor: 'text-cyan-400', activeBorder: 'border-cyan-400' },
@@ -268,6 +270,9 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 relative z-10">
         {activeTab === 'home' && <PublicLandingPage onNavigate={(target) => setActiveTab(target)} />}
         {activeTab === 'launch' && <LaunchTransparencyDashboard />}
+        {activeTab === 'operations' && (
+          <OperationsDashboard connectedWallet={publicKey?.toBase58() ?? null} />
+        )}
         {activeTab === 'treasury' && (
           <TreasuryDashboard
             lang={lang}

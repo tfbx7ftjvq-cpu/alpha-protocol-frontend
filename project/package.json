@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json"
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "operations:test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",

@@ -15,7 +15,7 @@ import {
   Vote,
 } from 'lucide-react';
 
-export type PublicLandingTarget = 'launch' | 'treasury' | 'shame' | 'greenLabel' | 'tokenRevenue';
+export type PublicLandingTarget = 'launch' | 'operations' | 'treasury' | 'shame' | 'greenLabel' | 'tokenRevenue';
 
 interface PublicLandingPageProps {
   onNavigate: (target: PublicLandingTarget) => void;
@@ -25,7 +25,7 @@ const STATUS_BADGES = [
   { label: 'Zero-funded Prelaunch', tone: 'yellow' },
   { label: 'Selected Devnet Paths Verified', tone: 'emerald' },
   { label: 'Mainnet Not Live', tone: 'red' },
-  { label: 'Read-only Public MVP', tone: 'cyan' },
+  { label: 'Gated Off-chain Intake', tone: 'cyan' },
   { label: 'No investment advice', tone: 'zinc' },
 ] as const;
 
@@ -58,7 +58,7 @@ const SOLUTIONS = [
   },
   {
     title: 'Public Dashboards',
-    text: '前端以只读方式展示链上状态，提高透明度，不提供写入按钮或交易入口。',
+    text: '链上状态保持只读；社区申请进入独立 RLS 运营后端，不提供链上交易或国库付款按钮。',
     icon: Gauge,
     tone: 'zinc',
   },
@@ -105,11 +105,13 @@ const COMPLETED = [
   'DAO Governance Read-only Dashboard completed',
   'Token / Revenue / Treasury Dashboard completed',
   'Mainnet prelaunch safety framework completed',
+  'Off-chain operations foundation completed locally',
 ];
 
 const PENDING = [
   'ALPHA Mainnet token launch',
   'Public Mainnet revenue wallet configuration',
+  'Supabase staging migration / RLS verification / abuse controls',
   'Mainnet deployment / config',
   'Mainnet authority migration',
   'Mainnet sanity check',
@@ -143,7 +145,7 @@ const RISK_DISCLOSURES = [
   'Staking rewards are protocol-rule-based incentives, not guaranteed returns.',
   'Relief pool does not mean automatic payout.',
   'Governance V1 latest build is locally tested but not upgraded on Devnet or deployed on Mainnet.',
-  'Current dashboards are read-only Devnet / Public MVP views.',
+  'On-chain dashboards are read-only; off-chain intake is separately gated and cannot move funds.',
 ];
 
 const DOC_LINKS = {
@@ -221,6 +223,14 @@ function HeroSection({ onNavigate }: PublicLandingPageProps) {
             className="inline-flex items-center gap-2 rounded border border-cyan-400/35 bg-cyan-400/10 px-4 py-2 text-xs font-black text-cyan-200 transition-all hover:bg-cyan-400/15"
           >
             Explore DAO Dashboard
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate('operations')}
+            className="inline-flex items-center gap-2 rounded border border-cyan-400/35 bg-cyan-400/10 px-4 py-2 text-xs font-black text-cyan-200 transition-all hover:bg-cyan-400/15"
+          >
+            Open Community Operations
             <ArrowRight className="h-3.5 w-3.5" />
           </button>
           <button
@@ -332,7 +342,7 @@ function UserJourneySection() {
         icon={Users}
         eyebrow="User Journey"
         title="不同参与者如何理解协议"
-        description="当前阶段强调审查、理解和只读验证。未来写入流程必须经过产品、合约、安全和治理阶段。"
+        description="链上状态继续只读；运营提交进入独立审核队列，不能直接调用合约或移动国库资金。"
       />
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
         {JOURNEYS.map((journey) => {
@@ -385,7 +395,7 @@ function FinalCtaSection({ onNavigate }: PublicLandingPageProps) {
           icon={FileText}
           eyebrow="Next Reading"
           title="Litepaper 与上线清单"
-          description="CTA 仅跳转前端只读页面或文档，不连接交易，不提供买币或真实资金入口。"
+          description="CTA 仅跳转公开页面或文档；运营表单是数据库 intake，不连接交易，不提供买币或真实资金入口。"
         />
         <div className="flex flex-wrap gap-2">
           <button
