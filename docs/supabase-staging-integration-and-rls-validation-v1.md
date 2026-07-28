@@ -1,14 +1,15 @@
 # Alpha Protocol Supabase Staging Integration and RLS Validation V1
 
-Status: local tooling and migration hardening only
-Baseline commit: `db06008123d0de851053bd4578f33fa7dc1047ce`
-Phase: `2E-6B-4G`
+Status: remote staging active; actor-level RLS E2E and cleanup verified
+Baseline commit: `50463230bf55f6a9d14b66f6679def099e1ba9a9`
+Phase: `2E-6B-4H`
 
 ## 1. Purpose
 
-Phase 4F created the off-chain operations foundation. Phase 4G prepares a
+Phase 4F created the off-chain operations foundation. Phase 4G prepared a
 separate Supabase staging project to validate the database authorization
-boundary with real Auth users and real PostgREST RLS behavior.
+boundary with real Auth users and real PostgREST RLS behavior. Phase 4H
+completed remote activation and closed the E2E cleanup privilege boundary.
 
 This phase adds:
 
@@ -18,10 +19,10 @@ This phase adds:
 - exact Supabase project-ref binding;
 - a follow-up database hardening migration;
 - pgTAP database assertions;
-- local PGlite execution of both migrations.
+- local PGlite execution of all operations migrations.
 
-It does not create a Supabase project, apply a remote migration, enable public
-intake, send a Solana transaction, or change any treasury authority.
+The staging activation does not enable public intake, send a Solana
+transaction, or change any treasury authority.
 
 ## 2. Architecture boundary
 
@@ -104,8 +105,9 @@ Never copy `OPERATIONS_STAGING_SERVICE_ROLE_KEY` into:
 - issue comments;
 - CI output.
 
-The service-role key bypasses RLS. Its presence is limited to a trusted
-operator process that creates and deletes test users and performs cleanup.
+The Supabase secret/service-role credential maps to the `service_role`
+database role and bypasses RLS. Its presence is limited to a trusted operator
+process that creates and deletes test users and performs cleanup.
 
 ## 4. Migration order
 
@@ -114,10 +116,12 @@ Apply migrations in filename order:
 ```text
 supabase/migrations/202607270001_offchain_operations_foundation.sql
 supabase/migrations/202607270002_operations_staging_hardening.sql
+supabase/migrations/202607290001_operations_staging_e2e_cleanup_privileges.sql
 ```
 
 The second migration fixes two findings identified while preparing real-role
-tests.
+tests. The third migration fixes the table-privilege boundary found by the
+first remote staging E2E cleanup attempt.
 
 ### 4.1 Published-record downgrade
 
@@ -152,6 +156,26 @@ governance_admin
 ```
 
 It does not expose discussions to `anon` or ordinary authenticated users.
+
+### 4.3 Staging E2E cleanup privilege
+
+The first remote actor-level E2E completed its RLS assertions but exited
+non-zero during cleanup. The `service_role` database role bypasses RLS, but
+PostgreSQL still requires table privileges for a filtered `DELETE`. The
+affected tables had no `service_role` DELETE grant.
+
+The third migration grants only `SELECT` and `DELETE` on the three temporary
+fixture tables:
+
+```text
+community_tasks
+task_submissions
+governance_discussions
+```
+
+`SELECT` is required for the `id` filter and returned deletion proof. `DELETE`
+remains explicitly revoked from `anon` and `authenticated`. No browser-facing
+role receives a cleanup path.
 
 ## 5. Read-only preflight
 
@@ -226,8 +250,9 @@ It validates:
 - rejection of published-content rewrite.
 
 Cleanup runs even when an assertion fails. It deletes test rows in dependency
-order and then deletes temporary Auth users. A cleanup error is reported and
-must be resolved before rerunning.
+order and then deletes temporary Auth users. Each row deletion must return
+exactly the expected id before it is counted as successful. A cleanup error is
+reported and must be resolved before rerunning.
 
 The runner does not:
 
@@ -245,6 +270,7 @@ Database assertions are stored at:
 
 ```text
 supabase/tests/database/operations_schema.test.sql
+supabase/tests/database/operations_cleanup_privileges.test.sql
 ```
 
 With the Supabase CLI and local database available:
@@ -253,7 +279,7 @@ With the Supabase CLI and local database available:
 supabase test db
 ```
 
-The test checks:
+The database tests check:
 
 - all 13 operations tables;
 - RLS enabled on all 13 tables;
@@ -262,6 +288,8 @@ The test checks:
 - moderator discussion SELECT policy shape;
 - absence of `anon` grants on private intake;
 - published-downgrade protection in the installed function;
+- exact `service_role` cleanup privileges on the three E2E fixture tables;
+- continued denial of DELETE to `anon` and `authenticated`;
 - absence of database HTTP or transaction-sending functions.
 
 pgTAP results complement, but do not replace, actor-level PostgREST E2E.
@@ -285,7 +313,8 @@ npm audit --omit=dev
 4. ESLint;
 5. production Vite build.
 
-The Node schema suite executes both migrations in isolated PGlite databases.
+The Node schema suite executes all operations migrations in isolated PGlite
+databases.
 The `pgcrypto` extension installation line is omitted only inside PGlite;
 Supabase supplies `pgcrypto`, and the unmodified migration must be used for
 local Supabase or staging.
@@ -306,12 +335,12 @@ remote staging pass.
 
 ## 9. Remote activation sequence
 
-When a real staging project is available:
+For a fresh staging project:
 
 1. record the exact project ref out of band;
 2. confirm the project contains no production data;
 3. enable Anonymous Sign-Ins only if anonymous intake will be tested;
-4. apply both migrations in order;
+4. apply all operations migrations in order;
 5. run `supabase test db`;
 6. run the read-only preflight;
 7. inspect Auth rate limits and abuse controls;
@@ -327,13 +356,25 @@ confirmation because they modify a cloud project.
 
 ## 10. Deployment status
 
-At completion of the local 4G implementation:
+Current staging status after final Phase 4H verification:
 
-- the second migration exists only in code;
-- no Supabase cloud project was created;
-- no migration was applied remotely;
-- no staging Auth user was created;
-- no remote RLS E2E ran;
+- dedicated staging project `alpha-protocol-staging` is active;
+- migrations `202607270001`, `202607270002`, and `202607290001` are applied
+  remotely and the local/remote migration lists match;
+- a post-activation dry run reports the remote database is up to date;
+- remote schema lint reports no errors;
+- read-only preflight passed with seven public tables readable and six private
+  tables denied to `anon`;
+- the corrected operations-schema pgTAP suite passed `1..22`;
+- a remote privilege inspection confirmed `service_role` has `SELECT` and
+  `DELETE` only on the three E2E fixture tables required for cleanup, while
+  `anon` and `authenticated` retain no DELETE privilege on them;
+- `npm run operations:verify` passed 35 of 35 tests, both TypeScript checks,
+  ESLint, and the production Vite build;
+- the final actor-level RLS E2E passed 14 assertions and exited zero;
+- automatic cleanup reported three rows and four temporary Auth users deleted;
+- an independent read-only residue query returned zero for community tasks,
+  task submissions, governance discussions, and temporary Auth users;
 - frontend community intake remains disabled by default;
 - no Devnet transaction was sent;
 - no Mainnet transaction was sent;
@@ -342,6 +383,6 @@ At completion of the local 4G implementation:
 - the latest full Solana program remains not upgraded on Devnet;
 - no Alpha Protocol custom program is deployed on Mainnet.
 
-This phase validates local implementation and prepares real staging checks. It
-is not a professional Mainnet audit and is not evidence that remote Supabase
-RLS has already passed.
+This phase verifies the selected off-chain authorization paths on the dedicated
+Supabase staging project. It does not activate production intake, deploy or
+upgrade the Solana program, or constitute a professional Mainnet audit.

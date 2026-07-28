@@ -11,9 +11,14 @@ const hardeningMigrationUrl = new URL(
   '../../supabase/migrations/202607270002_operations_staging_hardening.sql',
   import.meta.url,
 );
+const cleanupPrivilegesMigrationUrl = new URL(
+  '../../supabase/migrations/202607290001_operations_staging_e2e_cleanup_privileges.sql',
+  import.meta.url,
+);
 const foundationSql = readFileSync(foundationMigrationUrl, 'utf8');
 const hardeningSql = readFileSync(hardeningMigrationUrl, 'utf8');
-const sql = `${foundationSql}\n${hardeningSql}`;
+const cleanupPrivilegesSql = readFileSync(cleanupPrivilegesMigrationUrl, 'utf8');
+const sql = `${foundationSql}\n${hardeningSql}\n${cleanupPrivilegesSql}`;
 
 const expectedTables = [
   'community_tasks',
@@ -188,7 +193,62 @@ test('staging hardening prevents publication downgrade and gives moderators read
   assert.match(policy, /'moderator', 'operator', 'governance_admin'/);
 });
 
-test('both migrations create the expected schema, policy, and trigger totals', async () => {
+test('staging E2E cleanup privilege is narrow and excludes browser roles', async () => {
+  assert.match(
+    cleanupPrivilegesSql,
+    /grant select, delete on table[\s\S]*?to service_role;/,
+  );
+  assert.match(
+    cleanupPrivilegesSql,
+    /revoke delete on table[\s\S]*?from anon, authenticated;/,
+  );
+
+  const database = await createOperationsDatabase();
+  try {
+    const serviceRolePrivileges = await database.query<{
+      table_name: string;
+      privilege_type: string;
+    }>(`
+      select table_name, privilege_type
+      from information_schema.role_table_grants
+      where table_schema = 'public'
+        and grantee = 'service_role'
+        and table_name = any(array[
+          'community_tasks',
+          'task_submissions',
+          'governance_discussions'
+        ])
+        and privilege_type in ('SELECT', 'DELETE')
+      order by table_name, privilege_type;
+    `);
+    assert.deepEqual(serviceRolePrivileges.rows, [
+      { table_name: 'community_tasks', privilege_type: 'DELETE' },
+      { table_name: 'community_tasks', privilege_type: 'SELECT' },
+      { table_name: 'governance_discussions', privilege_type: 'DELETE' },
+      { table_name: 'governance_discussions', privilege_type: 'SELECT' },
+      { table_name: 'task_submissions', privilege_type: 'DELETE' },
+      { table_name: 'task_submissions', privilege_type: 'SELECT' },
+    ]);
+
+    const browserDeletePrivileges = await database.query<{ count: number }>(`
+      select count(*)::integer as count
+      from information_schema.role_table_grants
+      where table_schema = 'public'
+        and grantee in ('anon', 'authenticated')
+        and table_name = any(array[
+          'community_tasks',
+          'task_submissions',
+          'governance_discussions'
+        ])
+        and privilege_type = 'DELETE';
+    `);
+    assert.equal(browserDeletePrivileges.rows[0]?.count, 0);
+  } finally {
+    await database.close();
+  }
+});
+
+test('all migrations create the expected schema, policy, and trigger totals', async () => {
   const database = await createOperationsDatabase();
   try {
     const tableCount = await database.query<{ count: number }>(`
@@ -314,6 +374,7 @@ async function createOperationsDatabase(): Promise<PGlite> {
   await database.exec(`
     create role anon nologin;
     create role authenticated nologin;
+    create role service_role nologin bypassrls;
     create schema auth;
     create table auth.users (id uuid primary key);
 
@@ -347,6 +408,7 @@ async function createOperationsDatabase(): Promise<PGlite> {
     ),
   );
   await database.exec(hardeningSql);
+  await database.exec(cleanupPrivilegesSql);
   return database;
 }
 

@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 export const OPERATIONS_STAGING_CONFIRMATION =
   'I_UNDERSTAND_THIS_CREATES_AND_DELETES_STAGING_TEST_DATA';
@@ -182,9 +182,36 @@ export function sanitizeStagingError(
   return message;
 }
 
-export function isMainModule(metaUrl: string): boolean {
-  const entry = process.argv[1];
-  return Boolean(entry) && metaUrl === pathToFileURL(resolve(entry)).href;
+export function isMainModule(
+  metaUrl: string,
+  entry = process.argv[1],
+): boolean {
+  if (!entry) {
+    return false;
+  }
+
+  let modulePath: string;
+  try {
+    modulePath = canonicalPath(fileURLToPath(metaUrl));
+  } catch {
+    return false;
+  }
+
+  const entryPath = canonicalPath(entry);
+  if (process.platform === 'win32') {
+    return modulePath.toLowerCase() === entryPath.toLowerCase();
+  }
+
+  return modulePath === entryPath;
+}
+
+function canonicalPath(value: string): string {
+  const resolvedPath = resolve(value);
+  try {
+    return realpathSync.native(resolvedPath);
+  } catch {
+    return resolvedPath;
+  }
 }
 
 function resolveProjectDirectory(cwd: string): string {

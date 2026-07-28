@@ -12,19 +12,19 @@ set local search_path = public, extensions;
 
 select no_plan();
 
-select has_table('public', 'community_tasks');
-select has_table('public', 'task_submissions');
-select has_table('public', 'risk_reports');
-select has_table('public', 'risk_evidence');
-select has_table('public', 'risk_publications');
-select has_table('public', 'relief_applications');
-select has_table('public', 'relief_public_updates');
-select has_table('public', 'governance_proposals');
-select has_table('public', 'governance_discussions');
-select has_table('public', 'governance_discussion_publications');
-select has_table('public', 'governance_decisions');
-select has_table('public', 'treasury_execution_intents');
-select has_table('public', 'treasury_execution_receipts');
+select has_table('public'::name, 'community_tasks'::name);
+select has_table('public'::name, 'task_submissions'::name);
+select has_table('public'::name, 'risk_reports'::name);
+select has_table('public'::name, 'risk_evidence'::name);
+select has_table('public'::name, 'risk_publications'::name);
+select has_table('public'::name, 'relief_applications'::name);
+select has_table('public'::name, 'relief_public_updates'::name);
+select has_table('public'::name, 'governance_proposals'::name);
+select has_table('public'::name, 'governance_discussions'::name);
+select has_table('public'::name, 'governance_discussion_publications'::name);
+select has_table('public'::name, 'governance_decisions'::name);
+select has_table('public'::name, 'treasury_execution_intents'::name);
+select has_table('public'::name, 'treasury_execution_receipts'::name);
 
 select is(
   (
@@ -171,7 +171,7 @@ select ok(
       on namespace.oid = procedure.pronamespace
     where namespace.nspname = 'public'
       and procedure.proname = 'protect_published_operations_record'
-  ) like '%new.publication_status IS DISTINCT FROM old.publication_status%',
+  ) ilike '%new.publication_status is distinct from old.publication_status%',
   'published protection explicitly rejects publication status downgrade'
 );
 

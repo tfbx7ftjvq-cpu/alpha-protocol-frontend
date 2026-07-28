@@ -361,9 +361,15 @@ async function cleanupStagingFixtures(
       continue;
     }
 
-    const result = await admin.from(table).delete().eq('id', id);
+    const result = await admin
+      .from(table)
+      .delete()
+      .eq('id', id)
+      .select('id');
     if (result.error) {
       errors.push(`${table} cleanup failed`);
+    } else if (!isExactCleanupDeletion(result.data, id)) {
+      errors.push(`${table} cleanup count mismatch`);
     } else {
       rowsDeleted += 1;
     }
@@ -379,6 +385,20 @@ async function cleanupStagingFixtures(
   }
 
   return { errors, rowsDeleted, usersDeleted };
+}
+
+export function isExactCleanupDeletion(data: unknown, id: string): boolean {
+  if (!Array.isArray(data) || data.length !== 1) {
+    return false;
+  }
+
+  const row = data[0];
+  return (
+    typeof row === 'object'
+    && row !== null
+    && 'id' in row
+    && row.id === id
+  );
 }
 
 function assertNoError(

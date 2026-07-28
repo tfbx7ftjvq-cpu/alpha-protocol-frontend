@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import { resolve } from 'node:path';
 import test from 'node:test';
+import { pathToFileURL } from 'node:url';
 import {
+  isMainModule,
   OPERATIONS_STAGING_CONFIRMATION,
   OperationsStagingConfigError,
   resolveOperationsStagingConfig,
@@ -22,6 +25,26 @@ function validEnvironment(): NodeJS.ProcessEnv {
     OPERATIONS_STAGING_PUBLIC_KEY: PUBLIC_KEY,
   };
 }
+
+test('CLI entry detection is fail-closed and tolerates Windows path casing', () => {
+  const entry = resolve('scripts/operations-staging/e2e.ts');
+  const entryUrl = pathToFileURL(entry).href;
+  const differentEntryUrl = pathToFileURL(
+    resolve('scripts/operations-staging/preflight.ts'),
+  ).href;
+  const caseVariantUrl = entryUrl.replace(
+    '/scripts/operations-staging/',
+    '/SCRIPTS/OPERATIONS-STAGING/',
+  );
+
+  assert.equal(isMainModule(entryUrl, entry), true);
+  assert.equal(isMainModule(differentEntryUrl, entry), false);
+  if (process.platform === 'win32') {
+    assert.equal(isMainModule(caseVariantUrl, entry), true);
+  }
+  assert.equal(isMainModule('not-a-file-url', entry), false);
+  assert.equal(isMainModule(entryUrl, undefined), false);
+});
 
 test('staging preflight fails closed when required configuration is missing', () => {
   assert.throws(
