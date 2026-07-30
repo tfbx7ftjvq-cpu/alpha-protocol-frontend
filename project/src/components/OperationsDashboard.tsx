@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   AlertTriangle,
   BadgeCheck,
@@ -11,10 +11,13 @@ import {
   Link2,
   Loader2,
   LockKeyhole,
+  LogIn,
+  LogOut,
   MessageSquareText,
   RefreshCw,
   Send,
   ShieldCheck,
+  UserRoundCheck,
   Users,
   WalletCards,
 } from 'lucide-react';
@@ -24,15 +27,14 @@ import {
   submitRiskReport,
   submitTaskResult,
 } from '../features/operations/repository';
+import type { OperationsWalletAuthState } from '../hooks/useOperationsWalletAuth';
+import { useMyOperationsSubmissions } from '../hooks/useMyOperationsSubmissions';
 import { useOperations } from '../hooks/useOperations';
+import { useOperationsWalletAuth } from '../hooks/useOperationsWalletAuth';
 import { operationsBackendConfig } from '../lib/operationsSupabase';
 
-type OperationsTab = 'tasks' | 'risk' | 'relief' | 'discussion' | 'decisions';
+type OperationsTab = 'tasks' | 'risk' | 'relief' | 'discussion' | 'mine' | 'decisions';
 type NoticeTone = 'success' | 'error';
-
-interface OperationsDashboardProps {
-  connectedWallet: string | null;
-}
 
 interface SubmissionNotice {
   tone: NoticeTone;
@@ -48,6 +50,7 @@ const TABS: {
   { key: 'risk', label: '风险与证据', icon: FileWarning },
   { key: 'relief', label: '救助申请', icon: HandHeart },
   { key: 'discussion', label: '治理讨论', icon: MessageSquareText },
+  { key: 'mine', label: '我的提交', icon: UserRoundCheck },
   { key: 'decisions', label: '公开决定', icon: BookOpenCheck },
 ];
 
@@ -58,17 +61,24 @@ const fieldClassName = [
   'disabled:cursor-not-allowed disabled:opacity-50',
 ].join(' ');
 
-export default function OperationsDashboard({ connectedWallet }: OperationsDashboardProps) {
+export default function OperationsDashboard() {
   const [activeTab, setActiveTab] = useState<OperationsTab>('tasks');
   const operations = useOperations();
+  const walletAuth = useOperationsWalletAuth();
+  const mySubmissions = useMyOperationsSubmissions(
+    walletAuth.status === 'authenticated' ? walletAuth.authenticatedWallet : null,
+  );
+  const intakeReady = walletAuth.status === 'authenticated'
+    && walletAuth.authenticatedWallet === walletAuth.connectedWallet;
 
   const counts = useMemo(() => ({
     tasks: operations.overview.tasks.length,
     risk: operations.overview.riskReports.length,
     relief: operations.overview.reliefUpdates.length,
     discussion: operations.overview.discussions.length,
+    mine: mySubmissions.submissions.length,
     decisions: operations.overview.governanceDecisions.length,
-  }), [operations.overview]);
+  }), [mySubmissions.submissions.length, operations.overview]);
 
   return (
     <div className="select-text space-y-6">
@@ -84,8 +94,8 @@ export default function OperationsDashboard({ connectedWallet }: OperationsDashb
                   tone={operationsBackendConfig.publicReadEnabled ? 'emerald' : 'yellow'}
                 />
                 <StatusBadge
-                  label={operationsBackendConfig.intakeEnabled ? 'INTAKE ENABLED' : 'INTAKE LOCKED'}
-                  tone={operationsBackendConfig.intakeEnabled ? 'emerald' : 'zinc'}
+                  label={intakeReady ? 'WALLET SESSION VERIFIED' : 'INTAKE LOCKED'}
+                  tone={intakeReady ? 'emerald' : 'zinc'}
                 />
               </div>
               <h2 className="mt-4 text-2xl font-black text-zinc-100">社区运营、申请与公开决定</h2>
@@ -144,6 +154,8 @@ export default function OperationsDashboard({ connectedWallet }: OperationsDashb
         lastLoadedAt={operations.lastLoadedAt}
       />
 
+      <WalletAuthBoundary auth={walletAuth} />
+
       <section className="rounded-xl border border-zinc-800 bg-zinc-950/70">
         <div className="flex overflow-x-auto border-b border-zinc-800">
           {TABS.map((tab) => {
@@ -177,29 +189,36 @@ export default function OperationsDashboard({ connectedWallet }: OperationsDashb
             <TasksPanel
               tasks={operations.overview.tasks}
               loaded={operations.status === 'ready'}
-              connectedWallet={connectedWallet}
+              authenticatedWallet={intakeReady ? walletAuth.authenticatedWallet : null}
+              onSubmitted={mySubmissions.refresh}
             />
           )}
           {activeTab === 'risk' && (
             <RiskPanel
               reports={operations.overview.riskReports}
               loaded={operations.status === 'ready'}
-              connectedWallet={connectedWallet}
+              authenticatedWallet={intakeReady ? walletAuth.authenticatedWallet : null}
+              onSubmitted={mySubmissions.refresh}
             />
           )}
           {activeTab === 'relief' && (
             <ReliefPanel
               updates={operations.overview.reliefUpdates}
               loaded={operations.status === 'ready'}
-              connectedWallet={connectedWallet}
+              authenticatedWallet={intakeReady ? walletAuth.authenticatedWallet : null}
+              onSubmitted={mySubmissions.refresh}
             />
           )}
           {activeTab === 'discussion' && (
             <DiscussionPanel
               discussions={operations.overview.discussions}
               loaded={operations.status === 'ready'}
-              connectedWallet={connectedWallet}
+              authenticatedWallet={intakeReady ? walletAuth.authenticatedWallet : null}
+              onSubmitted={mySubmissions.refresh}
             />
+          )}
+          {activeTab === 'mine' && (
+            <MySubmissionsPanel state={mySubmissions} auth={walletAuth} />
           )}
           {activeTab === 'decisions' && (
             <DecisionsPanel
@@ -243,27 +262,29 @@ export default function OperationsDashboard({ connectedWallet }: OperationsDashb
 function TasksPanel({
   tasks,
   loaded,
-  connectedWallet,
+  authenticatedWallet,
+  onSubmitted,
 }: {
   tasks: ReturnType<typeof useOperations>['overview']['tasks'];
   loaded: boolean;
-  connectedWallet: string | null;
+  authenticatedWallet: string | null;
+  onSubmitted: () => Promise<void>;
 }) {
   const [form, setForm] = useState({
     taskId: '',
     summary: '',
     deliverableUrl: '',
-    walletAddress: connectedWallet ?? '',
+    walletAddress: authenticatedWallet ?? '',
   });
   const submission = useSubmission();
 
-  usePrefillWallet(connectedWallet, (walletAddress) => {
-    setForm((current) => current.walletAddress ? current : { ...current, walletAddress });
+  usePrefillWallet(authenticatedWallet, (walletAddress) => {
+    setForm((current) => ({ ...current, walletAddress }));
   });
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    await submission.run(
+    const succeeded = await submission.run(
       () => submitTaskResult(form),
       '任务成果已进入私有审核队列；这不是付款承诺。',
       () => setForm((current) => ({
@@ -272,6 +293,9 @@ function TasksPanel({
         deliverableUrl: '',
       })),
     );
+    if (succeeded) {
+      await onSubmitted();
+    }
   }
 
   return (
@@ -309,7 +333,7 @@ function TasksPanel({
         busy={submission.busy}
         notice={submission.notice}
         onSubmit={handleSubmit}
-        disabled={!operationsBackendConfig.intakeEnabled || tasks.length === 0}
+        disabled={!authenticatedWallet || tasks.length === 0}
       >
         <FormField label="任务">
           <select
@@ -345,8 +369,7 @@ function TasksPanel({
         </FormField>
         <WalletField
           value={form.walletAddress}
-          onChange={(walletAddress) => setForm({ ...form, walletAddress })}
-          label="拟收款钱包（未签名验证）"
+          label="已认证提交钱包（付款前仍需独立复核）"
         />
       </SubmissionForm>
     </TwoColumnPanel>
@@ -356,27 +379,29 @@ function TasksPanel({
 function RiskPanel({
   reports,
   loaded,
-  connectedWallet,
+  authenticatedWallet,
+  onSubmitted,
 }: {
   reports: ReturnType<typeof useOperations>['overview']['riskReports'];
   loaded: boolean;
-  connectedWallet: string | null;
+  authenticatedWallet: string | null;
+  onSubmitted: () => Promise<void>;
 }) {
   const [form, setForm] = useState({
     projectIdentifier: '',
     summary: '',
     referenceUrl: '',
-    walletAddress: connectedWallet ?? '',
+    walletAddress: authenticatedWallet ?? '',
   });
   const submission = useSubmission();
 
-  usePrefillWallet(connectedWallet, (walletAddress) => {
-    setForm((current) => current.walletAddress ? current : { ...current, walletAddress });
+  usePrefillWallet(authenticatedWallet, (walletAddress) => {
+    setForm((current) => ({ ...current, walletAddress }));
   });
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    await submission.run(
+    const succeeded = await submission.run(
       () => submitRiskReport(form),
       '风险报告已私密提交；公开前必须人工核验并净化敏感信息。',
       () => setForm((current) => ({
@@ -386,6 +411,9 @@ function RiskPanel({
         referenceUrl: '',
       })),
     );
+    if (succeeded) {
+      await onSubmitted();
+    }
   }
 
   return (
@@ -417,7 +445,7 @@ function RiskPanel({
         busy={submission.busy}
         notice={submission.notice}
         onSubmit={handleSubmit}
-        disabled={!operationsBackendConfig.intakeEnabled}
+        disabled={!authenticatedWallet}
       >
         <FormField label="项目名称 / Mint / Program / 交易标识">
           <input
@@ -448,9 +476,7 @@ function RiskPanel({
         </FormField>
         <WalletField
           value={form.walletAddress}
-          onChange={(walletAddress) => setForm({ ...form, walletAddress })}
-          label="可选提交钱包（未签名验证）"
-          required={false}
+          label="已认证提交钱包"
         />
       </SubmissionForm>
     </TwoColumnPanel>
@@ -460,27 +486,29 @@ function RiskPanel({
 function ReliefPanel({
   updates,
   loaded,
-  connectedWallet,
+  authenticatedWallet,
+  onSubmitted,
 }: {
   updates: ReturnType<typeof useOperations>['overview']['reliefUpdates'];
   loaded: boolean;
-  connectedWallet: string | null;
+  authenticatedWallet: string | null;
+  onSubmitted: () => Promise<void>;
 }) {
   const [form, setForm] = useState({
     incidentSummary: '',
     requestedAmountUsdc: '',
     evidenceUrl: '',
-    walletAddress: connectedWallet ?? '',
+    walletAddress: authenticatedWallet ?? '',
   });
   const submission = useSubmission();
 
-  usePrefillWallet(connectedWallet, (walletAddress) => {
-    setForm((current) => current.walletAddress ? current : { ...current, walletAddress });
+  usePrefillWallet(authenticatedWallet, (walletAddress) => {
+    setForm((current) => ({ ...current, walletAddress }));
   });
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    await submission.run(
+    const succeeded = await submission.run(
       () => submitReliefApplication(form),
       '救助申请已私密提交；申请、批准与实际赔付是三个独立阶段。',
       () => setForm((current) => ({
@@ -490,6 +518,9 @@ function ReliefPanel({
         evidenceUrl: '',
       })),
     );
+    if (succeeded) {
+      await onSubmitted();
+    }
   }
 
   return (
@@ -523,7 +554,7 @@ function ReliefPanel({
         busy={submission.busy}
         notice={submission.notice}
         onSubmit={handleSubmit}
-        disabled={!operationsBackendConfig.intakeEnabled}
+        disabled={!authenticatedWallet}
       >
         <FormField label="事件说明（50–8000 字）">
           <textarea
@@ -556,8 +587,7 @@ function ReliefPanel({
         </FormField>
         <WalletField
           value={form.walletAddress}
-          onChange={(walletAddress) => setForm({ ...form, walletAddress })}
-          label="拟收款钱包（未签名验证）"
+          label="已认证申请钱包（赔付前仍需冻结与复核）"
         />
       </SubmissionForm>
     </TwoColumnPanel>
@@ -567,30 +597,35 @@ function ReliefPanel({
 function DiscussionPanel({
   discussions,
   loaded,
-  connectedWallet,
+  authenticatedWallet,
+  onSubmitted,
 }: {
   discussions: ReturnType<typeof useOperations>['overview']['discussions'];
   loaded: boolean;
-  connectedWallet: string | null;
+  authenticatedWallet: string | null;
+  onSubmitted: () => Promise<void>;
 }) {
   const [form, setForm] = useState({
     topic: '',
     body: '',
-    walletAddress: connectedWallet ?? '',
+    walletAddress: authenticatedWallet ?? '',
   });
   const submission = useSubmission();
 
-  usePrefillWallet(connectedWallet, (walletAddress) => {
-    setForm((current) => current.walletAddress ? current : { ...current, walletAddress });
+  usePrefillWallet(authenticatedWallet, (walletAddress) => {
+    setForm((current) => ({ ...current, walletAddress }));
   });
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    await submission.run(
+    const succeeded = await submission.run(
       () => submitDiscussion(form),
       '讨论已进入审核队列；通过后才会出现在公开页面。',
       () => setForm((current) => ({ ...current, topic: '', body: '' })),
     );
+    if (succeeded) {
+      await onSubmitted();
+    }
   }
 
   return (
@@ -619,7 +654,7 @@ function DiscussionPanel({
         busy={submission.busy}
         notice={submission.notice}
         onSubmit={handleSubmit}
-        disabled={!operationsBackendConfig.intakeEnabled}
+        disabled={!authenticatedWallet}
       >
         <FormField label="讨论主题">
           <input
@@ -639,12 +674,157 @@ function DiscussionPanel({
         </FormField>
         <WalletField
           value={form.walletAddress}
-          onChange={(walletAddress) => setForm({ ...form, walletAddress })}
-          label="可选发言钱包（未签名验证）"
-          required={false}
+          label="已认证发言钱包"
         />
       </SubmissionForm>
     </TwoColumnPanel>
+  );
+}
+
+function WalletAuthBoundary({ auth }: { auth: OperationsWalletAuthState }) {
+  const canSignIn = operationsBackendConfig.intakeEnabled
+    && Boolean(auth.connectedWallet)
+    && !['checking', 'signing-in'].includes(auth.status);
+  const authenticated = auth.status === 'authenticated';
+
+  return (
+    <section className={`rounded-xl border p-5 ${
+      authenticated
+        ? 'border-emerald-400/25 bg-emerald-400/5'
+        : 'border-yellow-400/20 bg-yellow-400/[0.035]'
+    }`}>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className={`flex items-center gap-2 text-sm font-black ${
+            authenticated ? 'text-emerald-200' : 'text-yellow-200'
+          }`}>
+            {authenticated
+              ? <UserRoundCheck className="h-4 w-4" />
+              : <LockKeyhole className="h-4 w-4" />}
+            {authenticated ? 'Solana Web3 钱包会话已验证' : '提交前需要钱包签名认证'}
+          </h3>
+          <div className="mt-3 grid gap-1 text-[10px] leading-relaxed text-zinc-500">
+            <span>当前连接：{auth.connectedWallet ? shorten(auth.connectedWallet) : '未连接钱包'}</span>
+            <span>认证会话：{auth.authenticatedWallet ? shorten(auth.authenticatedWallet) : '尚未建立'}</span>
+            <span>签名只建立 Supabase 会话，不创建 Solana 交易、不授权代币、不移动资金。</span>
+          </div>
+          {auth.error && (
+            <p className="mt-3 text-[10px] leading-relaxed text-red-300">{auth.error}</p>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {auth.authenticatedWallet && (
+            <button
+              type="button"
+              onClick={() => void auth.signOut()}
+              className="inline-flex items-center gap-2 rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-[10px] font-black text-zinc-300 hover:border-zinc-600"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              退出运营会话
+            </button>
+          )}
+          {!authenticated && (
+            <button
+              type="button"
+              onClick={() => void auth.signIn()}
+              disabled={!canSignIn}
+              className="inline-flex items-center gap-2 rounded border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-[10px] font-black text-emerald-200 hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {auth.status === 'checking' || auth.status === 'signing-in'
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <LogIn className="h-3.5 w-3.5" />}
+              {auth.status === 'signing-in' ? '等待钱包签名…' : '签名认证钱包'}
+            </button>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MySubmissionsPanel({
+  state,
+  auth,
+}: {
+  state: ReturnType<typeof useMyOperationsSubmissions>;
+  auth: OperationsWalletAuthState;
+}) {
+  const kindLabels = {
+    task: '任务成果',
+    risk: '风险报告',
+    relief: '救助申请',
+    discussion: '治理讨论',
+  } as const;
+
+  if (auth.status !== 'authenticated') {
+    return (
+      <EmptyState text="签名认证当前 Solana 钱包后，才能读取只属于该 Auth 用户的私有提交状态。" />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 rounded border border-cyan-400/15 bg-cyan-400/[0.025] p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="text-sm font-black text-zinc-200">我的私有提交状态</h3>
+          <p className="mt-1 text-[10px] leading-relaxed text-zinc-600">
+            这些记录由 RLS 按 Auth 用户隔离，不会自动公开，也不代表付款承诺。
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void state.refresh()}
+          disabled={state.status === 'loading'}
+          className="inline-flex items-center justify-center gap-2 rounded border border-cyan-400/25 bg-cyan-400/5 px-3 py-2 text-[10px] font-black text-cyan-300 disabled:opacity-40"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${state.status === 'loading' ? 'animate-spin' : ''}`} />
+          刷新我的提交
+        </button>
+      </div>
+
+      {state.status === 'loading' && <LoadingRows />}
+      {state.status === 'error' && (
+        <div className="rounded border border-red-400/20 bg-red-400/5 p-4 text-[10px] text-red-200">
+          {state.error}
+        </div>
+      )}
+      {state.status === 'ready' && state.submissions.length === 0 && (
+        <EmptyState text="当前认证钱包还没有提交记录。" />
+      )}
+      <div className="grid gap-3 lg:grid-cols-2">
+        {state.submissions.map((submission) => (
+          <article key={`${submission.kind}:${submission.id}`} className="rounded border border-zinc-800 bg-zinc-950 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <span className="text-[9px] font-black uppercase tracking-widest text-cyan-500">
+                  {kindLabels[submission.kind]}
+                </span>
+                <h4 className="mt-2 text-xs font-black leading-relaxed text-zinc-200">
+                  {submission.title}
+                </h4>
+              </div>
+              <StatusBadge
+                label={submission.status.replace(/_/g, ' ')}
+                tone={['accepted', 'approved', 'published', 'resolved', 'paid'].includes(submission.status)
+                  ? 'emerald'
+                  : ['rejected', 'dismissed', 'cancelled'].includes(submission.status)
+                    ? 'red'
+                    : 'yellow'}
+              />
+            </div>
+            {submission.reviewerNotes && (
+              <div className="mt-3 rounded border border-zinc-900 bg-zinc-900/30 p-3 text-[10px] leading-relaxed text-zinc-500">
+                审核备注：{submission.reviewerNotes}
+              </div>
+            )}
+            <div className="mt-3 flex flex-wrap justify-between gap-2 text-[9px] text-zinc-700">
+              <span>ID: {shorten(submission.id)}</span>
+              <span>更新：{formatDate(submission.updatedAt)}</span>
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -772,7 +952,13 @@ function SubmissionForm({
 
       {!operationsBackendConfig.intakeEnabled && (
         <div className="mt-4 rounded border border-yellow-400/20 bg-yellow-400/5 px-3 py-2 text-[10px] leading-relaxed text-yellow-200/70">
-          提交功能默认关闭。只有部署者显式启用 anonymous intake 且 Supabase RLS 已应用后才会开放。
+          提交功能默认关闭。只有钱包身份 migration、Web3 Auth、Redirect URL 和滥用防护全部验证后，
+          才能显式启用 wallet-staging intake。
+        </div>
+      )}
+      {operationsBackendConfig.intakeEnabled && disabled && (
+        <div className="mt-4 rounded border border-yellow-400/20 bg-yellow-400/5 px-3 py-2 text-[10px] leading-relaxed text-yellow-200/70">
+          当前表单已锁定。请连接钱包并完成上方的 Solana Web3 签名认证。
         </div>
       )}
 
@@ -843,14 +1029,10 @@ function FormField({ label, children }: { label: string; children: ReactNode }) 
 
 function WalletField({
   value,
-  onChange,
   label,
-  required = true,
 }: {
   value: string;
-  onChange: (value: string) => void;
   label: string;
-  required?: boolean;
 }) {
   return (
     <FormField label={label}>
@@ -858,14 +1040,14 @@ function WalletField({
         <WalletCards className="pointer-events-none absolute left-3 top-3 h-3.5 w-3.5 text-zinc-700" />
         <input
           value={value}
-          onChange={(event) => onChange(event.target.value)}
           className={`${fieldClassName} pl-9`}
-          placeholder="Solana public address"
-          required={required}
+          placeholder="完成钱包签名认证后自动绑定"
+          readOnly
+          required
         />
       </div>
       <span className="mt-1.5 block text-[9px] leading-relaxed text-zinc-700">
-        自动填充连接钱包不构成签名证明；付款前必须另行完成地址所有权验证。
+        该地址必须同时匹配 Supabase Web3 身份与当前连接钱包；付款前仍需独立复核收款资格。
       </span>
     </FormField>
   );
@@ -961,7 +1143,11 @@ function useSubmission() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<SubmissionNotice | null>(null);
 
-  async function run(action: () => Promise<void>, successMessage: string, afterSuccess: () => void) {
+  async function run(
+    action: () => Promise<void>,
+    successMessage: string,
+    afterSuccess: () => void,
+  ): Promise<boolean> {
     setBusy(true);
     setNotice(null);
 
@@ -969,11 +1155,13 @@ function useSubmission() {
       await action();
       afterSuccess();
       setNotice({ tone: 'success', message: successMessage });
+      return true;
     } catch (error) {
       setNotice({
         tone: 'error',
         message: error instanceof Error ? error.message : '提交失败，请稍后重试',
       });
+      return false;
     } finally {
       setBusy(false);
     }
@@ -983,11 +1171,12 @@ function useSubmission() {
 }
 
 function usePrefillWallet(wallet: string | null, update: (wallet: string) => void) {
+  const updateRef = useRef(update);
+  updateRef.current = update;
+
   useEffect(() => {
-    if (wallet) {
-      update(wallet);
-    }
-  }, [update, wallet]);
+    updateRef.current(wallet ?? '');
+  }, [wallet]);
 }
 
 function formatDate(value: string | null): string {

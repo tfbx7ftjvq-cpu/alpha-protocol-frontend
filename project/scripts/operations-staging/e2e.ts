@@ -1,9 +1,15 @@
-import { randomBytes } from 'node:crypto';
+import {
+  createPrivateKey,
+  randomBytes,
+  sign as signWithPrivateKey,
+} from 'node:crypto';
+import { Keypair } from '@solana/web3.js';
 import {
   createClient,
   type SupabaseClient,
   type User,
 } from '@supabase/supabase-js';
+import { OPERATIONS_WALLET_SIGN_IN_STATEMENT } from '../../src/features/operations/auth.ts';
 import {
   assertStagingSecretIsolation,
   isMainModule,
@@ -19,6 +25,7 @@ type OperationsRole = 'operator' | 'moderator';
 interface TestActor {
   user: User;
   client: SupabaseClient;
+  walletAddress: string | null;
 }
 
 interface CreatedRows {
@@ -40,6 +47,7 @@ export async function runOperationsStagingE2E(
   if (
     config.mode !== 'e2e'
     || !config.serviceRoleKey
+    || !config.web3Url
     || !config.confirmedForWrites
   ) {
     throw new Error('staging E2E 配置未满足写入确认与 service-role 要求');
@@ -82,6 +90,14 @@ export async function runOperationsStagingE2E(
     );
     createdUsers.push(operator.user.id);
 
+    const intakeGate = await operator.client.rpc('is_operations_wallet_intake_enabled');
+    assertNoError(intakeGate.error, 'wallet intake server gate read');
+    expect(
+      intakeGate.data === true,
+      'wallet intake server gate is disabled',
+    );
+    assertions += 1;
+
     const moderator = await createActor(
       admin,
       config,
@@ -91,11 +107,14 @@ export async function runOperationsStagingE2E(
     );
     createdUsers.push(moderator.user.id);
 
-    const ownerA = await createActor(admin, config, runId, 'owner-a');
+    const ownerA = await createWalletActor(admin, config);
     createdUsers.push(ownerA.user.id);
 
-    const ownerB = await createActor(admin, config, runId, 'owner-b');
+    const ownerB = await createWalletActor(admin, config);
     createdUsers.push(ownerB.user.id);
+
+    const emailOnlyOwner = await createActor(admin, config, runId, 'email-owner');
+    createdUsers.push(emailOnlyOwner.user.id);
 
     const taskInsert = await operator.client
       .from('community_tasks')
@@ -141,7 +160,7 @@ export async function runOperationsStagingE2E(
         submitted_by: ownerA.user.id,
         summary: 'Staging-only contribution result used for owner isolation validation.',
         deliverable_url: 'https://example.com/alpha-staging-e2e',
-        wallet_address: '11111111111111111111111111111111',
+        wallet_address: requiredWallet(ownerA),
         wallet_verified: false,
         status: 'submitted',
       })
@@ -149,6 +168,40 @@ export async function runOperationsStagingE2E(
       .single();
     assertNoError(submissionInsert.error, 'owner task submission insert');
     rows.submissionId = requiredId(submissionInsert.data?.id, 'submission');
+    assertions += 1;
+
+    const switchedWalletInsert = await ownerA.client
+      .from('task_submissions')
+      .insert({
+        task_id: rows.taskId,
+        submitted_by: ownerA.user.id,
+        summary: 'This row must be rejected because the submitted wallet belongs to another actor.',
+        deliverable_url: 'https://example.com/alpha-staging-switched-wallet',
+        wallet_address: requiredWallet(ownerB),
+        wallet_verified: false,
+        status: 'submitted',
+      });
+    expect(
+      Boolean(switchedWalletInsert.error),
+      'wallet-authenticated owner submitted a different wallet address',
+    );
+    assertions += 1;
+
+    const emailOnlyInsert = await emailOnlyOwner.client
+      .from('task_submissions')
+      .insert({
+        task_id: rows.taskId,
+        submitted_by: emailOnlyOwner.user.id,
+        summary: 'This row must be rejected because email auth does not prove wallet ownership.',
+        deliverable_url: 'https://example.com/alpha-staging-email-only',
+        wallet_address: requiredWallet(ownerA),
+        wallet_verified: false,
+        status: 'submitted',
+      });
+    expect(
+      Boolean(emailOnlyInsert.error),
+      'email-only owner bypassed the Solana Web3 identity requirement',
+    );
     assertions += 1;
 
     const ownerRead = await ownerA.client
@@ -177,7 +230,7 @@ export async function runOperationsStagingE2E(
         submitted_by: ownerA.user.id,
         summary: 'This row must be rejected because intake cannot verify its own wallet.',
         deliverable_url: 'https://example.com/alpha-staging-forged-wallet',
-        wallet_address: '11111111111111111111111111111111',
+        wallet_address: requiredWallet(ownerA),
         wallet_verified: true,
         status: 'submitted',
       });
@@ -193,6 +246,7 @@ export async function runOperationsStagingE2E(
         submitted_by: ownerA.user.id,
         topic: `Staging moderation ${runId}`,
         body: 'This private staging discussion verifies moderator SELECT and UPDATE policies.',
+        wallet_address: requiredWallet(ownerA),
         wallet_verified: false,
         moderation_status: 'pending',
       })
@@ -332,11 +386,74 @@ async function createActor(
       throw new Error(`sign in ${label} test user returned no user`);
     }
 
-    return { user: signInResult.data.user, client };
+    return { user: signInResult.data.user, client, walletAddress: null };
   } catch (error) {
     await admin.auth.admin.deleteUser(createResult.data.user.id);
     throw error;
   }
+}
+
+async function createWalletActor(
+  admin: SupabaseClient,
+  config: OperationsStagingConfig,
+): Promise<TestActor> {
+  if (!config.web3Url) {
+    throw new Error('wallet actor requires OPERATIONS_STAGING_WEB3_URL');
+  }
+
+  const client = createClient(config.supabaseUrl, config.publicKey, {
+    auth: {
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      persistSession: false,
+    },
+  });
+  const keypair = Keypair.generate();
+  const privateKey = createPrivateKey({
+    key: Buffer.concat([
+      Buffer.from('302e020100300506032b657004220420', 'hex'),
+      Buffer.from(keypair.secretKey.slice(0, 32)),
+    ]),
+    format: 'der',
+    type: 'pkcs8',
+  });
+  const wallet = {
+    publicKey: keypair.publicKey,
+    signMessage: async (message: Uint8Array): Promise<Uint8Array> => (
+      new Uint8Array(signWithPrivateKey(null, Buffer.from(message), privateKey))
+    ),
+  };
+
+  const signInResult = await client.auth.signInWithWeb3({
+    chain: 'solana',
+    statement: OPERATIONS_WALLET_SIGN_IN_STATEMENT,
+    wallet,
+    options: {
+      url: config.web3Url,
+    },
+  });
+  assertNoError(signInResult.error, 'sign in ephemeral Solana wallet actor');
+  if (!signInResult.data.user) {
+    throw new Error('sign in ephemeral Solana wallet actor returned no user');
+  }
+
+  try {
+    return {
+      user: signInResult.data.user,
+      client,
+      walletAddress: keypair.publicKey.toBase58(),
+    };
+  } catch (error) {
+    await admin.auth.admin.deleteUser(signInResult.data.user.id);
+    throw error;
+  }
+}
+
+function requiredWallet(actor: TestActor): string {
+  if (!actor.walletAddress) {
+    throw new Error('test actor does not have a verified Solana wallet');
+  }
+  return actor.walletAddress;
 }
 
 async function cleanupStagingFixtures(

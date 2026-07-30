@@ -4,6 +4,12 @@ Status: remote staging active; actor-level RLS E2E and cleanup verified
 Baseline commit: `50463230bf55f6a9d14b66f6679def099e1ba9a9`
 Phase: `2E-6B-4H`
 
+Follow-on note (`2026-07-30`): this document records the completed Phase 4H
+email/role RLS baseline. Phase `2E-6B-4I` locally replaces the abandoned
+anonymous-intake plan with Solana Web3 Auth and wallet-bound RLS. Its migration
+has not yet been applied remotely. See
+`docs/wallet-authenticated-staging-intake-v1.md`.
+
 ## 1. Purpose
 
 Phase 4F created the off-chain operations foundation. Phase 4G prepared a
@@ -74,6 +80,7 @@ Required only for the mutating E2E:
 
 ```dotenv
 OPERATIONS_STAGING_SERVICE_ROLE_KEY=
+OPERATIONS_STAGING_WEB3_URL=https://<exact-allowlisted-staging-page>
 CONFIRM_OPERATIONS_STAGING_E2E=I_UNDERSTAND_THIS_CREATES_AND_DELETES_STAGING_TEST_DATA
 ```
 
@@ -117,11 +124,16 @@ Apply migrations in filename order:
 supabase/migrations/202607270001_offchain_operations_foundation.sql
 supabase/migrations/202607270002_operations_staging_hardening.sql
 supabase/migrations/202607290001_operations_staging_e2e_cleanup_privileges.sql
+supabase/migrations/202607300001_wallet_authenticated_operations_intake.sql
 ```
 
 The second migration fixes two findings identified while preparing real-role
 tests. The third migration fixes the table-privilege boundary found by the
 first remote staging E2E cleanup attempt.
+The fourth migration belongs to follow-on Phase 4I. It creates a
+wallet-authenticated intake path but leaves its database-side gate disabled by
+default. The Phase 4H remote status below does not claim that migration has
+been applied.
 
 ### 4.1 Published-record downgrade
 
@@ -230,15 +242,19 @@ actors:
 
 - operator;
 - moderator;
-- owner A;
-- owner B.
+- Solana Web3 owner A;
+- Solana Web3 owner B;
+- one email-only negative-control owner.
 
 It validates:
 
 - operator creation of a published community task;
 - public anonymous read of that task;
 - anonymous denial on private submissions;
+- confirmation that the reviewed database-side intake gate is enabled;
 - owner creation and read of a private submission;
+- rejection when owner A submits owner B's wallet;
+- rejection of an email-only owner that cannot prove wallet control;
 - owner B isolation from owner A's submission;
 - rejection of self-asserted `wallet_verified=true`;
 - owner creation of a private governance discussion;
@@ -281,10 +297,10 @@ supabase test db
 
 The database tests check:
 
-- all 13 operations tables;
-- RLS enabled on all 13 tables;
+- all 14 operations tables, including the disabled-by-default intake control;
+- RLS enabled on all 14 tables;
 - the reviewed total of 37 policies;
-- the reviewed total of 29 non-internal triggers;
+- the reviewed total of 34 non-internal triggers;
 - moderator discussion SELECT policy shape;
 - absence of `anon` grants on private intake;
 - published-downgrade protection in the installed function;
@@ -322,9 +338,9 @@ local Supabase or staging.
 The PGlite checks confirm:
 
 ```text
-13 operations tables
+14 operations tables
 37 RLS policies
-29 non-internal triggers
+34 non-internal triggers
 ```
 
 They also execute the published-downgrade rejection and a moderator RLS read.
@@ -339,7 +355,8 @@ For a fresh staging project:
 
 1. record the exact project ref out of band;
 2. confirm the project contains no production data;
-3. enable Anonymous Sign-Ins only if anonymous intake will be tested;
+3. keep Anonymous Sign-Ins disabled; the follow-on intake path uses Solana
+   Web3 Auth;
 4. apply all operations migrations in order;
 5. run `supabase test db`;
 6. run the read-only preflight;

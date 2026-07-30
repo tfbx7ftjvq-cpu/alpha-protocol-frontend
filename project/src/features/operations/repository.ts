@@ -1,5 +1,6 @@
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import {
+  type MyOperationsSubmission,
   OPERATIONS_PUBLIC_RECORD_LIMIT,
   type CommunityTask,
   type DiscussionInput,
@@ -18,6 +19,7 @@ import {
   validateRiskReport,
   validateTaskSubmission,
 } from './domain';
+import { assertWalletSessionMatch } from './auth';
 import {
   getOperationsSupabase,
   operationsBackendConfig,
@@ -101,7 +103,7 @@ export async function loadOperationsOverview(): Promise<OperationsOverview> {
 
 export async function submitTaskResult(input: TaskSubmissionInput): Promise<void> {
   const payload = validateTaskSubmission(input);
-  const { client, user } = await requireIntakeSession();
+  const { client, user } = await requireIntakeSession(payload.walletAddress);
   const { error } = await client.from('task_submissions').insert({
     task_id: payload.taskId,
     submitted_by: user.id,
@@ -117,7 +119,7 @@ export async function submitTaskResult(input: TaskSubmissionInput): Promise<void
 
 export async function submitRiskReport(input: RiskReportInput): Promise<void> {
   const payload = validateRiskReport(input);
-  const { client, user } = await requireIntakeSession();
+  const { client, user } = await requireIntakeSession(payload.walletAddress);
   const { error } = await client.from('risk_reports').insert({
     submitted_by: user.id,
     project_identifier: payload.projectIdentifier,
@@ -134,7 +136,7 @@ export async function submitRiskReport(input: RiskReportInput): Promise<void> {
 
 export async function submitReliefApplication(input: ReliefApplicationInput): Promise<void> {
   const payload = validateReliefApplication(input);
-  const { client, user } = await requireIntakeSession();
+  const { client, user } = await requireIntakeSession(payload.walletAddress);
   const { error } = await client.from('relief_applications').insert({
     submitted_by: user.id,
     incident_summary: payload.incidentSummary,
@@ -150,7 +152,7 @@ export async function submitReliefApplication(input: ReliefApplicationInput): Pr
 
 export async function submitDiscussion(input: DiscussionInput): Promise<void> {
   const payload = validateDiscussion(input);
-  const { client, user } = await requireIntakeSession();
+  const { client, user } = await requireIntakeSession(payload.walletAddress);
   const { error } = await client.from('governance_discussions').insert({
     submitted_by: user.id,
     topic: payload.topic,
@@ -163,7 +165,83 @@ export async function submitDiscussion(input: DiscussionInput): Promise<void> {
   assertNoMutationError(error, '治理讨论');
 }
 
-async function requireIntakeSession(): Promise<{ client: SupabaseClient; user: User }> {
+export async function loadMyOperationsSubmissions(
+  connectedWallet: string,
+): Promise<MyOperationsSubmission[]> {
+  const { client } = await requireIntakeSession(connectedWallet);
+  const [taskResult, riskResult, reliefResult, discussionResult] = await Promise.all([
+    client
+      .from('task_submissions')
+      .select('id,summary,status,reviewer_notes,created_at,updated_at')
+      .order('created_at', { ascending: false })
+      .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
+    client
+      .from('risk_reports')
+      .select('id,project_identifier,review_status,reviewer_notes,created_at,updated_at')
+      .order('created_at', { ascending: false })
+      .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
+    client
+      .from('relief_applications')
+      .select('id,incident_summary,status,reviewer_notes,created_at,updated_at')
+      .order('created_at', { ascending: false })
+      .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
+    client
+      .from('governance_discussions')
+      .select('id,topic,moderation_status,created_at,updated_at')
+      .order('created_at', { ascending: false })
+      .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
+  ]);
+
+  assertNoQueryError(taskResult.error, '我的任务提交');
+  assertNoQueryError(riskResult.error, '我的风险报告');
+  assertNoQueryError(reliefResult.error, '我的救助申请');
+  assertNoQueryError(discussionResult.error, '我的治理讨论');
+
+  return [
+    ...(taskResult.data ?? []).map((row) => ({
+      id: row.id,
+      kind: 'task' as const,
+      title: summarizePrivateText(row.summary, '任务成果'),
+      status: row.status,
+      reviewerNotes: row.reviewer_notes,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    })),
+    ...(riskResult.data ?? []).map((row) => ({
+      id: row.id,
+      kind: 'risk' as const,
+      title: row.project_identifier,
+      status: row.review_status,
+      reviewerNotes: row.reviewer_notes,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    })),
+    ...(reliefResult.data ?? []).map((row) => ({
+      id: row.id,
+      kind: 'relief' as const,
+      title: summarizePrivateText(row.incident_summary, '救助申请'),
+      status: row.status,
+      reviewerNotes: row.reviewer_notes,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    })),
+    ...(discussionResult.data ?? []).map((row) => ({
+      id: row.id,
+      kind: 'discussion' as const,
+      title: row.topic,
+      status: row.moderation_status,
+      reviewerNotes: null,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    })),
+  ]
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+    .slice(0, OPERATIONS_PUBLIC_RECORD_LIMIT);
+}
+
+async function requireIntakeSession(
+  connectedWallet: string,
+): Promise<{ client: SupabaseClient; user: User }> {
   if (!operationsBackendConfig.intakeEnabled) {
     throw new OperationsBackendError(
       operationsBackendConfig.reason ?? '社区提交入口尚未启用',
@@ -175,21 +253,32 @@ async function requireIntakeSession(): Promise<{ client: SupabaseClient; user: U
     throw new OperationsBackendError('运营后端尚未配置');
   }
 
-  const sessionResult = await client.auth.getSession();
-  if (sessionResult.error) {
-    throw new OperationsBackendError('无法读取匿名提交会话');
+  const userResult = await client.auth.getUser();
+  if (userResult.error || !userResult.data.user) {
+    throw new OperationsBackendError('缺少有效的钱包认证会话，请先签名认证');
   }
 
-  if (sessionResult.data.session?.user) {
-    return { client, user: sessionResult.data.session.user };
+  try {
+    assertWalletSessionMatch(userResult.data.user, connectedWallet);
+  } catch (error) {
+    throw new OperationsBackendError(
+      error instanceof Error ? error.message : '钱包认证会话不匹配',
+    );
   }
 
-  const signInResult = await client.auth.signInAnonymously();
-  if (signInResult.error || !signInResult.data.user) {
-    throw new OperationsBackendError('匿名提交会话创建失败，请确认 Supabase Anonymous Sign-Ins 已开启');
+  const [intakeResult, walletResult] = await Promise.all([
+    client.rpc('is_operations_wallet_intake_enabled'),
+    client.rpc('current_verified_solana_wallet'),
+  ]);
+  if (intakeResult.error || intakeResult.data !== true) {
+    throw new OperationsBackendError('数据库端钱包提交总闸门仍为关闭状态');
   }
 
-  return { client, user: signInResult.data.user };
+  if (walletResult.error || walletResult.data !== connectedWallet) {
+    throw new OperationsBackendError('数据库未确认当前 Web3 钱包身份，提交已中止');
+  }
+
+  return { client, user: userResult.data.user };
 }
 
 function requirePublicReadClient(): SupabaseClient {
@@ -217,6 +306,15 @@ function assertNoMutationError(error: { message: string } | null, label: string)
   if (error) {
     throw new OperationsBackendError(`${label}未提交成功，请检查权限或稍后重试`);
   }
+}
+
+function summarizePrivateText(value: string, fallback: string): string {
+  const normalized = value.trim().replace(/\s+/g, ' ');
+  if (!normalized) {
+    return fallback;
+  }
+
+  return normalized.length > 80 ? `${normalized.slice(0, 77)}…` : normalized;
 }
 
 function mapTask(row: {

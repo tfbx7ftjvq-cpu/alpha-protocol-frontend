@@ -17,6 +17,7 @@ const SERVICE_KEY = [
   'secret',
   'staging-test-value-without-credentials',
 ].join('_');
+const WEB3_URL = 'https://staging.alpha.example/operations';
 
 function validEnvironment(): NodeJS.ProcessEnv {
   return {
@@ -80,6 +81,7 @@ test('public and service-role keys stay in separate configuration slots', () => 
     () => resolveOperationsStagingConfig({
       ...validEnvironment(),
       OPERATIONS_STAGING_SERVICE_ROLE_KEY: PUBLIC_KEY,
+      OPERATIONS_STAGING_WEB3_URL: WEB3_URL,
       CONFIRM_OPERATIONS_STAGING_E2E: OPERATIONS_STAGING_CONFIRMATION,
     }, 'e2e'),
     /service-role key/,
@@ -90,6 +92,7 @@ test('mutating E2E requires an exact confirmation and rejects VITE secret exposu
   const e2eEnvironment = {
     ...validEnvironment(),
     OPERATIONS_STAGING_SERVICE_ROLE_KEY: SERVICE_KEY,
+    OPERATIONS_STAGING_WEB3_URL: WEB3_URL,
   };
 
   assert.throws(
@@ -111,12 +114,32 @@ test('mutating E2E requires an exact confirmation and rejects VITE secret exposu
     CONFIRM_OPERATIONS_STAGING_E2E: OPERATIONS_STAGING_CONFIRMATION,
   }, 'e2e');
   assert.equal(config.confirmedForWrites, true);
+  assert.equal(config.web3Url, WEB3_URL);
+});
+
+test('wallet E2E URL must be an exact HTTPS page without credentials or query data', () => {
+  for (const web3Url of [
+    'http://staging.alpha.example/operations',
+    'https://user:pass@staging.alpha.example/operations',
+    'https://staging.alpha.example/operations?token=unsafe',
+  ]) {
+    assert.throws(
+      () => resolveOperationsStagingConfig({
+        ...validEnvironment(),
+        OPERATIONS_STAGING_SERVICE_ROLE_KEY: SERVICE_KEY,
+        OPERATIONS_STAGING_WEB3_URL: web3Url,
+        CONFIRM_OPERATIONS_STAGING_E2E: OPERATIONS_STAGING_CONFIRMATION,
+      }, 'e2e'),
+      /OPERATIONS_STAGING_WEB3_URL/,
+    );
+  }
 });
 
 test('staging errors redact service keys and JWT-shaped credentials', () => {
   const config = resolveOperationsStagingConfig({
     ...validEnvironment(),
     OPERATIONS_STAGING_SERVICE_ROLE_KEY: SERVICE_KEY,
+    OPERATIONS_STAGING_WEB3_URL: WEB3_URL,
     CONFIRM_OPERATIONS_STAGING_E2E: OPERATIONS_STAGING_CONFIRMATION,
   }, 'e2e');
   const jwt = [

@@ -9,7 +9,9 @@ interface ImportMetaEnv {
   readonly VITE_REVENUE_DISTRIBUTION_THRESHOLD_USDC?: string;
   readonly VITE_SUPABASE_URL?: string;
   readonly VITE_SUPABASE_ANON_KEY?: string;
-  readonly VITE_OPERATIONS_INTAKE_MODE?: 'disabled' | 'anonymous';
+  readonly VITE_OPERATIONS_PROJECT_REF?: string;
+  readonly VITE_OPERATIONS_WEB3_URL?: string;
+  readonly VITE_OPERATIONS_INTAKE_MODE?: 'disabled' | 'wallet-staging';
 }
 
 interface ImportMeta {

@@ -5,6 +5,7 @@ export type CommunityTaskStatus = 'open' | 'under_review';
 export type PublicRiskStatus = 'published' | 'resolved' | 'dismissed';
 export type PublicReliefOutcome = 'reviewing' | 'approved' | 'rejected' | 'paid' | 'cancelled';
 export type GovernanceDecisionValue = 'approved' | 'rejected' | 'cancelled';
+export type MyOperationsSubmissionKind = 'task' | 'risk' | 'relief' | 'discussion';
 
 export interface CommunityTask {
   id: string;
@@ -62,6 +63,16 @@ export interface OperationsOverview {
   governanceDecisions: PublicGovernanceDecision[];
 }
 
+export interface MyOperationsSubmission {
+  id: string;
+  kind: MyOperationsSubmissionKind;
+  title: string;
+  status: string;
+  reviewerNotes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TaskSubmissionInput {
   taskId: string;
   summary: string;
@@ -100,7 +111,7 @@ export interface ValidatedRiskReport {
   projectIdentifier: string;
   summary: string;
   referenceUrl: string;
-  walletAddress: string | null;
+  walletAddress: string;
 }
 
 export interface ValidatedReliefApplication {
@@ -113,7 +124,7 @@ export interface ValidatedReliefApplication {
 export interface ValidatedDiscussion {
   topic: string;
   body: string;
-  walletAddress: string | null;
+  walletAddress: string;
 }
 
 export class OperationsValidationError extends Error {
@@ -137,7 +148,7 @@ export function validateRiskReport(input: RiskReportInput): ValidatedRiskReport 
     projectIdentifier: validateText(input.projectIdentifier, '项目标识', 2, 160),
     summary: validateText(input.summary, '风险说明', 30, 5_000),
     referenceUrl: validateHttpsUrl(input.referenceUrl, '证据链接', true),
-    walletAddress: validateSolanaAddress(input.walletAddress, '提交钱包', false),
+    walletAddress: validateSolanaAddress(input.walletAddress, '认证提交钱包', true),
   };
 }
 
@@ -154,7 +165,7 @@ export function validateDiscussion(input: DiscussionInput): ValidatedDiscussion 
   return {
     topic: validateText(input.topic, '讨论主题', 4, 160),
     body: validateText(input.body, '讨论内容', 20, 5_000),
-    walletAddress: validateSolanaAddress(input.walletAddress, '发言钱包', false),
+    walletAddress: validateSolanaAddress(input.walletAddress, '认证发言钱包', true),
   };
 }
 

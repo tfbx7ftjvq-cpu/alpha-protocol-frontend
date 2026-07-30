@@ -4,6 +4,12 @@ Status: local implementation only
 Baseline commit: `83711210c8e3818a17036a4f3a56eb08afa2fa50`
 Phase: `2E-6B-4F`
 
+Supersession note (`2026-07-30`): Phase `2E-6B-4I` removes the anonymous
+intake path described in this historical foundation document. Current intake
+uses Supabase Solana Web3 Auth, database-side wallet binding, and database
+rate limits. The frontend treats the old `anonymous` mode as disabled. See
+`docs/wallet-authenticated-staging-intake-v1.md`.
+
 ## 1. Purpose
 
 Alpha Protocol does not need to place its entire administration inside one
@@ -94,9 +100,10 @@ The following protocol records are public by design:
 
 ## 4. Identity and wallet meaning
 
-The initial intake path uses a Supabase anonymous auth session. It gives RLS a
-stable `auth.uid()` for ownership checks, but it is not proof of legal identity
-or wallet ownership.
+At the Phase 4F baseline, the initial intake path used a Supabase anonymous
+auth session. It gave RLS a stable `auth.uid()` for ownership checks, but it
+was not proof of legal identity or wallet ownership. Phase 4I supersedes that
+path with a signed Solana Web3 Auth session and database-bound wallet address.
 
 A wallet copied from Phantom into a form is stored with:
 
@@ -275,6 +282,8 @@ The public frontend uses only:
 ```dotenv
 VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
+VITE_OPERATIONS_PROJECT_REF=
+VITE_OPERATIONS_WEB3_URL=
 VITE_OPERATIONS_INTAKE_MODE=disabled
 ```
 
@@ -284,22 +293,28 @@ Fail-closed behavior:
 - malformed or non-HTTPS URL: locked;
 - suspected service-role/secret key: locked;
 - configured public key with intake `disabled`: public reads only;
-- intake `anonymous`: anonymous session creation and form submission enabled.
+- intake `anonymous`: rejected and treated as disabled;
+- intake `wallet-staging`: enabled only with an exact project ref, exact HTTPS
+  Web3 page, verified Web3 session, matching connected wallet, matching
+  database identity, and an explicitly activated database-side intake gate.
 
 The default is `disabled`.
 
-Before switching to `anonymous`:
+Before switching to `wallet-staging`:
 
-- enable Supabase Anonymous Sign-Ins;
+- keep Supabase Anonymous Sign-Ins disabled;
+- apply the wallet-authenticated intake migration;
+- enable the Solana Web3 Wallet provider;
+- allowlist the exact Web3 authentication page;
 - apply and verify all RLS policies;
 - set project-level Auth rate limits;
 - add abuse monitoring and alerting;
 - define evidence retention and takedown procedures;
-- decide whether CAPTCHA or an Edge Function intake gateway is required;
+- configure CAPTCHA before public exposure;
 - verify that published records contain no private claimant information.
 
-Anonymous sessions can be created repeatedly by an attacker. RLS is an
-authorization boundary, not a complete anti-spam system.
+Wallet sessions and database limits still do not prevent multi-wallet abuse.
+RLS is an authorization boundary, not a complete anti-spam system.
 
 ## 9. User-facing functions
 

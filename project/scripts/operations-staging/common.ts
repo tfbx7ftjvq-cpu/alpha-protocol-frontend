@@ -13,6 +13,7 @@ export interface OperationsStagingConfig {
   supabaseUrl: string;
   publicKey: string;
   serviceRoleKey: string | null;
+  web3Url: string | null;
   confirmedForWrites: boolean;
 }
 
@@ -66,6 +67,9 @@ export function resolveOperationsStagingConfig(
   if (mode === 'e2e' && !env.OPERATIONS_STAGING_SERVICE_ROLE_KEY?.trim()) {
     missing.push('OPERATIONS_STAGING_SERVICE_ROLE_KEY');
   }
+  if (mode === 'e2e' && !env.OPERATIONS_STAGING_WEB3_URL?.trim()) {
+    missing.push('OPERATIONS_STAGING_WEB3_URL');
+  }
 
   if (missing.length > 0) {
     throw new OperationsStagingConfigError(
@@ -78,6 +82,9 @@ export function resolveOperationsStagingConfig(
   const publicKey = env.OPERATIONS_STAGING_PUBLIC_KEY!.trim();
   const rawServiceKey = env.OPERATIONS_STAGING_SERVICE_ROLE_KEY?.trim() ?? '';
   const serviceRoleKey = rawServiceKey || null;
+  const web3Url = env.OPERATIONS_STAGING_WEB3_URL
+    ? normalizeWeb3Url(env.OPERATIONS_STAGING_WEB3_URL)
+    : null;
 
   if (!PROJECT_REF_PATTERN.test(projectRef)) {
     throw new OperationsStagingConfigError(
@@ -125,6 +132,7 @@ export function resolveOperationsStagingConfig(
     supabaseUrl,
     publicKey,
     serviceRoleKey,
+    web3Url,
     confirmedForWrites,
   };
 }
@@ -290,6 +298,29 @@ function normalizeStagingUrl(rawUrl: string): string {
   }
 
   return parsed.origin;
+}
+
+function normalizeWeb3Url(rawUrl: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl.trim());
+  } catch {
+    throw new OperationsStagingConfigError('OPERATIONS_STAGING_WEB3_URL 不是有效 URL');
+  }
+
+  if (
+    parsed.protocol !== 'https:'
+    || parsed.username
+    || parsed.password
+    || parsed.search
+    || parsed.hash
+  ) {
+    throw new OperationsStagingConfigError(
+      'OPERATIONS_STAGING_WEB3_URL 必须是无凭据、无 query/hash 的 HTTPS URL',
+    );
+  }
+
+  return parsed.href;
 }
 
 function assertNoBrowserSecretExposure(

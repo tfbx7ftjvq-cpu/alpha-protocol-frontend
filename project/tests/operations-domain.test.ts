@@ -80,20 +80,29 @@ test('task submission normalizes text and requires a valid task and wallet', () 
   );
 });
 
-test('risk report permits an omitted wallet but never omits evidence', () => {
+test('risk report requires the authenticated wallet and evidence', () => {
   const result = validateRiskReport({
     projectIdentifier: 'Example Project',
     summary: 'Observed behavior is documented separately from unverified interpretation.',
     referenceUrl: 'https://example.org/risk-evidence',
-    walletAddress: '',
+    walletAddress: VALID_WALLET,
   });
 
-  assert.equal(result.walletAddress, null);
+  assert.equal(result.walletAddress, VALID_WALLET);
   assert.throws(
     () => validateRiskReport({
       projectIdentifier: 'Example Project',
       summary: result.summary,
       referenceUrl: '',
+      walletAddress: VALID_WALLET,
+    }),
+    OperationsValidationError,
+  );
+  assert.throws(
+    () => validateRiskReport({
+      projectIdentifier: 'Example Project',
+      summary: result.summary,
+      referenceUrl: result.referenceUrl,
       walletAddress: '',
     }),
     OperationsValidationError,
@@ -121,14 +130,14 @@ test('relief application requires evidence, a valid wallet, and a positive amoun
   );
 });
 
-test('discussion validation keeps wallet optional and enforces substantive content', () => {
+test('discussion validation requires the authenticated wallet and substantive content', () => {
   const result = validateDiscussion({
     topic: 'Builder compensation process',
     body: 'Publish acceptance evidence before a spending proposal is created.',
-    walletAddress: '',
+    walletAddress: VALID_WALLET,
   });
 
-  assert.equal(result.walletAddress, null);
+  assert.equal(result.walletAddress, VALID_WALLET);
   assert.throws(
     () => validateDiscussion({ topic: 'Tiny', body: 'too short', walletAddress: '' }),
     OperationsValidationError,

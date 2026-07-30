@@ -271,7 +271,7 @@ function AppContent({ walletNotice, onClearWalletNotice }: AppContentProps) {
         {activeTab === 'home' && <PublicLandingPage onNavigate={(target) => setActiveTab(target)} />}
         {activeTab === 'launch' && <LaunchTransparencyDashboard />}
         {activeTab === 'operations' && (
-          <OperationsDashboard connectedWallet={publicKey?.toBase58() ?? null} />
+          <OperationsDashboard />
         )}
         {activeTab === 'treasury' && (
           <TreasuryDashboard

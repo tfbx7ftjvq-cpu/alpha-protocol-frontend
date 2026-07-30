@@ -15,12 +15,23 @@ const cleanupPrivilegesMigrationUrl = new URL(
   '../../supabase/migrations/202607290001_operations_staging_e2e_cleanup_privileges.sql',
   import.meta.url,
 );
+const walletIntakeMigrationUrl = new URL(
+  '../../supabase/migrations/202607300001_wallet_authenticated_operations_intake.sql',
+  import.meta.url,
+);
 const foundationSql = readFileSync(foundationMigrationUrl, 'utf8');
 const hardeningSql = readFileSync(hardeningMigrationUrl, 'utf8');
 const cleanupPrivilegesSql = readFileSync(cleanupPrivilegesMigrationUrl, 'utf8');
-const sql = `${foundationSql}\n${hardeningSql}\n${cleanupPrivilegesSql}`;
+const walletIntakeSql = readFileSync(walletIntakeMigrationUrl, 'utf8');
+const sql = [
+  foundationSql,
+  hardeningSql,
+  cleanupPrivilegesSql,
+  walletIntakeSql,
+].join('\n');
 
 const expectedTables = [
+  'operations_intake_control',
   'community_tasks',
   'task_submissions',
   'risk_reports',
@@ -48,6 +59,7 @@ test('every operations table enables row-level security', () => {
 
 test('private intake tables are never granted to anon', () => {
   for (const table of [
+    'operations_intake_control',
     'task_submissions',
     'risk_reports',
     'risk_evidence',
@@ -193,6 +205,64 @@ test('staging hardening prevents publication downgrade and gives moderators read
   assert.match(policy, /'moderator', 'operator', 'governance_admin'/);
 });
 
+test('wallet intake binds all owner inserts to a verified Solana Web3 identity', () => {
+  assert.match(
+    walletIntakeSql,
+    /mode text not null default 'disabled'/,
+  );
+  assert.match(
+    walletIntakeSql,
+    /Applying this migration leaves wallet intake disabled/,
+  );
+  assert.match(
+    walletIntakeSql,
+    /from auth\.identities identity/,
+  );
+  assert.match(
+    walletIntakeSql,
+    /identity\.provider = 'web3'/,
+  );
+  assert.match(
+    walletIntakeSql,
+    /identity\.identity_data ->> 'chain' = 'solana'/,
+  );
+
+  for (const policyName of [
+    'task_submissions_owner_insert',
+    'risk_reports_owner_insert',
+    'relief_applications_owner_insert',
+    'governance_discussions_owner_insert',
+  ]) {
+    const policy = extractPolicy(policyName, walletIntakeSql);
+    assert.match(
+      policy,
+      /wallet_address = public\.current_verified_solana_wallet\(\)/,
+      `${policyName} must bind the submitted wallet to the Auth identity`,
+    );
+    assert.match(
+      policy,
+      /public\.is_operations_wallet_intake_enabled\(\)/,
+      `${policyName} must respect the database-side intake gate`,
+    );
+  }
+});
+
+test('wallet intake adds database-side rate limits to every direct intake table', () => {
+  for (const trigger of [
+    'task_submissions_rate_limit',
+    'risk_reports_rate_limit',
+    'relief_applications_rate_limit',
+    'governance_discussions_rate_limit',
+  ]) {
+    assert.match(walletIntakeSql, new RegExp(`create trigger ${trigger}`));
+  }
+
+  assert.match(walletIntakeSql, /pg_advisory_xact_lock/);
+  assert.match(walletIntakeSql, /new\.created_at := now\(\)/);
+  assert.match(walletIntakeSql, /new\.updated_at := now\(\)/);
+  assert.match(walletIntakeSql, /relief_applications' then[\s\S]*interval '24 hours'/);
+});
+
 test('staging E2E cleanup privilege is narrow and excludes browser roles', async () => {
   assert.match(
     cleanupPrivilegesSql,
@@ -273,9 +343,288 @@ test('all migrations create the expected schema, policy, and trigger totals', as
         and relation.relname = any(array[${expectedTables.map(quoteSql).join(', ')}]);
     `);
 
-    assert.equal(tableCount.rows[0]?.count, 13);
+    assert.equal(tableCount.rows[0]?.count, 14);
     assert.equal(policyCount.rows[0]?.count, 37);
-    assert.equal(triggerCount.rows[0]?.count, 29);
+    assert.equal(triggerCount.rows[0]?.count, 34);
+  } finally {
+    await database.close();
+  }
+});
+
+test('runtime requires an auditable server-gate activation and hides its control row', async () => {
+  const database = await createOperationsDatabase();
+
+  try {
+    await assert.rejects(
+      database.exec(`
+        update public.operations_intake_control
+        set mode = 'wallet_staging';
+      `),
+      /check constraint/,
+    );
+
+    await database.exec(`
+      update public.operations_intake_control
+      set
+        mode = 'wallet_staging',
+        activation_reference = 'local auditable activation test';
+      set role authenticated;
+    `);
+    const gateResult = await database.query<{ enabled: boolean }>(`
+      select public.is_operations_wallet_intake_enabled() as enabled;
+    `);
+    assert.equal(gateResult.rows[0]?.enabled, true);
+    await assert.rejects(
+      database.query('select * from public.operations_intake_control;'),
+      /permission denied/,
+    );
+    await database.exec('reset role;');
+  } finally {
+    await database.close();
+  }
+});
+
+test('runtime keeps wallet intake closed after the migration is applied', async () => {
+  const database = await createOperationsDatabase();
+  const walletUserId = '66666666-6666-4666-8666-666666666666';
+  const verifiedWallet = '11111111111111111111111111111111';
+
+  try {
+    await database.exec(`
+      insert into auth.users (id) values ('${walletUserId}');
+      insert into auth.identities (id, user_id, provider, identity_data)
+      values (
+        'web3:solana:${verifiedWallet}',
+        '${walletUserId}',
+        'web3',
+        '{"sub":"web3:solana:${verifiedWallet}","chain":"solana","address":"${verifiedWallet}"}'
+      );
+      select set_config('request.jwt.claim.sub', '${walletUserId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${walletUserId}","role":"authenticated"}',
+        false
+      );
+      set role authenticated;
+    `);
+
+    await assert.rejects(
+      database.exec(`
+        insert into public.risk_reports (
+          submitted_by,
+          project_identifier,
+          summary,
+          reference_url,
+          wallet_address
+        ) values (
+          '${walletUserId}',
+          'Disabled server gate report',
+          'This sufficiently detailed report must fail while the database intake gate is disabled.',
+          'https://example.com/disabled-server-gate',
+          '${verifiedWallet}'
+        );
+      `),
+      /operations wallet intake is disabled/,
+    );
+  } finally {
+    await database.close();
+  }
+});
+
+test('runtime accepts the matching Web3 wallet and rejects email or switched-wallet intake', async () => {
+  const database = await createOperationsDatabase();
+  const walletUserId = '33333333-3333-4333-8333-333333333333';
+  const emailUserId = '44444444-4444-4444-8444-444444444444';
+  const verifiedWallet = '11111111111111111111111111111111';
+  const otherWallet = 'HrLBQxUD3XHkB3KABjHXTiBHuAe6jVP2UPqiwmpmH8EY';
+
+  try {
+    await database.exec(`
+      insert into auth.users (id) values
+        ('${walletUserId}'),
+        ('${emailUserId}');
+
+      insert into auth.identities (id, user_id, provider, identity_data)
+      values (
+        'web3:solana:${verifiedWallet}',
+        '${walletUserId}',
+        'web3',
+        '{"sub":"web3:solana:${verifiedWallet}","chain":"solana","address":"${verifiedWallet}"}'
+      );
+
+      update public.operations_intake_control
+      set
+        mode = 'wallet_staging',
+        activation_reference = 'local matching-wallet runtime test';
+
+      select set_config('request.jwt.claim.sub', '${walletUserId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${walletUserId}","role":"authenticated"}',
+        false
+      );
+      set role authenticated;
+    `);
+
+    await database.exec(`
+      insert into public.risk_reports (
+        submitted_by,
+        project_identifier,
+        summary,
+        reference_url,
+        wallet_address
+      ) values (
+        '${walletUserId}',
+        'Verified wallet report',
+        'A sufficiently detailed risk report submitted by the matching wallet identity.',
+        'https://example.com/verified-wallet-report',
+        '${verifiedWallet}'
+      );
+    `);
+
+    await assert.rejects(
+      database.exec(`
+        insert into public.risk_reports (
+          submitted_by,
+          project_identifier,
+          summary,
+          reference_url,
+          wallet_address
+        ) values (
+          '${walletUserId}',
+          'Switched wallet report',
+          'This report must fail because its wallet differs from the verified identity.',
+          'https://example.com/switched-wallet-report',
+          '${otherWallet}'
+        );
+      `),
+      /row-level security policy/,
+    );
+
+    await assert.rejects(
+      database.exec(`
+        insert into public.risk_reports (
+          submitted_by,
+          project_identifier,
+          summary,
+          reference_url,
+          wallet_address
+        ) values (
+          '${emailUserId}',
+          'Forged owner report',
+          'This report must fail because submitted_by differs from the authenticated user.',
+          'https://example.com/forged-owner-report',
+          '${verifiedWallet}'
+        );
+      `),
+      /operations submission owner does not match auth\.uid/,
+    );
+
+    await database.exec('reset role;');
+    await database.exec(`
+      select set_config('request.jwt.claim.sub', '${emailUserId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${emailUserId}","role":"authenticated"}',
+        false
+      );
+      set role authenticated;
+    `);
+
+    await assert.rejects(
+      database.exec(`
+        insert into public.risk_reports (
+          submitted_by,
+          project_identifier,
+          summary,
+          reference_url,
+          wallet_address
+        ) values (
+          '${emailUserId}',
+          'Email-only report',
+          'This report must fail because email authentication does not prove wallet control.',
+          'https://example.com/email-only-report',
+          '${verifiedWallet}'
+        );
+      `),
+      /row-level security policy/,
+    );
+
+    await database.exec('reset role;');
+  } finally {
+    await database.close();
+  }
+});
+
+test('runtime database throttle rejects the seventh hourly risk report', async () => {
+  const database = await createOperationsDatabase();
+  const walletUserId = '55555555-5555-4555-8555-555555555555';
+  const verifiedWallet = '11111111111111111111111111111111';
+
+  try {
+    await database.exec(`
+      insert into auth.users (id) values ('${walletUserId}');
+      insert into auth.identities (id, user_id, provider, identity_data)
+      values (
+        'web3:solana:${verifiedWallet}',
+        '${walletUserId}',
+        'web3',
+        '{"sub":"web3:solana:${verifiedWallet}","chain":"solana","address":"${verifiedWallet}"}'
+      );
+      update public.operations_intake_control
+      set
+        mode = 'wallet_staging',
+        activation_reference = 'local database throttle runtime test';
+      select set_config('request.jwt.claim.sub', '${walletUserId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${walletUserId}","role":"authenticated"}',
+        false
+      );
+      set role authenticated;
+    `);
+
+    for (let index = 0; index < 6; index += 1) {
+      await database.exec(`
+        insert into public.risk_reports (
+          submitted_by,
+          project_identifier,
+          summary,
+          reference_url,
+          wallet_address,
+          created_at
+        ) values (
+          '${walletUserId}',
+          'Rate limit report ${index}',
+          'A sufficiently detailed risk report used to validate the database throttle.',
+          'https://example.com/rate-limit-${index}',
+          '${verifiedWallet}',
+          '2000-01-01T00:00:00Z'
+        );
+      `);
+    }
+
+    await assert.rejects(
+      database.exec(`
+        insert into public.risk_reports (
+          submitted_by,
+          project_identifier,
+          summary,
+          reference_url,
+          wallet_address,
+          created_at
+        ) values (
+          '${walletUserId}',
+          'Rate limit report seven',
+          'This sufficiently detailed report must be rejected by the database throttle.',
+          'https://example.com/rate-limit-seven',
+          '${verifiedWallet}',
+          '2000-01-01T00:00:00Z'
+        );
+      `),
+      /operations submission rate limit exceeded/,
+    );
+    await database.exec('reset role;');
   } finally {
     await database.close();
   }
@@ -291,6 +640,17 @@ test('runtime rejects published downgrade and allows moderator private discussio
       insert into auth.users (id) values
         ('${ownerId}'),
         ('${moderatorId}');
+
+      select set_config('request.jwt.claim.sub', '${ownerId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${ownerId}","role":"authenticated"}',
+        false
+      );
+      update public.operations_intake_control
+      set
+        mode = 'wallet_staging',
+        activation_reference = 'local moderator runtime fixture';
 
       insert into public.community_tasks (
         title,
@@ -377,6 +737,12 @@ async function createOperationsDatabase(): Promise<PGlite> {
     create role service_role nologin bypassrls;
     create schema auth;
     create table auth.users (id uuid primary key);
+    create table auth.identities (
+      id text primary key,
+      user_id uuid not null references auth.users(id),
+      provider text not null,
+      identity_data jsonb not null
+    );
 
     create function auth.uid()
     returns uuid
@@ -409,6 +775,7 @@ async function createOperationsDatabase(): Promise<PGlite> {
   );
   await database.exec(hardeningSql);
   await database.exec(cleanupPrivilegesSql);
+  await database.exec(walletIntakeSql);
   return database;
 }
 
