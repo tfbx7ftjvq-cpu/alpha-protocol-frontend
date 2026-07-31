@@ -9,6 +9,7 @@ export interface OperationsBackendConfig {
   intakeEnabled: boolean;
   projectRef: string | null;
   web3Url: string | null;
+  turnstileSiteKey: string | null;
   reason: string | null;
 }
 
@@ -17,6 +18,7 @@ const rawPublicKey = import.meta.env?.VITE_SUPABASE_ANON_KEY?.trim() ?? '';
 const rawIntakeMode = import.meta.env?.VITE_OPERATIONS_INTAKE_MODE?.trim() ?? 'disabled';
 const rawProjectRef = import.meta.env?.VITE_OPERATIONS_PROJECT_REF?.trim() ?? '';
 const rawWeb3Url = import.meta.env?.VITE_OPERATIONS_WEB3_URL?.trim() ?? '';
+const rawTurnstileSiteKey = import.meta.env?.VITE_TURNSTILE_SITE_KEY?.trim() ?? '';
 
 let client: SupabaseClient | null = null;
 
@@ -26,6 +28,7 @@ export const operationsBackendConfig = resolveOperationsBackendConfig(
   rawIntakeMode,
   rawProjectRef,
   rawWeb3Url,
+  rawTurnstileSiteKey,
 );
 
 export function getOperationsSupabase(): SupabaseClient | null {
@@ -57,6 +60,7 @@ export function resolveOperationsBackendConfig(
   intakeModeValue: string,
   expectedProjectRef = '',
   expectedWeb3Url = '',
+  turnstileSiteKeyValue = '',
 ): OperationsBackendConfig {
   if (!url || !publicKey) {
     return disabledConfig('Supabase URL 或公开 anon/publishable key 尚未配置');
@@ -86,12 +90,14 @@ export function resolveOperationsBackendConfig(
     : 'disabled';
   const projectRef = extractSupabaseProjectRef(parsedUrl);
   const web3Url = normalizeWeb3Url(expectedWeb3Url);
+  const turnstileSiteKey = normalizeTurnstileSiteKey(turnstileSiteKeyValue);
 
   if (intakeMode === 'wallet-staging') {
     if (!/^[a-z0-9]{20}$/.test(expectedProjectRef)) {
       return readOnlyConfig(
         projectRef,
         web3Url,
+        turnstileSiteKey,
         '公开读取已启用；钱包提交保持关闭，因为缺少有效的 VITE_OPERATIONS_PROJECT_REF',
       );
     }
@@ -100,6 +106,7 @@ export function resolveOperationsBackendConfig(
       return readOnlyConfig(
         projectRef,
         web3Url,
+        turnstileSiteKey,
         '公开读取已启用；钱包提交保持关闭，因为 Supabase URL 与预期 project ref 不一致',
       );
     }
@@ -108,7 +115,17 @@ export function resolveOperationsBackendConfig(
       return readOnlyConfig(
         projectRef,
         null,
+        turnstileSiteKey,
         '公开读取已启用；钱包提交保持关闭，因为缺少有效的 VITE_OPERATIONS_WEB3_URL',
+      );
+    }
+
+    if (!turnstileSiteKey) {
+      return readOnlyConfig(
+        projectRef,
+        web3Url,
+        null,
+        '公开读取已启用；钱包提交保持关闭，因为缺少有效的 VITE_TURNSTILE_SITE_KEY',
       );
     }
   }
@@ -120,6 +137,7 @@ export function resolveOperationsBackendConfig(
     intakeEnabled: intakeMode === 'wallet-staging',
     projectRef,
     web3Url,
+    turnstileSiteKey,
     reason: intakeMode === 'wallet-staging'
       ? null
       : '公开读取已启用；用户提交保持关闭，直到显式设置 wallet-staging intake',
@@ -153,6 +171,7 @@ function disabledConfig(reason: string): OperationsBackendConfig {
     intakeEnabled: false,
     projectRef: null,
     web3Url: null,
+    turnstileSiteKey: null,
     reason,
   };
 }
@@ -160,6 +179,7 @@ function disabledConfig(reason: string): OperationsBackendConfig {
 function readOnlyConfig(
   projectRef: string | null,
   web3Url: string | null,
+  turnstileSiteKey: string | null,
   reason: string,
 ): OperationsBackendConfig {
   return {
@@ -169,6 +189,7 @@ function readOnlyConfig(
     intakeEnabled: false,
     projectRef,
     web3Url,
+    turnstileSiteKey,
     reason,
   };
 }
@@ -198,6 +219,19 @@ function normalizeWeb3Url(value: string): string | null {
   } catch {
     return null;
   }
+}
+
+export function normalizeTurnstileSiteKey(value: string): string | null {
+  const siteKey = value.trim();
+  if (
+    siteKey.length < 20
+    || siteKey.length > 100
+    || !/^[A-Za-z0-9_-]+$/.test(siteKey)
+  ) {
+    return null;
+  }
+
+  return siteKey;
 }
 
 function isBrowserForbiddenKey(key: string): boolean {

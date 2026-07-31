@@ -10,6 +10,12 @@ anonymous-intake plan with Solana Web3 Auth and wallet-bound RLS. Its migration
 has not yet been applied remotely. See
 `docs/wallet-authenticated-staging-intake-v1.md`.
 
+Current-state note (`2026-07-31`): migration `202607300001` was subsequently
+applied and verified on the same dedicated Staging project. The Cloudflare
+Pages frontend is live in public-read-only mode. Phase `2E-6B-4J` adds the
+Turnstile client path, but CAPTCHA, Web3 provider, database intake gate, and
+frontend wallet-staging mode remain disabled.
+
 ## 1. Purpose
 
 Phase 4F created the off-chain operations foundation. Phase 4G prepared a
@@ -399,6 +405,21 @@ Current staging status after final Phase 4H verification:
 - the existing uploaded Devnet program buffer was not closed or modified;
 - the latest full Solana program remains not upgraded on Devnet;
 - no Alpha Protocol custom program is deployed on Mainnet.
+
+Subsequent verified Staging state:
+
+- migration `202607300001_wallet_authenticated_operations_intake.sql` is also
+  applied and local/remote migration parity is confirmed;
+- remote database lint reports no schema errors after that migration;
+- the read-only preflight still passes;
+- Cloudflare Pages serves the frontend at
+  `https://alpha-protocol-frontend.pages.dev/`;
+- frontend public reads are configured, while
+  `VITE_OPERATIONS_INTAKE_MODE=disabled`;
+- the database-side operations intake control remains disabled;
+- Supabase Anonymous Sign-Ins remain disabled;
+- Supabase Web3 Wallet and CAPTCHA remain disabled pending the reviewed
+  Turnstile activation sequence.
 
 This phase verifies the selected off-chain authorization paths on the dedicated
 Supabase staging project. It does not activate production intake, deploy or

@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   assertWalletSessionMatch,
+  buildOperationsWeb3AuthOptions,
   getVerifiedSolanaWallet,
+  normalizeTurnstileToken,
+  TURNSTILE_TOKEN_MAX_LENGTH,
 } from '../src/features/operations/auth.ts';
 
 const WALLET = '11111111111111111111111111111111';
@@ -74,4 +77,33 @@ test('wallet session matching rejects disconnected and switched wallets', () => 
   assert.equal(assertWalletSessionMatch(user, WALLET), WALLET);
   assert.throws(() => assertWalletSessionMatch(user, null), /连接 Solana 钱包/);
   assert.throws(() => assertWalletSessionMatch(user, OTHER_WALLET), /不一致/);
+});
+
+test('Turnstile token validation accepts boundaries and rejects unsafe values', () => {
+  const minimumToken = 'a'.repeat(20);
+  const maximumToken = 'b'.repeat(TURNSTILE_TOKEN_MAX_LENGTH);
+
+  assert.equal(normalizeTurnstileToken(minimumToken), minimumToken);
+  assert.equal(normalizeTurnstileToken(maximumToken), maximumToken);
+
+  for (const token of [
+    '',
+    'a'.repeat(19),
+    ` ${minimumToken}`,
+    `${minimumToken}\n`,
+    `valid-token ${minimumToken}`,
+    'x'.repeat(TURNSTILE_TOKEN_MAX_LENGTH + 1),
+  ]) {
+    assert.throws(() => normalizeTurnstileToken(token), /Turnstile/);
+  }
+});
+
+test('Web3 auth options bind the exact page and forward the CAPTCHA token', () => {
+  const url = 'https://alpha.example/operations';
+  const captchaToken = 'turnstile-token-for-one-auth-attempt';
+
+  assert.deepEqual(
+    buildOperationsWeb3AuthOptions(url, captchaToken),
+    { url, captchaToken },
+  );
 });

@@ -5,6 +5,12 @@ Baseline commit: `3700ba73ef117fdbb66f8db10a56b9a31752f79b`
 Phase: `2E-6B-4I`
 Date: `2026-07-30`
 
+Follow-on note (`2026-07-31`): Phase `2E-6B-4J` adds a fail-closed
+Cloudflare Turnstile challenge in front of Supabase Solana Web3 Auth. The
+wallet-auth migration is now applied to the dedicated Supabase Staging project
+and the frontend is deployed read-only on Cloudflare Pages. Intake remains
+disabled. See `docs/turnstile-protected-wallet-auth-staging-v1.md`.
+
 ## 1. Purpose
 
 This phase replaces the superseded anonymous operations intake with a
@@ -54,6 +60,7 @@ VITE_SUPABASE_URL=https://<project-ref>.supabase.co
 VITE_SUPABASE_ANON_KEY=<browser-safe-publishable-or-anon-key>
 VITE_OPERATIONS_PROJECT_REF=<exact-20-character-project-ref>
 VITE_OPERATIONS_WEB3_URL=https://<exact-staging-host>/<exact-page>
+VITE_TURNSTILE_SITE_KEY=<browser-safe-site-key>
 VITE_OPERATIONS_INTAKE_MODE=wallet-staging
 ```
 
@@ -64,6 +71,7 @@ The configuration rejects:
 - a missing or mismatched project ref;
 - a Web3 URL containing credentials, a query string, or a fragment;
 - a current browser origin or path that differs from the configured Web3 URL;
+- a missing or malformed public Turnstile site key;
 - any intake mode other than the exact value `wallet-staging`.
 
 Query strings and fragments on the current page are removed before comparison,
@@ -216,40 +224,31 @@ limitation rather than a reason to apply an unreviewed forced upgrade.
 
 ## 9. Remote activation gates
 
-None of the following actions was performed in this phase:
+Original Phase 4I implementation did not perform remote activation. Since that
+code-only phase, the following Staging preparation has been completed:
 
-- applying migration `202607300001` to Supabase Staging;
-- enabling the Supabase Web3 Wallet provider;
-- adding or changing an Auth Redirect URL;
-- changing Auth rate limits;
-- enabling CAPTCHA;
-- setting the frontend intake mode to `wallet-staging`;
-- running the new mutating Web3 RLS E2E;
-- deploying the frontend;
-- sending a Devnet or Mainnet transaction.
+- migration `202607300001` is applied to the dedicated Supabase Staging
+  project;
+- migration parity, remote lint, and the read-only preflight passed;
+- the exact Cloudflare Pages URL is configured for Auth;
+- a conservative Web3 Auth rate limit is configured;
+- the frontend is deployed at
+  `https://alpha-protocol-frontend.pages.dev/`;
+- public database reads work from the deployment.
 
-Remote activation requires a new explicit human confirmation and must proceed
-in this order:
+The following gates remain closed:
 
-1. review and apply migration `202607300001` to the exact Staging project;
-2. confirm migration parity and run remote database lint;
-3. add one exact HTTPS Staging page to Auth Redirect URLs;
-4. enable only the Solana Web3 Wallet provider; keep Anonymous Sign-Ins off;
-5. set a conservative Web3 Auth rate limit;
-6. configure the exact browser-safe frontend variables while keeping intake
-   disabled;
-7. run the read-only preflight;
-8. keep the database gate disabled until CAPTCHA integration is complete;
-9. integrate a CAPTCHA token into `signInWithWeb3`, configure the selected
-   CAPTCHA provider, and verify a browser authentication smoke test;
-10. explicitly activate the database gate with an auditable reference;
-11. explicitly confirm and run the mutating Web3 RLS E2E;
-12. verify all temporary rows and users were removed;
-13. enable `wallet-staging` only for the reviewed Staging deployment.
+- `VITE_OPERATIONS_INTAKE_MODE=disabled`;
+- database `operations_intake_control.mode=disabled`;
+- Supabase Web3 Wallet provider is not enabled;
+- Supabase CAPTCHA is not enabled;
+- no Turnstile widget or site key is configured;
+- no public browser wallet-authentication smoke test has run;
+- no public wallet-authenticated intake has run.
 
-CAPTCHA token integration is intentionally a remaining public-exposure blocker
-because no provider or site key has been selected. Internal code review and
-database migration verification can proceed while intake remains disabled.
+Phase 4J implements the missing client token path. Remote activation must still
+follow its separately reviewed order. A service-role key or Turnstile secret
+must never be placed in a browser variable.
 
 ## 10. Official references
 

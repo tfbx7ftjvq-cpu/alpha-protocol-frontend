@@ -7,10 +7,36 @@ export const OPERATIONS_WALLET_SIGN_IN_STATEMENT = [
   'a Solana transaction, token approval, or transfer of funds.',
 ].join(' ');
 
+export const TURNSTILE_TOKEN_MAX_LENGTH = 2048;
+const TURNSTILE_TOKEN_MIN_LENGTH = 20;
+
 type AuthIdentity = NonNullable<User['identities']>[number];
 
 export interface OperationsAuthUser {
   identities?: Pick<AuthIdentity, 'provider' | 'identity_data'>[] | null;
+}
+
+export function normalizeTurnstileToken(value: string): string {
+  if (
+    value.length < TURNSTILE_TOKEN_MIN_LENGTH
+    || value.length > TURNSTILE_TOKEN_MAX_LENGTH
+    || value.trim() !== value
+    || /\s/.test(value)
+  ) {
+    throw new Error('Turnstile 验证已失效或格式无效，请重新完成安全验证');
+  }
+
+  return value;
+}
+
+export function buildOperationsWeb3AuthOptions(
+  url: string,
+  captchaToken: string,
+): { url: string; captchaToken: string } {
+  return {
+    url,
+    captchaToken: normalizeTurnstileToken(captchaToken),
+  };
 }
 
 export function getVerifiedSolanaWallet(user: OperationsAuthUser | null): string | null {

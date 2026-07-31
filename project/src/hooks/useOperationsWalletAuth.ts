@@ -3,7 +3,9 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import type { User } from '@supabase/supabase-js';
 import {
   assertWalletSessionMatch,
+  buildOperationsWeb3AuthOptions,
   getVerifiedSolanaWallet,
+  normalizeTurnstileToken,
   OPERATIONS_WALLET_SIGN_IN_STATEMENT,
 } from '../features/operations/auth';
 import {
@@ -26,7 +28,7 @@ export interface OperationsWalletAuthState {
   connectedWallet: string | null;
   authenticatedWallet: string | null;
   error: string | null;
-  signIn: () => Promise<void>;
+  signIn: (captchaToken: string) => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -160,10 +162,23 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
     return () => data.subscription.unsubscribe();
   }, [applyUser, refresh]);
 
-  const signIn = useCallback(async () => {
+  const signIn = useCallback(async (captchaToken: string) => {
     if (!operationsBackendConfig.intakeEnabled) {
       setStatus('disabled');
       setError(operationsBackendConfig.reason);
+      return;
+    }
+
+    let verifiedCaptchaToken: string;
+    try {
+      verifiedCaptchaToken = normalizeTurnstileToken(captchaToken);
+    } catch (captchaError) {
+      setStatus('signed-out');
+      setError(
+        captchaError instanceof Error
+          ? captchaError.message
+          : 'Turnstile 验证无效，请重新验证',
+      );
       return;
     }
 
@@ -203,14 +218,14 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
         signMessage: wallet.signMessage,
       },
       options: {
-        url: expectedWeb3Url,
+        ...buildOperationsWeb3AuthOptions(expectedWeb3Url, verifiedCaptchaToken),
       },
     });
 
     if (signInResult.error || !signInResult.data.user) {
       setStatus('error');
       setAuthenticatedWallet(null);
-      setError('钱包认证失败；请检查 Web3 Provider、Redirect URL、域名和钱包签名权限');
+      setError('钱包认证失败；请重新完成 Turnstile，并检查 Web3 Provider、Redirect URL、域名和钱包签名权限');
       return;
     }
 

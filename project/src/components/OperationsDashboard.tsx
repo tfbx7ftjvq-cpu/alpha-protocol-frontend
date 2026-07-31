@@ -21,6 +21,7 @@ import {
   Users,
   WalletCards,
 } from 'lucide-react';
+import TurnstileChallenge from './TurnstileChallenge';
 import {
   submitDiscussion,
   submitReliefApplication,
@@ -682,10 +683,32 @@ function DiscussionPanel({
 }
 
 function WalletAuthBoundary({ auth }: { auth: OperationsWalletAuthState }) {
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileError, setTurnstileError] = useState<string | null>(null);
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const canSignIn = operationsBackendConfig.intakeEnabled
     && Boolean(auth.connectedWallet)
+    && Boolean(turnstileToken)
     && !['checking', 'signing-in'].includes(auth.status);
   const authenticated = auth.status === 'authenticated';
+  const showChallenge = operationsBackendConfig.intakeEnabled
+    && !authenticated
+    && Boolean(operationsBackendConfig.turnstileSiteKey);
+
+  const handleSignIn = async () => {
+    if (!turnstileToken) {
+      setTurnstileError('请先完成 Turnstile 安全验证');
+      return;
+    }
+
+    const singleUseToken = turnstileToken;
+    setTurnstileToken(null);
+    try {
+      await auth.signIn(singleUseToken);
+    } finally {
+      setTurnstileResetKey((value) => value + 1);
+    }
+  };
 
   return (
     <section className={`rounded-xl border p-5 ${
@@ -711,8 +734,20 @@ function WalletAuthBoundary({ auth }: { auth: OperationsWalletAuthState }) {
           {auth.error && (
             <p className="mt-3 text-[10px] leading-relaxed text-red-300">{auth.error}</p>
           )}
+          {turnstileError && (
+            <p className="mt-2 text-[10px] leading-relaxed text-red-300">{turnstileError}</p>
+          )}
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex w-full max-w-sm flex-col gap-3 sm:w-auto">
+          {showChallenge && operationsBackendConfig.turnstileSiteKey && (
+            <TurnstileChallenge
+              siteKey={operationsBackendConfig.turnstileSiteKey}
+              resetKey={turnstileResetKey}
+              onToken={setTurnstileToken}
+              onError={setTurnstileError}
+            />
+          )}
+          <div className="flex flex-wrap justify-end gap-2">
           {auth.authenticatedWallet && (
             <button
               type="button"
@@ -726,7 +761,7 @@ function WalletAuthBoundary({ auth }: { auth: OperationsWalletAuthState }) {
           {!authenticated && (
             <button
               type="button"
-              onClick={() => void auth.signIn()}
+              onClick={() => void handleSignIn()}
               disabled={!canSignIn}
               className="inline-flex items-center gap-2 rounded border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-[10px] font-black text-emerald-200 hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -736,6 +771,7 @@ function WalletAuthBoundary({ auth }: { auth: OperationsWalletAuthState }) {
               {auth.status === 'signing-in' ? '等待钱包签名…' : '签名认证钱包'}
             </button>
           )}
+          </div>
         </div>
       </div>
     </section>

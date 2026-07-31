@@ -9,6 +9,7 @@ const PUBLIC_KEY = 'sb_publishable_public_browser_key_example_123456';
 const PROJECT_REF = 'abcdefghijklmnopqrst';
 const PROJECT_URL = `https://${PROJECT_REF}.supabase.co`;
 const WEB3_URL = 'https://staging.alpha.example/operations';
+const TURNSTILE_SITE_KEY = '0x4AAAAAAAtest_public_site_key';
 
 test('operations backend is fail-closed when public configuration is missing', () => {
   const config = resolveOperationsBackendConfig(
@@ -17,6 +18,7 @@ test('operations backend is fail-closed when public configuration is missing', (
     'wallet-staging',
     PROJECT_REF,
     WEB3_URL,
+    TURNSTILE_SITE_KEY,
   );
 
   assert.equal(config.configured, false);
@@ -43,6 +45,7 @@ test('wallet staging intake requires exact mode and project binding', () => {
     'wallet-staging',
     PROJECT_REF,
     WEB3_URL,
+    TURNSTILE_SITE_KEY,
   );
   const typo = resolveOperationsBackendConfig(
     PROJECT_URL,
@@ -50,6 +53,7 @@ test('wallet staging intake requires exact mode and project binding', () => {
     'Wallet-Staging',
     PROJECT_REF,
     WEB3_URL,
+    TURNSTILE_SITE_KEY,
   );
   const mismatchedProject = resolveOperationsBackendConfig(
     PROJECT_URL,
@@ -57,6 +61,7 @@ test('wallet staging intake requires exact mode and project binding', () => {
     'wallet-staging',
     'differentprojectref1',
     WEB3_URL,
+    TURNSTILE_SITE_KEY,
   );
   const oldAnonymousMode = resolveOperationsBackendConfig(
     PROJECT_URL,
@@ -64,6 +69,7 @@ test('wallet staging intake requires exact mode and project binding', () => {
     'anonymous',
     PROJECT_REF,
     WEB3_URL,
+    TURNSTILE_SITE_KEY,
   );
 
   assert.equal(enabled.intakeEnabled, true);
@@ -87,6 +93,7 @@ test('wallet staging intake requires an exact HTTPS Web3 page binding', () => {
       'wallet-staging',
       PROJECT_REF,
       web3Url,
+      TURNSTILE_SITE_KEY,
     );
     assert.equal(config.publicReadEnabled, true);
     assert.equal(config.intakeEnabled, false);
@@ -98,8 +105,41 @@ test('wallet staging intake requires an exact HTTPS Web3 page binding', () => {
     'wallet-staging',
     PROJECT_REF,
     WEB3_URL,
+    TURNSTILE_SITE_KEY,
   );
   assert.equal(enabled.web3Url, WEB3_URL);
+  assert.equal(enabled.intakeEnabled, true);
+});
+
+test('wallet staging intake requires a browser-safe Turnstile site key', () => {
+  for (const siteKey of [
+    '',
+    'short',
+    'contains whitespace in key',
+    '0x4AAAAAAA/invalid',
+  ]) {
+    const config = resolveOperationsBackendConfig(
+      PROJECT_URL,
+      PUBLIC_KEY,
+      'wallet-staging',
+      PROJECT_REF,
+      WEB3_URL,
+      siteKey,
+    );
+    assert.equal(config.publicReadEnabled, true);
+    assert.equal(config.intakeEnabled, false);
+    assert.equal(config.turnstileSiteKey, null);
+  }
+
+  const enabled = resolveOperationsBackendConfig(
+    PROJECT_URL,
+    PUBLIC_KEY,
+    'wallet-staging',
+    PROJECT_REF,
+    WEB3_URL,
+    TURNSTILE_SITE_KEY,
+  );
+  assert.equal(enabled.turnstileSiteKey, TURNSTILE_SITE_KEY);
   assert.equal(enabled.intakeEnabled, true);
 });
 
@@ -126,6 +166,7 @@ test('browser configuration rejects secret and service-role keys', () => {
     'wallet-staging',
     PROJECT_REF,
     WEB3_URL,
+    TURNSTILE_SITE_KEY,
   );
   const serviceRoleJwt = [
     base64Url({ alg: 'HS256', typ: 'JWT' }),
@@ -138,6 +179,7 @@ test('browser configuration rejects secret and service-role keys', () => {
     'wallet-staging',
     PROJECT_REF,
     WEB3_URL,
+    TURNSTILE_SITE_KEY,
   );
 
   assert.equal(secret.configured, false);
@@ -158,6 +200,7 @@ test('backend URL must be HTTPS and contain no credentials', () => {
       'wallet-staging',
       PROJECT_REF,
       WEB3_URL,
+      TURNSTILE_SITE_KEY,
     );
     assert.equal(config.configured, false);
   }
