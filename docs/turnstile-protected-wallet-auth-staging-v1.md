@@ -1,6 +1,6 @@
 # Alpha Protocol Turnstile-Protected Wallet Auth Staging V1
 
-Status: local implementation complete; remote security controls not activated
+Status: remote challenge and Web3 authentication reached Supabase; intake locked
 Baseline commit: `f125230873d97e05b5cd432ea40a194ee8832f15`
 Phase: `2E-6B-4J`
 Date: `2026-07-31`
@@ -172,21 +172,32 @@ Already complete:
 - Cloudflare Pages deployment:
   `https://alpha-protocol-frontend.pages.dev/`;
 - public database reads confirmed from the deployment;
-- exact Auth page configuration and conservative Web3 Auth rate limit
-  prepared.
+- exact Auth page configuration and conservative Web3 Auth rate limit;
+- one Cloudflare Turnstile Managed widget bound to the Pages hostname;
+- the public Turnstile site key in Cloudflare Pages;
+- the Turnstile secret in Supabase CAPTCHA configuration only;
+- Supabase CAPTCHA and the Solana Web3 Wallet provider enabled;
+- frontend `wallet-staging` mode enabled;
+- a real Turnstile challenge and Phantom message-signature flow reached
+  Supabase Auth;
+- the resulting Auth identity was read back as matching
+  `provider_id = identity_data.sub = web3:solana:<connected-wallet>`.
 
 Still closed:
 
-- frontend mode remains `disabled`;
 - database operations intake gate remains `disabled`;
 - Supabase Anonymous Sign-Ins remain disabled;
-- Supabase Web3 Wallet provider is disabled;
-- Supabase CAPTCHA is disabled;
-- no Turnstile widget exists yet;
-- no Turnstile public site key is configured in Pages;
-- no Turnstile secret is configured in Supabase;
-- no browser wallet-authentication smoke test has run;
+- compatibility migration `202607310001` is not applied remotely;
+- the deployed client still contains the pre-fix identity parser;
 - no public intake mutation has run.
+
+The first browser authentication was intentionally conducted while the
+database gate was closed. It revealed a compatibility defect: the client and
+database expected separate `identity_data.chain/address` values, while the
+real Supabase identity uses the canonical `provider_id` and
+`identity_data.sub` subject. The old client therefore failed closed after the
+valid signature. Phase `2E-6B-4K` corrects that parser without opening intake.
+See `docs/supabase-web3-solana-identity-compatibility-v1.md`.
 
 ## 8. Reviewed remote activation order
 

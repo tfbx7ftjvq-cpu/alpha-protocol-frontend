@@ -8,6 +8,7 @@ export const OPERATIONS_WALLET_SIGN_IN_STATEMENT = [
 ].join(' ');
 
 export const TURNSTILE_TOKEN_MAX_LENGTH = 2048;
+export const SUPABASE_SOLANA_WEB3_SUB_PREFIX = 'web3:solana:';
 const TURNSTILE_TOKEN_MIN_LENGTH = 20;
 
 type AuthIdentity = NonNullable<User['identities']>[number];
@@ -44,21 +45,42 @@ export function getVerifiedSolanaWallet(user: OperationsAuthUser | null): string
     return null;
   }
 
-  const addresses = new Set<string>();
-
-  for (const identity of user.identities) {
-    if (identity.provider !== 'web3' || !isRecord(identity.identity_data)) {
-      continue;
-    }
-
-    const chain = identity.identity_data.chain;
-    const address = identity.identity_data.address;
-    if (chain === 'solana' && typeof address === 'string' && isSolanaPublicKey(address)) {
-      addresses.add(address);
-    }
+  const web3Identities = user.identities.filter((identity) => identity.provider === 'web3');
+  if (web3Identities.length !== 1) {
+    return null;
   }
 
-  return addresses.size === 1 ? [...addresses][0] : null;
+  const identityData = web3Identities[0].identity_data;
+  if (!isRecord(identityData)) {
+    return null;
+  }
+
+  const address = parseSupabaseSolanaWeb3Subject(identityData.sub);
+  if (!address) {
+    return null;
+  }
+
+  if (
+    hasConflictingIdentityValue(identityData, 'chain', 'solana')
+    || hasConflictingIdentityValue(identityData, 'address', address)
+    || hasConflictingIdentityValue(identityData, 'wallet_address', address)
+  ) {
+    return null;
+  }
+
+  return address;
+}
+
+export function parseSupabaseSolanaWeb3Subject(value: unknown): string | null {
+  if (
+    typeof value !== 'string'
+    || !value.startsWith(SUPABASE_SOLANA_WEB3_SUB_PREFIX)
+  ) {
+    return null;
+  }
+
+  const address = value.slice(SUPABASE_SOLANA_WEB3_SUB_PREFIX.length);
+  return isSolanaPublicKey(address) ? address : null;
 }
 
 export function assertWalletSessionMatch(
@@ -83,4 +105,13 @@ export function assertWalletSessionMatch(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function hasConflictingIdentityValue(
+  identityData: Record<string, unknown>,
+  key: string,
+  expected: string,
+): boolean {
+  const value = identityData[key];
+  return value !== undefined && value !== null && value !== expected;
 }

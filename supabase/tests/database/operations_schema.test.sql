@@ -206,6 +206,28 @@ select ok(
 
 select ok(
   (
+    select
+      pg_get_functiondef(procedure.oid) ilike '%identity.provider_id%'
+      and pg_get_functiondef(procedure.oid)
+        ilike '%identity.identity_data ->> ''sub''%'
+      and pg_get_functiondef(procedure.oid)
+        ilike '%provider_identifier is distinct from identity_subject%'
+      and pg_get_functiondef(procedure.oid) ilike '%web3:solana:%'
+      and pg_get_functiondef(procedure.oid)
+        ilike '%leading_zero_bytes + non_zero_bytes <> 32%'
+      and pg_get_functiondef(procedure.oid)
+        not ilike '%identity_data ->> ''chain''%'
+    from pg_catalog.pg_proc procedure
+    join pg_catalog.pg_namespace namespace
+      on namespace.oid = procedure.pronamespace
+    where namespace.nspname = 'public'
+      and procedure.proname = 'current_verified_solana_wallet'
+  ),
+  'wallet resolver uses the observed provider_id and identity_data.sub contract'
+);
+
+select ok(
+  (
     select count(*) = 4
     from pg_catalog.pg_trigger trigger
     join pg_catalog.pg_class relation on relation.oid = trigger.tgrelid

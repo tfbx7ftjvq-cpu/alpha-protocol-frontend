@@ -19,15 +19,21 @@ const walletIntakeMigrationUrl = new URL(
   '../../supabase/migrations/202607300001_wallet_authenticated_operations_intake.sql',
   import.meta.url,
 );
+const identityCompatibilityMigrationUrl = new URL(
+  '../../supabase/migrations/202607310001_web3_solana_identity_subject_compatibility.sql',
+  import.meta.url,
+);
 const foundationSql = readFileSync(foundationMigrationUrl, 'utf8');
 const hardeningSql = readFileSync(hardeningMigrationUrl, 'utf8');
 const cleanupPrivilegesSql = readFileSync(cleanupPrivilegesMigrationUrl, 'utf8');
 const walletIntakeSql = readFileSync(walletIntakeMigrationUrl, 'utf8');
+const identityCompatibilitySql = readFileSync(identityCompatibilityMigrationUrl, 'utf8');
 const sql = [
   foundationSql,
   hardeningSql,
   cleanupPrivilegesSql,
   walletIntakeSql,
+  identityCompatibilitySql,
 ].join('\n');
 
 const expectedTables = [
@@ -222,10 +228,6 @@ test('wallet intake binds all owner inserts to a verified Solana Web3 identity',
     walletIntakeSql,
     /identity\.provider = 'web3'/,
   );
-  assert.match(
-    walletIntakeSql,
-    /identity\.identity_data ->> 'chain' = 'solana'/,
-  );
 
   for (const policyName of [
     'task_submissions_owner_insert',
@@ -245,6 +247,37 @@ test('wallet intake binds all owner inserts to a verified Solana Web3 identity',
       `${policyName} must respect the database-side intake gate`,
     );
   }
+});
+
+test('wallet identity compatibility matches the observed Supabase provider subject', () => {
+  assert.match(
+    identityCompatibilitySql,
+    /min\(identity\.provider_id\)/,
+  );
+  assert.match(
+    identityCompatibilitySql,
+    /min\(identity\.identity_data ->> 'sub'\)/,
+  );
+  assert.match(
+    identityCompatibilitySql,
+    /provider_identifier is distinct from identity_subject/,
+  );
+  assert.match(
+    identityCompatibilitySql,
+    /identity_prefix constant text := 'web3:solana:';/,
+  );
+  assert.match(
+    identityCompatibilitySql,
+    /wallet_address !~ '\^\[1-9A-HJ-NP-Za-km-z\]\+\$'/,
+  );
+  assert.match(
+    identityCompatibilitySql,
+    /leading_zero_bytes \+ non_zero_bytes <> 32/,
+  );
+  assert.doesNotMatch(
+    identityCompatibilitySql,
+    /update public\.operations_intake_control/,
+  );
 });
 
 test('wallet intake adds database-side rate limits to every direct intake table', () => {
@@ -384,6 +417,103 @@ test('runtime requires an auditable server-gate activation and hides its control
   }
 });
 
+test('runtime resolves only one matching observed Supabase Solana Web3 subject', async () => {
+  const database = await createOperationsDatabase();
+  const validUserId = '77777777-7777-4777-8777-777777777700';
+  const mismatchUserId = '77777777-7777-4777-8777-777777777701';
+  const wrongChainUserId = '77777777-7777-4777-8777-777777777702';
+  const malformedUserId = '77777777-7777-4777-8777-777777777703';
+  const legacyUserId = '77777777-7777-4777-8777-777777777704';
+  const ambiguousUserId = '77777777-7777-4777-8777-777777777705';
+  const verifiedWallet = '11111111111111111111111111111111';
+  const otherWallet = 'HrLBQxUD3XHkB3KABjHXTiBHuAe6jVP2UPqiwmpmH8EY';
+
+  try {
+    await database.exec(`
+      insert into auth.users (id) values
+        ('${validUserId}'),
+        ('${mismatchUserId}'),
+        ('${wrongChainUserId}'),
+        ('${malformedUserId}'),
+        ('${legacyUserId}'),
+        ('${ambiguousUserId}');
+
+      insert into auth.identities (
+        id,
+        user_id,
+        provider,
+        provider_id,
+        identity_data
+      ) values
+        (
+          'identity-valid',
+          '${validUserId}',
+          'web3',
+          'web3:solana:${verifiedWallet}',
+          '{"sub":"web3:solana:${verifiedWallet}"}'
+        ),
+        (
+          'identity-mismatch',
+          '${mismatchUserId}',
+          'web3',
+          'web3:solana:${verifiedWallet}',
+          '{"sub":"web3:solana:${otherWallet}"}'
+        ),
+        (
+          'identity-wrong-chain',
+          '${wrongChainUserId}',
+          'web3',
+          'web3:ethereum:${verifiedWallet}',
+          '{"sub":"web3:ethereum:${verifiedWallet}"}'
+        ),
+        (
+          'identity-malformed',
+          '${malformedUserId}',
+          'web3',
+          'web3:solana:1111111111111111111111111111111',
+          '{"sub":"web3:solana:1111111111111111111111111111111"}'
+        ),
+        (
+          'identity-legacy',
+          '${legacyUserId}',
+          'web3',
+          '${verifiedWallet}',
+          '{"chain":"solana","address":"${verifiedWallet}"}'
+        ),
+        (
+          'identity-ambiguous-a',
+          '${ambiguousUserId}',
+          'web3',
+          'web3:solana:${verifiedWallet}',
+          '{"sub":"web3:solana:${verifiedWallet}"}'
+        ),
+        (
+          'identity-ambiguous-b',
+          '${ambiguousUserId}',
+          'web3',
+          'web3:solana:${otherWallet}',
+          '{"sub":"web3:solana:${otherWallet}"}'
+        );
+    `);
+
+    assert.equal(
+      await resolveCurrentWallet(database, validUserId),
+      verifiedWallet,
+    );
+    for (const userId of [
+      mismatchUserId,
+      wrongChainUserId,
+      malformedUserId,
+      legacyUserId,
+      ambiguousUserId,
+    ]) {
+      assert.equal(await resolveCurrentWallet(database, userId), null);
+    }
+  } finally {
+    await database.close();
+  }
+});
+
 test('runtime keeps wallet intake closed after the migration is applied', async () => {
   const database = await createOperationsDatabase();
   const walletUserId = '66666666-6666-4666-8666-666666666666';
@@ -392,12 +522,13 @@ test('runtime keeps wallet intake closed after the migration is applied', async 
   try {
     await database.exec(`
       insert into auth.users (id) values ('${walletUserId}');
-      insert into auth.identities (id, user_id, provider, identity_data)
+      insert into auth.identities (id, user_id, provider, provider_id, identity_data)
       values (
-        'web3:solana:${verifiedWallet}',
+        'identity-disabled-gate',
         '${walletUserId}',
         'web3',
-        '{"sub":"web3:solana:${verifiedWallet}","chain":"solana","address":"${verifiedWallet}"}'
+        'web3:solana:${verifiedWallet}',
+        '{"sub":"web3:solana:${verifiedWallet}"}'
       );
       select set_config('request.jwt.claim.sub', '${walletUserId}', false);
       select set_config(
@@ -444,12 +575,13 @@ test('runtime accepts the matching Web3 wallet and rejects email or switched-wal
         ('${walletUserId}'),
         ('${emailUserId}');
 
-      insert into auth.identities (id, user_id, provider, identity_data)
+      insert into auth.identities (id, user_id, provider, provider_id, identity_data)
       values (
-        'web3:solana:${verifiedWallet}',
+        'identity-matching-wallet',
         '${walletUserId}',
         'web3',
-        '{"sub":"web3:solana:${verifiedWallet}","chain":"solana","address":"${verifiedWallet}"}'
+        'web3:solana:${verifiedWallet}',
+        '{"sub":"web3:solana:${verifiedWallet}"}'
       );
 
       update public.operations_intake_control
@@ -564,12 +696,13 @@ test('runtime database throttle rejects the seventh hourly risk report', async (
   try {
     await database.exec(`
       insert into auth.users (id) values ('${walletUserId}');
-      insert into auth.identities (id, user_id, provider, identity_data)
+      insert into auth.identities (id, user_id, provider, provider_id, identity_data)
       values (
-        'web3:solana:${verifiedWallet}',
+        'identity-rate-limit-wallet',
         '${walletUserId}',
         'web3',
-        '{"sub":"web3:solana:${verifiedWallet}","chain":"solana","address":"${verifiedWallet}"}'
+        'web3:solana:${verifiedWallet}',
+        '{"sub":"web3:solana:${verifiedWallet}"}'
       );
       update public.operations_intake_control
       set
@@ -741,6 +874,7 @@ async function createOperationsDatabase(): Promise<PGlite> {
       id text primary key,
       user_id uuid not null references auth.users(id),
       provider text not null,
+      provider_id text not null,
       identity_data jsonb not null
     );
 
@@ -776,7 +910,29 @@ async function createOperationsDatabase(): Promise<PGlite> {
   await database.exec(hardeningSql);
   await database.exec(cleanupPrivilegesSql);
   await database.exec(walletIntakeSql);
+  await database.exec(identityCompatibilitySql);
   return database;
+}
+
+async function resolveCurrentWallet(
+  database: PGlite,
+  userId: string,
+): Promise<string | null> {
+  await database.exec(`
+    reset role;
+    select set_config('request.jwt.claim.sub', '${userId}', false);
+    select set_config(
+      'request.jwt.claims',
+      '{"sub":"${userId}","role":"authenticated"}',
+      false
+    );
+    set role authenticated;
+  `);
+  const result = await database.query<{ wallet_address: string | null }>(`
+    select public.current_verified_solana_wallet() as wallet_address;
+  `);
+  await database.exec('reset role;');
+  return result.rows[0]?.wallet_address ?? null;
 }
 
 function quoteSql(value: string): string {

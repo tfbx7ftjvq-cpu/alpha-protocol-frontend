@@ -5,6 +5,8 @@ import {
   buildOperationsWeb3AuthOptions,
   getVerifiedSolanaWallet,
   normalizeTurnstileToken,
+  parseSupabaseSolanaWeb3Subject,
+  SUPABASE_SOLANA_WEB3_SUB_PREFIX,
   TURNSTILE_TOKEN_MAX_LENGTH,
 } from '../src/features/operations/auth.ts';
 
@@ -18,8 +20,6 @@ test('a unique Supabase Web3 Solana identity resolves to its verified address', 
         provider: 'web3',
         identity_data: {
           sub: `web3:solana:${WALLET}`,
-          chain: 'solana',
-          address: WALLET,
         },
       }],
     }),
@@ -27,37 +27,80 @@ test('a unique Supabase Web3 Solana identity resolves to its verified address', 
   );
 });
 
-test('email, malformed, non-Solana, and ambiguous identities fail closed', () => {
+test('Supabase Solana Web3 subjects require the exact prefix and a 32-byte Base58 key', () => {
+  assert.equal(
+    parseSupabaseSolanaWeb3Subject(`${SUPABASE_SOLANA_WEB3_SUB_PREFIX}${WALLET}`),
+    WALLET,
+  );
+
+  for (const subject of [
+    null,
+    WALLET,
+    `web3:ethereum:${WALLET}`,
+    `Web3:solana:${WALLET}`,
+    `web3:solana:${WALLET} `,
+    `web3:solana:${WALLET}:extra`,
+    'web3:solana:not-a-solana-key',
+  ]) {
+    assert.equal(parseSupabaseSolanaWeb3Subject(subject), null);
+  }
+});
+
+test('email, legacy, contradictory, malformed, and ambiguous identities fail closed', () => {
   for (const user of [
     null,
     { identities: null },
     {
       identities: [{
         provider: 'email',
+        identity_data: { sub: `web3:solana:${WALLET}` },
+      }],
+    },
+    {
+      identities: [{
+        provider: 'web3',
         identity_data: { chain: 'solana', address: WALLET },
       }],
     },
     {
       identities: [{
         provider: 'web3',
-        identity_data: { chain: 'ethereum', address: WALLET },
+        identity_data: { sub: `web3:ethereum:${WALLET}` },
       }],
     },
     {
       identities: [{
         provider: 'web3',
-        identity_data: { chain: 'solana', address: 'not-a-solana-key' },
+        identity_data: { sub: 'web3:solana:not-a-solana-key' },
+      }],
+    },
+    {
+      identities: [{
+        provider: 'web3',
+        identity_data: {
+          sub: `web3:solana:${WALLET}`,
+          chain: 'ethereum',
+        },
+      }],
+    },
+    {
+      identities: [{
+        provider: 'web3',
+        identity_data: {
+          sub: `web3:solana:${WALLET}`,
+          address: OTHER_WALLET,
+        },
       }],
     },
     {
       identities: [
         {
           provider: 'web3',
-          identity_data: { chain: 'solana', address: WALLET },
+          identity_data: { sub: `web3:solana:${WALLET}` },
         },
         {
           provider: 'web3',
-          identity_data: { chain: 'solana', address: OTHER_WALLET },
+          identity_data: { sub: `web3:solana:${OTHER_WALLET}` },
         },
       ],
     },
@@ -70,7 +113,7 @@ test('wallet session matching rejects disconnected and switched wallets', () => 
   const user = {
     identities: [{
       provider: 'web3',
-      identity_data: { chain: 'solana', address: WALLET },
+      identity_data: { sub: `web3:solana:${WALLET}` },
     }],
   };
 

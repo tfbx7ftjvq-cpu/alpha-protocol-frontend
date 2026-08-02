@@ -12,9 +12,13 @@ has not yet been applied remotely. See
 
 Current-state note (`2026-07-31`): migration `202607300001` was subsequently
 applied and verified on the same dedicated Staging project. The Cloudflare
-Pages frontend is live in public-read-only mode. Phase `2E-6B-4J` adds the
-Turnstile client path, but CAPTCHA, Web3 provider, database intake gate, and
-frontend wallet-staging mode remain disabled.
+Pages frontend is live. Turnstile, Supabase CAPTCHA, the Solana Web3 provider,
+and frontend `wallet-staging` mode were enabled while the database intake gate
+remained disabled. A real Phantom authentication reached Supabase and exposed
+the canonical identity shape as `web3:solana:<address>` in `provider_id` and
+`identity_data.sub`. Phase `2E-6B-4K` corrects the fail-closed client and
+database parsers for that observed format. Migration `202607310001` is not yet
+applied remotely.
 
 ## 1. Purpose
 

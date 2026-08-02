@@ -11,6 +11,13 @@ wallet-auth migration is now applied to the dedicated Supabase Staging project
 and the frontend is deployed read-only on Cloudflare Pages. Intake remains
 disabled. See `docs/turnstile-protected-wallet-auth-staging-v1.md`.
 
+Compatibility note (`2026-07-31`): a live Phantom sign-in showed that Supabase
+stores the canonical Web3 identity as `web3:solana:<address>` in
+`provider_id` and `identity_data.sub`, without separate `chain` or `address`
+properties. Phase `2E-6B-4K` updates both parsers while keeping the database
+intake gate disabled. See
+`docs/supabase-web3-solana-identity-compatibility-v1.md`.
+
 ## 1. Purpose
 
 This phase replaces the superseded anonymous operations intake with a
@@ -31,8 +38,8 @@ An intake mutation is accepted only when all of the following agree:
 
 1. the user connects a Solana wallet that supports message signing;
 2. Supabase Web3 Auth verifies the signed Solana authentication message;
-3. the returned Auth user has exactly one `web3` identity whose chain is
-   `solana`;
+3. the returned Auth user has exactly one `web3` identity whose canonical
+   subject has the exact form `web3:solana:<32-byte-Base58-address>`;
 4. the frontend identity address equals the currently connected wallet;
 5. the database function `current_verified_solana_wallet()` independently
    resolves the same address from `auth.identities`;
@@ -238,17 +245,16 @@ code-only phase, the following Staging preparation has been completed:
 
 The following gates remain closed:
 
-- `VITE_OPERATIONS_INTAKE_MODE=disabled`;
 - database `operations_intake_control.mode=disabled`;
-- Supabase Web3 Wallet provider is not enabled;
-- Supabase CAPTCHA is not enabled;
-- no Turnstile widget or site key is configured;
-- no public browser wallet-authentication smoke test has run;
+- migration `202607310001` has not been applied remotely;
 - no public wallet-authenticated intake has run.
 
-Phase 4J implements the missing client token path. Remote activation must still
-follow its separately reviewed order. A service-role key or Turnstile secret
-must never be placed in a browser variable.
+Turnstile, Supabase CAPTCHA, the Solana Web3 provider, and frontend
+`wallet-staging` mode are configured. The browser challenge and Phantom
+signature reached Supabase, but the old parser rejected the real identity
+shape and signed the local application session out. Phase 4K fixes that
+compatibility boundary. A service-role key or Turnstile secret must never be
+placed in a browser variable.
 
 ## 10. Official references
 
