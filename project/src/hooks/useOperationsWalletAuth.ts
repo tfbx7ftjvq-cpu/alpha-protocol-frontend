@@ -8,26 +8,23 @@ import {
   normalizeTurnstileToken,
   OPERATIONS_WALLET_SIGN_IN_STATEMENT,
 } from '../features/operations/auth';
+import type {
+  OperationsAuthStatus,
+  OperationsIntakeGateStatus,
+} from '../features/operations/walletAccess';
 import {
   getOperationsSupabase,
   isExactOperationsWeb3Page,
   operationsBackendConfig,
 } from '../lib/operationsSupabase';
 
-export type OperationsAuthStatus =
-  | 'disabled'
-  | 'checking'
-  | 'signed-out'
-  | 'signing-in'
-  | 'authenticated'
-  | 'wallet-mismatch'
-  | 'error';
-
 export interface OperationsWalletAuthState {
   status: OperationsAuthStatus;
+  intakeGateStatus: OperationsIntakeGateStatus;
   connectedWallet: string | null;
   authenticatedWallet: string | null;
   error: string | null;
+  intakeGateError: string | null;
   signIn: (captchaToken: string) => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -41,45 +38,59 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
     operationsBackendConfig.intakeEnabled ? 'checking' : 'disabled',
   );
   const [authenticatedWallet, setAuthenticatedWallet] = useState<string | null>(null);
+  const [intakeGateStatus, setIntakeGateStatus] = useState<OperationsIntakeGateStatus>(
+    operationsBackendConfig.intakeEnabled ? 'checking' : 'unavailable',
+  );
   const [error, setError] = useState<string | null>(
     operationsBackendConfig.intakeEnabled ? null : operationsBackendConfig.reason,
   );
+  const [intakeGateError, setIntakeGateError] = useState<string | null>(null);
 
   const applyUser = useCallback(async (user: User | null) => {
     if (!operationsBackendConfig.intakeEnabled) {
       setStatus('disabled');
+      setIntakeGateStatus('unavailable');
       setAuthenticatedWallet(null);
       setError(operationsBackendConfig.reason);
+      setIntakeGateError(null);
       return;
     }
 
     if (!user) {
       setStatus('signed-out');
+      setIntakeGateStatus('unavailable');
       setAuthenticatedWallet(null);
       setError(null);
+      setIntakeGateError(null);
       return;
     }
 
     const identityWallet = getVerifiedSolanaWallet(user);
     if (!identityWallet) {
       setStatus('error');
+      setIntakeGateStatus('unavailable');
       setAuthenticatedWallet(null);
       setError('当前会话不是唯一的 Solana Web3 钱包身份，请退出后重新认证');
+      setIntakeGateError(null);
       return;
     }
 
     const client = getOperationsSupabase();
     if (!client) {
       setStatus('error');
+      setIntakeGateStatus('error');
       setAuthenticatedWallet(null);
       setError('运营后端尚未配置');
+      setIntakeGateError('无法读取数据库写入总闸门');
       return;
     }
 
     if (!expectedWeb3Url || !isCurrentWeb3Page(expectedWeb3Url)) {
       setStatus('error');
+      setIntakeGateStatus('unavailable');
       setAuthenticatedWallet(null);
       setError('当前页面与允许的钱包认证 URL 不一致，已拒绝签名');
+      setIntakeGateError(null);
       return;
     }
 
@@ -87,11 +98,18 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
       client.rpc('is_operations_wallet_intake_enabled'),
       client.rpc('current_verified_solana_wallet'),
     ]);
-    if (intakeResult.error || intakeResult.data !== true) {
-      setStatus('error');
-      setAuthenticatedWallet(null);
-      setError('数据库端钱包提交总闸门仍为关闭状态');
-      return;
+    if (intakeResult.error) {
+      setIntakeGateStatus('error');
+      setIntakeGateError('无法确认数据库写入总闸门；所有提交继续锁定');
+    } else if (intakeResult.data === true) {
+      setIntakeGateStatus('enabled');
+      setIntakeGateError(null);
+    } else if (intakeResult.data === false) {
+      setIntakeGateStatus('disabled');
+      setIntakeGateError(null);
+    } else {
+      setIntakeGateStatus('error');
+      setIntakeGateError('数据库写入总闸门返回了无效状态；所有提交继续锁定');
     }
 
     if (walletResult.error || walletResult.data !== identityWallet) {
@@ -121,12 +139,16 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
     const client = getOperationsSupabase();
     if (!client) {
       setStatus('error');
+      setIntakeGateStatus('error');
       setError('运营后端尚未配置');
+      setIntakeGateError('无法读取数据库写入总闸门');
       return;
     }
 
     setStatus('checking');
+    setIntakeGateStatus('checking');
     setError(null);
+    setIntakeGateError(null);
 
     const sessionResult = await client.auth.getSession();
     if (sessionResult.error || !sessionResult.data.session) {
@@ -137,8 +159,10 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
     const userResult = await client.auth.getUser();
     if (userResult.error || !userResult.data.user) {
       setStatus('error');
+      setIntakeGateStatus('unavailable');
       setAuthenticatedWallet(null);
       setError('无法验证钱包认证会话，请重新认证');
+      setIntakeGateError(null);
       return;
     }
 
@@ -165,7 +189,9 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
   const signIn = useCallback(async (captchaToken: string) => {
     if (!operationsBackendConfig.intakeEnabled) {
       setStatus('disabled');
+      setIntakeGateStatus('unavailable');
       setError(operationsBackendConfig.reason);
+      setIntakeGateError(null);
       return;
     }
 
@@ -174,35 +200,45 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
       verifiedCaptchaToken = normalizeTurnstileToken(captchaToken);
     } catch (captchaError) {
       setStatus('signed-out');
+      setIntakeGateStatus('unavailable');
       setError(
         captchaError instanceof Error
           ? captchaError.message
           : 'Turnstile 验证无效，请重新验证',
       );
+      setIntakeGateError(null);
       return;
     }
 
     if (!wallet.publicKey || !wallet.signMessage || !connectedWallet) {
       setStatus('signed-out');
+      setIntakeGateStatus('unavailable');
       setError('请先连接支持消息签名的 Solana 钱包');
+      setIntakeGateError(null);
       return;
     }
 
     const client = getOperationsSupabase();
     if (!client) {
       setStatus('error');
+      setIntakeGateStatus('error');
       setError('运营后端尚未配置');
+      setIntakeGateError('无法读取数据库写入总闸门');
       return;
     }
 
     if (!expectedWeb3Url || !isCurrentWeb3Page(expectedWeb3Url)) {
       setStatus('error');
+      setIntakeGateStatus('unavailable');
       setError('当前页面与允许的钱包认证 URL 不一致，已拒绝签名');
+      setIntakeGateError(null);
       return;
     }
 
     setStatus('signing-in');
     setError(null);
+    setIntakeGateStatus('checking');
+    setIntakeGateError(null);
 
     const existingSession = await client.auth.getSession();
     const existingWallet = getVerifiedSolanaWallet(existingSession.data.session?.user ?? null);
@@ -224,8 +260,10 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
 
     if (signInResult.error || !signInResult.data.user) {
       setStatus('error');
+      setIntakeGateStatus('unavailable');
       setAuthenticatedWallet(null);
       setError('钱包认证失败；请重新完成 Turnstile，并检查 Web3 Provider、Redirect URL、域名和钱包签名权限');
+      setIntakeGateError(null);
       return;
     }
 
@@ -235,8 +273,10 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
     } catch (authError) {
       await client.auth.signOut({ scope: 'local' });
       setStatus('error');
+      setIntakeGateStatus('unavailable');
       setAuthenticatedWallet(null);
       setError(authError instanceof Error ? authError.message : '钱包会话校验失败');
+      setIntakeGateError(null);
     }
   }, [
     applyUser,
@@ -252,15 +292,19 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
       await client.auth.signOut({ scope: 'local' });
     }
     setAuthenticatedWallet(null);
+    setIntakeGateStatus('unavailable');
     setStatus(operationsBackendConfig.intakeEnabled ? 'signed-out' : 'disabled');
     setError(null);
+    setIntakeGateError(null);
   }, []);
 
   return {
     status,
+    intakeGateStatus,
     connectedWallet,
     authenticatedWallet,
     error,
+    intakeGateError,
     signIn,
     signOut,
     refresh,

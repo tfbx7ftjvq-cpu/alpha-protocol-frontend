@@ -4,8 +4,17 @@ import { fileURLToPath } from 'node:url';
 
 export const OPERATIONS_STAGING_CONFIRMATION =
   'I_UNDERSTAND_THIS_CREATES_AND_DELETES_STAGING_TEST_DATA';
+export const OPERATIONS_STAGING_GATE_ACTIVATION_CONFIRMATION =
+  'I_UNDERSTAND_THIS_ENABLES_WALLET_AUTHENTICATED_STAGING_WRITES';
+export const OPERATIONS_STAGING_GATE_DISABLE_CONFIRMATION =
+  'I_UNDERSTAND_THIS_DISABLES_WALLET_AUTHENTICATED_STAGING_WRITES';
 
-export type OperationsStagingMode = 'preflight' | 'e2e';
+export type OperationsStagingMode =
+  | 'preflight'
+  | 'e2e'
+  | 'gate-inspect'
+  | 'gate-activate'
+  | 'gate-disable';
 
 export interface OperationsStagingConfig {
   mode: OperationsStagingMode;
@@ -15,6 +24,8 @@ export interface OperationsStagingConfig {
   serviceRoleKey: string | null;
   web3Url: string | null;
   confirmedForWrites: boolean;
+  confirmedForGateChange: boolean;
+  gateChangeReference: string | null;
 }
 
 export interface LoadedStagingEnvironment {
@@ -64,7 +75,8 @@ export function resolveOperationsStagingConfig(
   const missing: string[] = REQUIRED_PREFLIGHT_NAMES.filter(
     (name) => !env[name]?.trim(),
   );
-  if (mode === 'e2e' && !env.OPERATIONS_STAGING_SERVICE_ROLE_KEY?.trim()) {
+  const requiresServiceRole = mode !== 'preflight';
+  if (requiresServiceRole && !env.OPERATIONS_STAGING_SERVICE_ROLE_KEY?.trim()) {
     missing.push('OPERATIONS_STAGING_SERVICE_ROLE_KEY');
   }
   if (mode === 'e2e' && !env.OPERATIONS_STAGING_WEB3_URL?.trim()) {
@@ -119,10 +131,28 @@ export function resolveOperationsStagingConfig(
 
   const confirmedForWrites =
     env.CONFIRM_OPERATIONS_STAGING_E2E === OPERATIONS_STAGING_CONFIRMATION;
+  const isGateMutation = mode === 'gate-activate' || mode === 'gate-disable';
+  const requiredGateConfirmation = mode === 'gate-activate'
+    ? OPERATIONS_STAGING_GATE_ACTIVATION_CONFIRMATION
+    : OPERATIONS_STAGING_GATE_DISABLE_CONFIRMATION;
+  const gateConfirmationName = mode === 'gate-activate'
+    ? 'CONFIRM_OPERATIONS_STAGING_GATE_ACTIVATION'
+    : 'CONFIRM_OPERATIONS_STAGING_GATE_DISABLE';
+  const confirmedForGateChange = isGateMutation
+    && env[gateConfirmationName] === requiredGateConfirmation;
+  const gateChangeReference = isGateMutation
+    ? normalizeGateChangeReference(env.OPERATIONS_STAGING_GATE_CHANGE_REFERENCE)
+    : null;
 
   if (mode === 'e2e' && !confirmedForWrites) {
     throw new OperationsStagingConfigError(
       `执行真实 staging 写入前必须设置 CONFIRM_OPERATIONS_STAGING_E2E=${OPERATIONS_STAGING_CONFIRMATION}`,
+    );
+  }
+
+  if (isGateMutation && !confirmedForGateChange) {
+    throw new OperationsStagingConfigError(
+      `执行数据库总闸门变更前必须设置 ${gateConfirmationName}=${requiredGateConfirmation}`,
     );
   }
 
@@ -134,6 +164,8 @@ export function resolveOperationsStagingConfig(
     serviceRoleKey,
     web3Url,
     confirmedForWrites,
+    confirmedForGateChange,
+    gateChangeReference,
   };
 }
 
@@ -321,6 +353,24 @@ function normalizeWeb3Url(rawUrl: string): string {
   }
 
   return parsed.href;
+}
+
+function normalizeGateChangeReference(rawReference: string | undefined): string {
+  const reference = rawReference?.trim() ?? '';
+  if (
+    reference.length < 10
+    || reference.length > 200
+    || [...reference].some((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint <= 31 || codePoint === 127;
+    })
+  ) {
+    throw new OperationsStagingConfigError(
+      'OPERATIONS_STAGING_GATE_CHANGE_REFERENCE 必须是 10–200 字符且不含控制字符的审计引用',
+    );
+  }
+
+  return reference;
 }
 
 function assertNoBrowserSecretExposure(

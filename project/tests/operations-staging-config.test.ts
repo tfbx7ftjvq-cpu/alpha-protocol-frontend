@@ -5,6 +5,8 @@ import { pathToFileURL } from 'node:url';
 import {
   isMainModule,
   OPERATIONS_STAGING_CONFIRMATION,
+  OPERATIONS_STAGING_GATE_ACTIVATION_CONFIRMATION,
+  OPERATIONS_STAGING_GATE_DISABLE_CONFIRMATION,
   OperationsStagingConfigError,
   resolveOperationsStagingConfig,
   sanitizeStagingError,
@@ -155,4 +157,77 @@ test('staging errors redact service keys and JWT-shaped credentials', () => {
   assert.doesNotMatch(sanitized, /sb_secret_/);
   assert.doesNotMatch(sanitized, /eyJhbGci/);
   assert.match(sanitized, /\[REDACTED\]/);
+});
+
+test('gate inspection requires the isolated service-role credential but no mutation confirmation', () => {
+  assert.throws(
+    () => resolveOperationsStagingConfig(validEnvironment(), 'gate-inspect'),
+    /OPERATIONS_STAGING_SERVICE_ROLE_KEY/,
+  );
+
+  const config = resolveOperationsStagingConfig({
+    ...validEnvironment(),
+    OPERATIONS_STAGING_SERVICE_ROLE_KEY: SERVICE_KEY,
+  }, 'gate-inspect');
+  assert.equal(config.confirmedForGateChange, false);
+  assert.equal(config.gateChangeReference, null);
+});
+
+test('gate activation and emergency disable require distinct exact confirmations', () => {
+  const baseGateEnvironment = {
+    ...validEnvironment(),
+    OPERATIONS_STAGING_SERVICE_ROLE_KEY: SERVICE_KEY,
+    OPERATIONS_STAGING_GATE_CHANGE_REFERENCE: 'phase-4l reviewed staging change',
+  };
+
+  assert.throws(
+    () => resolveOperationsStagingConfig(baseGateEnvironment, 'gate-activate'),
+    /CONFIRM_OPERATIONS_STAGING_GATE_ACTIVATION=/,
+  );
+  assert.throws(
+    () => resolveOperationsStagingConfig({
+      ...baseGateEnvironment,
+      CONFIRM_OPERATIONS_STAGING_GATE_ACTIVATION:
+        OPERATIONS_STAGING_GATE_DISABLE_CONFIRMATION,
+    }, 'gate-activate'),
+    /CONFIRM_OPERATIONS_STAGING_GATE_ACTIVATION=/,
+  );
+
+  const activation = resolveOperationsStagingConfig({
+    ...baseGateEnvironment,
+    CONFIRM_OPERATIONS_STAGING_GATE_ACTIVATION:
+      OPERATIONS_STAGING_GATE_ACTIVATION_CONFIRMATION,
+  }, 'gate-activate');
+  assert.equal(activation.confirmedForGateChange, true);
+  assert.equal(
+    activation.gateChangeReference,
+    'phase-4l reviewed staging change',
+  );
+
+  const disable = resolveOperationsStagingConfig({
+    ...baseGateEnvironment,
+    CONFIRM_OPERATIONS_STAGING_GATE_DISABLE:
+      OPERATIONS_STAGING_GATE_DISABLE_CONFIRMATION,
+  }, 'gate-disable');
+  assert.equal(disable.confirmedForGateChange, true);
+});
+
+test('gate changes reject missing, short, oversized, and control-character audit references', () => {
+  for (const reference of [
+    undefined,
+    'too-short',
+    'x'.repeat(201),
+    'reviewed change\nsecond line',
+  ]) {
+    assert.throws(
+      () => resolveOperationsStagingConfig({
+        ...validEnvironment(),
+        OPERATIONS_STAGING_SERVICE_ROLE_KEY: SERVICE_KEY,
+        OPERATIONS_STAGING_GATE_CHANGE_REFERENCE: reference,
+        CONFIRM_OPERATIONS_STAGING_GATE_ACTIVATION:
+          OPERATIONS_STAGING_GATE_ACTIVATION_CONFIRMATION,
+      }, 'gate-activate'),
+      /GATE_CHANGE_REFERENCE/,
+    );
+  }
 });

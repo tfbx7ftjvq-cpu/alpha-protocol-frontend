@@ -1,6 +1,6 @@
 # Alpha Protocol Supabase Solana Web3 Identity Compatibility V1
 
-Status: remote compatibility fix active; local lint cleanup verified and pending remote application
+Status: remote compatibility fix and lint cleanup active; intake locked
 Baseline commit: `da21920783d5e56ea0da14f44511009b5bc1db09`
 Phase: `2E-6B-4K`
 Date: `2026-08-02`
@@ -135,24 +135,16 @@ At the current checkpoint:
 - migration `202607310001` is applied remotely and migration parity was
   confirmed;
 - the post-migration read-only preflight passed;
-- remote schema lint reported only the redundant loop-variable declaration;
-- follow-up migration `202608020001` is locally verified but not applied
-  remotely;
+- follow-up migration `202608020001` is applied remotely, migration parity is
+  confirmed, and linked schema lint reports no issues;
 - no operations intake row has been submitted;
 - no Solana transaction or treasury action has occurred.
 
-The reviewed order is:
-
-1. commit and push the lint-cleanup migration;
-2. inspect migration parity and run a dry-run against the exact Staging ref;
-3. separately confirm and apply migration `202608020001`;
-4. require remote schema lint to return no issues;
-5. rerun the read-only preflight;
-6. repeat Turnstile and Phantom authentication while the database gate stays
-   disabled;
-7. verify the Auth identity and resolver result;
-8. only after a separate explicit decision, consider activating the database
-   intake gate and running a controlled submission E2E.
+The compatibility and lint-cleanup sequence is complete. The next reviewed
+sequence is documented by Phase `2E-6B-4L`: keep the database gate disabled,
+apply the audit-only gate-control migration only after separate confirmation,
+inspect its default-closed state, and require another explicit confirmation
+before any controlled Staging activation or submission E2E.
 
 Do not activate the database gate as part of applying either compatibility
 migration.

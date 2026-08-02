@@ -20,9 +20,11 @@ intake gate disabled. See
 
 Current-state note (`2026-08-02`): the Phase 4K client is deployed, migration
 `202607310001` is applied to Staging, migration parity and the read-only
-preflight passed, and the database intake gate remains disabled. A
-non-functional loop-variable lint warning is addressed by locally verified
-follow-up migration `202608020001`, which is not yet applied remotely.
+preflight passed, migration `202608020001` is remotely applied, linked schema
+lint is clean, and the database intake gate remains disabled. Phase
+`2E-6B-4L` locally separates a valid wallet session from write-gate state and
+adds an audited gate-transition migration without applying it remotely. See
+`docs/wallet-session-intake-gate-separation-and-controlled-staging-activation-v1.md`.
 
 ## 1. Purpose
 
@@ -240,10 +242,10 @@ limitation rather than a reason to apply an unreviewed forced upgrade.
 Original Phase 4I implementation did not perform remote activation. Since that
 code-only phase, the following Staging preparation has been completed:
 
-- migrations through `202607310001` are applied to the dedicated Supabase
+- migrations through `202608020001` are applied to the dedicated Supabase
   Staging project;
 - migration parity and the read-only preflight passed;
-- remote lint reported one redundant loop-variable declaration warning;
+- linked schema lint reports no issues;
 - the exact Cloudflare Pages URL is configured for Auth;
 - a conservative Web3 Auth rate limit is configured;
 - the frontend is deployed at
@@ -253,14 +255,18 @@ code-only phase, the following Staging preparation has been completed:
 The following gates remain closed:
 
 - database `operations_intake_control.mode=disabled`;
-- lint-cleanup migration `202608020001` has not been applied remotely;
+- Phase 4L gate-audit migration `202608020002` has not been applied remotely;
 - no public wallet-authenticated intake has run.
 
 Turnstile, Supabase CAPTCHA, the Solana Web3 provider, and frontend
 `wallet-staging` mode are configured. The browser challenge and Phantom
 signature reached Supabase, and Phase 4K now parses the observed canonical
-identity subject. The database gate stays closed until the lint cleanup and
-final remote authentication checks complete. A service-role key or Turnstile
+identity subject. That historical sequence kept the database gate closed
+through lint cleanup and the final authentication checks. Those checks are now
+complete; Phase 4L keeps the gate closed under a new, separately confirmed
+audit-migration and gate-activation process. It also removes the coupling
+between session validity and gate state: a verified wallet may retain its
+off-chain session while writes remain locked. A service-role key or Turnstile
 secret must never be placed in a browser variable.
 
 ## 10. Official references

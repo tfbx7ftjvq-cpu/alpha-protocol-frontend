@@ -24,10 +24,11 @@ supersedes it.
 Current-state note (`2026-08-02`): the Phase 4K client is deployed from commit
 `da21920783d5e56ea0da14f44511009b5bc1db09`, and migration `202607310001`
 is applied to the dedicated Staging project. Migration parity and the read-only
-preflight passed. Linked schema lint found one redundant PL/pgSQL loop-variable
-declaration; follow-up migration `202608020001` removes only that declaration
-and remains pending remote application. The database intake gate remains
-disabled.
+preflight passed. Follow-up migration `202608020001` is remotely applied and
+linked schema lint is clean. The database intake gate remains disabled. Phase
+`2E-6B-4L` now implements local-only wallet-session/gate separation and an
+audited gate-control path; its migration `202608020002` is not remotely
+applied.
 
 ## 1. Purpose
 
@@ -422,14 +423,14 @@ Current staging status after final Phase 4H verification:
 Subsequent verified Staging state:
 
 - migrations through
-  `202607310001_web3_solana_identity_subject_compatibility.sql` are applied and
+  `202608020001_web3_solana_wallet_resolver_lint_cleanup.sql` are applied and
   local/remote migration parity is confirmed;
 - the Phase 4K client is deployed from commit
   `da21920783d5e56ea0da14f44511009b5bc1db09`;
-- remote database lint reports one non-functional shadowed/unused loop-variable
-  warning after `202607310001`;
-- follow-up migration `202608020001` is locally verified and pending remote
-  application;
+- remote database lint reports no schema issues;
+- Phase 4L migration
+  `202608020002_operations_wallet_intake_gate_audit.sql` is locally verified,
+  remains unapplied remotely, and does not enable the gate when applied;
 - the read-only preflight still passes;
 - Cloudflare Pages serves the frontend at
   `https://alpha-protocol-frontend.pages.dev/`;

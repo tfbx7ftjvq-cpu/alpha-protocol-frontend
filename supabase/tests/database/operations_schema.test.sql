@@ -13,6 +13,7 @@ set local search_path = public, extensions;
 select no_plan();
 
 select has_table('public'::name, 'operations_intake_control'::name);
+select has_table('public'::name, 'operations_intake_gate_events'::name);
 select has_table('public'::name, 'community_tasks'::name);
 select has_table('public'::name, 'task_submissions'::name);
 select has_table('public'::name, 'risk_reports'::name);
@@ -34,6 +35,7 @@ select is(
     where schemaname = 'public'
       and tablename = any(array[
         'operations_intake_control',
+        'operations_intake_gate_events',
         'community_tasks',
         'task_submissions',
         'risk_reports',
@@ -49,8 +51,8 @@ select is(
         'treasury_execution_receipts'
       ])
   ),
-  14,
-  'all 14 operations tables exist, including the server-side intake control'
+  15,
+  'all 15 operations tables exist, including gate control and audit history'
 );
 
 select is(
@@ -61,6 +63,7 @@ select is(
     where namespace.nspname = 'public'
       and relation.relname = any(array[
         'operations_intake_control',
+        'operations_intake_gate_events',
         'community_tasks',
         'task_submissions',
         'risk_reports',
@@ -77,7 +80,7 @@ select is(
       ])
       and relation.relrowsecurity
   ),
-  14,
+  15,
   'RLS is enabled on every operations table'
 );
 
@@ -88,6 +91,7 @@ select is(
     where schemaname = 'public'
       and tablename = any(array[
         'operations_intake_control',
+        'operations_intake_gate_events',
         'community_tasks',
         'task_submissions',
         'risk_reports',
@@ -117,6 +121,7 @@ select is(
       and namespace.nspname = 'public'
       and relation.relname = any(array[
         'operations_intake_control',
+        'operations_intake_gate_events',
         'community_tasks',
         'task_submissions',
         'risk_reports',
@@ -132,8 +137,8 @@ select is(
         'treasury_execution_receipts'
       ])
   ),
-  34,
-  'the reviewed non-internal trigger total includes four intake throttles and the control touch trigger'
+  35,
+  'the reviewed trigger total includes throttles, control touch, and immutable gate audit history'
 );
 
 select ok(
@@ -158,6 +163,59 @@ select ok(
       'SELECT'
     ),
   'wallet intake is database-disabled by default and its control row is not browser-readable'
+);
+
+select ok(
+  has_function_privilege(
+    'service_role',
+    'public.set_operations_wallet_intake_mode(text,text)',
+    'EXECUTE'
+  )
+    and not has_function_privilege(
+      'authenticated',
+      'public.set_operations_wallet_intake_mode(text,text)',
+      'EXECUTE'
+    )
+    and has_table_privilege(
+      'service_role',
+      'public.operations_intake_control',
+      'SELECT'
+    )
+    and not has_table_privilege(
+      'service_role',
+      'public.operations_intake_control',
+      'UPDATE'
+    )
+    and has_table_privilege(
+      'service_role',
+      'public.operations_intake_gate_events',
+      'SELECT'
+    )
+    and not has_table_privilege(
+      'service_role',
+      'public.operations_intake_gate_events',
+      'INSERT,UPDATE,DELETE'
+    )
+    and not has_table_privilege(
+      'authenticated',
+      'public.operations_intake_gate_events',
+      'SELECT'
+    ),
+  'only service-role tooling can inspect and invoke the audited gate transition RPC'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_catalog.pg_trigger trigger
+    join pg_catalog.pg_class relation on relation.oid = trigger.tgrelid
+    join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+    where not trigger.tgisinternal
+      and namespace.nspname = 'public'
+      and relation.relname = 'operations_intake_gate_events'
+      and trigger.tgname = 'operations_intake_gate_events_immutable'
+  ),
+  'intake gate audit events are immutable after insertion'
 );
 
 select ok(
@@ -253,6 +311,7 @@ select ok(
     where table_schema = 'public'
       and table_name = any(array[
         'task_submissions',
+        'operations_intake_gate_events',
         'risk_reports',
         'risk_evidence',
         'relief_applications',

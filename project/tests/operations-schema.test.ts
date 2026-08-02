@@ -27,6 +27,10 @@ const walletResolverLintCleanupMigrationUrl = new URL(
   '../../supabase/migrations/202608020001_web3_solana_wallet_resolver_lint_cleanup.sql',
   import.meta.url,
 );
+const intakeGateAuditMigrationUrl = new URL(
+  '../../supabase/migrations/202608020002_operations_wallet_intake_gate_audit.sql',
+  import.meta.url,
+);
 const foundationSql = readFileSync(foundationMigrationUrl, 'utf8');
 const hardeningSql = readFileSync(hardeningMigrationUrl, 'utf8');
 const cleanupPrivilegesSql = readFileSync(cleanupPrivilegesMigrationUrl, 'utf8');
@@ -36,6 +40,7 @@ const walletResolverLintCleanupSql = readFileSync(
   walletResolverLintCleanupMigrationUrl,
   'utf8',
 );
+const intakeGateAuditSql = readFileSync(intakeGateAuditMigrationUrl, 'utf8');
 const sql = [
   foundationSql,
   hardeningSql,
@@ -43,10 +48,12 @@ const sql = [
   walletIntakeSql,
   identityCompatibilitySql,
   walletResolverLintCleanupSql,
+  intakeGateAuditSql,
 ].join('\n');
 
 const expectedTables = [
   'operations_intake_control',
+  'operations_intake_gate_events',
   'community_tasks',
   'task_submissions',
   'risk_reports',
@@ -75,6 +82,7 @@ test('every operations table enables row-level security', () => {
 test('private intake tables are never granted to anon', () => {
   for (const table of [
     'operations_intake_control',
+    'operations_intake_gate_events',
     'task_submissions',
     'risk_reports',
     'risk_evidence',
@@ -329,6 +337,31 @@ test('wallet intake adds database-side rate limits to every direct intake table'
   assert.match(walletIntakeSql, /relief_applications' then[\s\S]*interval '24 hours'/);
 });
 
+test('intake gate changes use a service-role-only RPC and append-only audit history', () => {
+  const auditTable = extractCreateTable('operations_intake_gate_events');
+  assert.match(auditTable, /previous_mode text not null/);
+  assert.match(auditTable, /new_mode text not null/);
+  assert.match(auditTable, /change_reference text not null/);
+  assert.match(auditTable, /change_reference !~ '\[\[:cntrl:\]\]'/);
+  assert.match(auditTable, /previous_mode <> new_mode/);
+  assert.match(
+    intakeGateAuditSql,
+    /create trigger operations_intake_gate_events_immutable/,
+  );
+  assert.match(
+    intakeGateAuditSql,
+    /grant execute on function public\.set_operations_wallet_intake_mode\(text, text\) to service_role/,
+  );
+  assert.match(
+    intakeGateAuditSql,
+    /revoke all on table public\.operations_intake_control from service_role/,
+  );
+  assert.doesNotMatch(
+    intakeGateAuditSql,
+    /grant (?:insert|update|delete)[^;]*operations_intake_gate_events/i,
+  );
+});
+
 test('staging E2E cleanup privilege is narrow and excludes browser roles', async () => {
   assert.match(
     cleanupPrivilegesSql,
@@ -409,9 +442,9 @@ test('all migrations create the expected schema, policy, and trigger totals', as
         and relation.relname = any(array[${expectedTables.map(quoteSql).join(', ')}]);
     `);
 
-    assert.equal(tableCount.rows[0]?.count, 14);
+    assert.equal(tableCount.rows[0]?.count, 15);
     assert.equal(policyCount.rows[0]?.count, 37);
-    assert.equal(triggerCount.rows[0]?.count, 34);
+    assert.equal(triggerCount.rows[0]?.count, 35);
   } finally {
     await database.close();
   }
@@ -445,6 +478,134 @@ test('runtime requires an auditable server-gate activation and hides its control
       /permission denied/,
     );
     await database.exec('reset role;');
+  } finally {
+    await database.close();
+  }
+});
+
+test('runtime gate RPC audits activation and emergency disable without direct service-role mutation', async () => {
+  const database = await createOperationsDatabase();
+
+  try {
+    const initial = await database.query<{ mode: string; event_count: number }>(`
+      select
+        control.mode,
+        (select count(*)::integer from public.operations_intake_gate_events) as event_count
+      from public.operations_intake_control control
+      where control.singleton;
+    `);
+    assert.deepEqual(initial.rows, [{ mode: 'disabled', event_count: 0 }]);
+
+    await database.exec('set role service_role;');
+    await assert.rejects(
+      database.exec(`
+        update public.operations_intake_control
+        set mode = 'wallet_staging', activation_reference = 'direct service update';
+      `),
+      /permission denied/,
+    );
+
+    await assert.rejects(
+      database.query(`
+        select * from public.set_operations_wallet_intake_mode(
+          'wallet_staging',
+          E'phase-4l invalid\\ncontrol reference'
+        );
+      `),
+      /without control characters/,
+    );
+
+    const activated = await database.query<{
+      mode: string;
+      activation_reference: string | null;
+      event_id: number;
+    }>(`
+      select mode, activation_reference, event_id
+      from public.set_operations_wallet_intake_mode(
+        'wallet_staging',
+        'phase-4l isolated activation test'
+      );
+    `);
+    assert.equal(activated.rows[0]?.mode, 'wallet_staging');
+    assert.equal(
+      activated.rows[0]?.activation_reference,
+      'phase-4l isolated activation test',
+    );
+    assert.equal(activated.rows[0]?.event_id, 1);
+
+    await assert.rejects(
+      database.query(`
+        select * from public.set_operations_wallet_intake_mode(
+          'wallet_staging',
+          'duplicate activation attempt'
+        );
+      `),
+      /already in requested mode/,
+    );
+
+    const disabled = await database.query<{
+      mode: string;
+      activation_reference: string | null;
+      event_id: number;
+    }>(`
+      select mode, activation_reference, event_id
+      from public.set_operations_wallet_intake_mode(
+        'disabled',
+        'phase-4l emergency disable test'
+      );
+    `);
+    assert.equal(disabled.rows[0]?.mode, 'disabled');
+    assert.equal(disabled.rows[0]?.activation_reference, null);
+    assert.equal(disabled.rows[0]?.event_id, 2);
+
+    const events = await database.query<{
+      previous_mode: string;
+      new_mode: string;
+      change_reference: string;
+    }>(`
+      select previous_mode, new_mode, change_reference
+      from public.operations_intake_gate_events
+      order by event_id;
+    `);
+    assert.deepEqual(events.rows, [
+      {
+        previous_mode: 'disabled',
+        new_mode: 'wallet_staging',
+        change_reference: 'phase-4l isolated activation test',
+      },
+      {
+        previous_mode: 'wallet_staging',
+        new_mode: 'disabled',
+        change_reference: 'phase-4l emergency disable test',
+      },
+    ]);
+
+    await assert.rejects(
+      database.exec(`
+        update public.operations_intake_gate_events
+        set change_reference = 'rewritten audit reference';
+      `),
+      /permission denied/,
+    );
+
+    await database.exec('reset role;');
+    await assert.rejects(
+      database.exec(`
+        delete from public.operations_intake_gate_events where event_id = 1;
+      `),
+      /immutable operations record/,
+    );
+
+    await database.exec('set role authenticated;');
+    await assert.rejects(
+      database.query(`
+        select * from public.set_operations_wallet_intake_mode(
+          'wallet_staging',
+          'unauthorized browser activation'
+        );
+      `),
+      /permission denied/,
+    );
   } finally {
     await database.close();
   }
@@ -945,6 +1106,7 @@ async function createOperationsDatabase(): Promise<PGlite> {
   await database.exec(walletIntakeSql);
   await database.exec(identityCompatibilitySql);
   await database.exec(walletResolverLintCleanupSql);
+  await database.exec(intakeGateAuditSql);
   return database;
 }
 

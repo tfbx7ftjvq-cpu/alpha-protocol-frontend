@@ -28,6 +28,7 @@ import {
   submitRiskReport,
   submitTaskResult,
 } from '../features/operations/repository';
+import { resolveOperationsWalletAccess } from '../features/operations/walletAccess';
 import type { OperationsWalletAuthState } from '../hooks/useOperationsWalletAuth';
 import { useMyOperationsSubmissions } from '../hooks/useMyOperationsSubmissions';
 import { useOperations } from '../hooks/useOperations';
@@ -66,11 +67,16 @@ export default function OperationsDashboard() {
   const [activeTab, setActiveTab] = useState<OperationsTab>('tasks');
   const operations = useOperations();
   const walletAuth = useOperationsWalletAuth();
-  const mySubmissions = useMyOperationsSubmissions(
-    walletAuth.status === 'authenticated' ? walletAuth.authenticatedWallet : null,
+  const walletAccess = resolveOperationsWalletAccess(
+    walletAuth.status,
+    walletAuth.authenticatedWallet,
+    walletAuth.connectedWallet,
+    walletAuth.intakeGateStatus,
   );
-  const intakeReady = walletAuth.status === 'authenticated'
-    && walletAuth.authenticatedWallet === walletAuth.connectedWallet;
+  const mySubmissions = useMyOperationsSubmissions(
+    walletAccess.sessionVerified ? walletAuth.authenticatedWallet : null,
+  );
+  const intakeReady = walletAccess.intakeEnabled;
 
   const counts = useMemo(() => ({
     tasks: operations.overview.tasks.length,
@@ -95,8 +101,12 @@ export default function OperationsDashboard() {
                   tone={operationsBackendConfig.publicReadEnabled ? 'emerald' : 'yellow'}
                 />
                 <StatusBadge
-                  label={intakeReady ? 'WALLET SESSION VERIFIED' : 'INTAKE LOCKED'}
-                  tone={intakeReady ? 'emerald' : 'zinc'}
+                  label={walletAccess.sessionVerified ? 'WALLET SESSION VERIFIED' : 'WALLET SESSION REQUIRED'}
+                  tone={walletAccess.sessionVerified ? 'emerald' : 'zinc'}
+                />
+                <StatusBadge
+                  label={walletAuth.intakeGateStatus === 'enabled' ? 'INTAKE ENABLED' : 'INTAKE LOCKED'}
+                  tone={walletAuth.intakeGateStatus === 'enabled' ? 'yellow' : 'zinc'}
                 />
               </div>
               <h2 className="mt-4 text-2xl font-black text-zinc-100">社区运营、申请与公开决定</h2>
@@ -690,7 +700,13 @@ function WalletAuthBoundary({ auth }: { auth: OperationsWalletAuthState }) {
     && Boolean(auth.connectedWallet)
     && Boolean(turnstileToken)
     && !['checking', 'signing-in'].includes(auth.status);
-  const authenticated = auth.status === 'authenticated';
+  const access = resolveOperationsWalletAccess(
+    auth.status,
+    auth.authenticatedWallet,
+    auth.connectedWallet,
+    auth.intakeGateStatus,
+  );
+  const authenticated = access.sessionVerified;
   const showChallenge = operationsBackendConfig.intakeEnabled
     && !authenticated
     && Boolean(operationsBackendConfig.turnstileSiteKey);
@@ -729,10 +745,19 @@ function WalletAuthBoundary({ auth }: { auth: OperationsWalletAuthState }) {
           <div className="mt-3 grid gap-1 text-[10px] leading-relaxed text-zinc-500">
             <span>当前连接：{auth.connectedWallet ? shorten(auth.connectedWallet) : '未连接钱包'}</span>
             <span>认证会话：{auth.authenticatedWallet ? shorten(auth.authenticatedWallet) : '尚未建立'}</span>
+            <span>数据库写入总闸门：{formatIntakeGateStatus(auth.intakeGateStatus)}</span>
             <span>签名只建立 Supabase 会话，不创建 Solana 交易、不授权代币、不移动资金。</span>
           </div>
+          {authenticated && auth.intakeGateStatus === 'disabled' && (
+            <p className="mt-3 text-[10px] leading-relaxed text-yellow-300">
+              钱包会话已验证；数据库总闸门仍关闭。你可以查看自己的历史提交，但所有新提交继续锁定。
+            </p>
+          )}
           {auth.error && (
             <p className="mt-3 text-[10px] leading-relaxed text-red-300">{auth.error}</p>
+          )}
+          {auth.intakeGateError && (
+            <p className="mt-2 text-[10px] leading-relaxed text-red-300">{auth.intakeGateError}</p>
           )}
           {turnstileError && (
             <p className="mt-2 text-[10px] leading-relaxed text-red-300">{turnstileError}</p>
@@ -748,29 +773,29 @@ function WalletAuthBoundary({ auth }: { auth: OperationsWalletAuthState }) {
             />
           )}
           <div className="flex flex-wrap justify-end gap-2">
-          {auth.authenticatedWallet && (
-            <button
-              type="button"
-              onClick={() => void auth.signOut()}
-              className="inline-flex items-center gap-2 rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-[10px] font-black text-zinc-300 hover:border-zinc-600"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              退出运营会话
-            </button>
-          )}
-          {!authenticated && (
-            <button
-              type="button"
-              onClick={() => void handleSignIn()}
-              disabled={!canSignIn}
-              className="inline-flex items-center gap-2 rounded border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-[10px] font-black text-emerald-200 hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {auth.status === 'checking' || auth.status === 'signing-in'
-                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                : <LogIn className="h-3.5 w-3.5" />}
-              {auth.status === 'signing-in' ? '等待钱包签名…' : '签名认证钱包'}
-            </button>
-          )}
+            {auth.authenticatedWallet && (
+              <button
+                type="button"
+                onClick={() => void auth.signOut()}
+                className="inline-flex items-center gap-2 rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-[10px] font-black text-zinc-300 hover:border-zinc-600"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                退出运营会话
+              </button>
+            )}
+            {!authenticated && (
+              <button
+                type="button"
+                onClick={() => void handleSignIn()}
+                disabled={!canSignIn}
+                className="inline-flex items-center gap-2 rounded border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-[10px] font-black text-emerald-200 hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {auth.status === 'checking' || auth.status === 'signing-in'
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <LogIn className="h-3.5 w-3.5" />}
+                {auth.status === 'signing-in' ? '等待钱包签名…' : '签名认证钱包'}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1226,4 +1251,16 @@ function formatDate(value: string | null): string {
 
 function shorten(value: string): string {
   return value.length <= 16 ? value : `${value.slice(0, 7)}…${value.slice(-7)}`;
+}
+
+function formatIntakeGateStatus(
+  status: OperationsWalletAuthState['intakeGateStatus'],
+): string {
+  return {
+    unavailable: '登录后读取',
+    checking: '读取中',
+    enabled: '已开启',
+    disabled: '已关闭',
+    error: '读取失败（按关闭处理）',
+  }[status];
 }

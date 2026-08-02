@@ -9,6 +9,7 @@ import {
   SUPABASE_SOLANA_WEB3_SUB_PREFIX,
   TURNSTILE_TOKEN_MAX_LENGTH,
 } from '../src/features/operations/auth.ts';
+import { resolveOperationsWalletAccess } from '../src/features/operations/walletAccess.ts';
 
 const WALLET = '11111111111111111111111111111111';
 const OTHER_WALLET = 'HrLBQxUD3XHkB3KABjHXTiBHuAe6jVP2UPqiwmpmH8EY';
@@ -149,4 +150,39 @@ test('Web3 auth options bind the exact page and forward the CAPTCHA token', () =
     buildOperationsWeb3AuthOptions(url, captchaToken),
     { url, captchaToken },
   );
+});
+
+test('wallet session verification is independent from the database intake gate', () => {
+  const locked = resolveOperationsWalletAccess(
+    'authenticated',
+    WALLET,
+    WALLET,
+    'disabled',
+  );
+  assert.deepEqual(locked, {
+    sessionVerified: true,
+    intakeEnabled: false,
+  });
+
+  const enabled = resolveOperationsWalletAccess(
+    'authenticated',
+    WALLET,
+    WALLET,
+    'enabled',
+  );
+  assert.deepEqual(enabled, {
+    sessionVerified: true,
+    intakeEnabled: true,
+  });
+});
+
+test('intake stays locked for gate errors, signed-out sessions, and switched wallets', () => {
+  for (const access of [
+    resolveOperationsWalletAccess('authenticated', WALLET, WALLET, 'error'),
+    resolveOperationsWalletAccess('signed-out', null, WALLET, 'enabled'),
+    resolveOperationsWalletAccess('wallet-mismatch', WALLET, OTHER_WALLET, 'enabled'),
+    resolveOperationsWalletAccess('authenticated', WALLET, OTHER_WALLET, 'enabled'),
+  ]) {
+    assert.equal(access.intakeEnabled, false);
+  }
 });

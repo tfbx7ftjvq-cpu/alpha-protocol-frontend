@@ -13,6 +13,9 @@
     "operations:tooling:typecheck": "tsc --noEmit -p tsconfig.operations.json",
     "operations:staging:preflight": "node --experimental-strip-types scripts/operations-staging/preflight.ts",
     "operations:staging:e2e": "node --experimental-strip-types scripts/operations-staging/e2e.ts",
+    "operations:staging:gate:inspect": "node --experimental-strip-types scripts/operations-staging/intake-gate.ts inspect",
+    "operations:staging:gate:activate": "node --experimental-strip-types scripts/operations-staging/intake-gate.ts activate",
+    "operations:staging:gate:disable": "node --experimental-strip-types scripts/operations-staging/intake-gate.ts disable",
     "operations:verify": "npm run operations:test && npm run operations:tooling:typecheck && npm run typecheck && npm run lint && npm run build"
   },
   "dependencies": {

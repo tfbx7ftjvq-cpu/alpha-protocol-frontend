@@ -165,9 +165,9 @@ Already complete:
 
 - Supabase Staging project:
   `neevswvhndkalxkainxo`;
-- migrations through `202607310001` applied;
+- migrations through `202608020001` applied;
 - local/remote migration parity confirmed;
-- remote schema lint reported one redundant loop-variable declaration warning;
+- linked schema lint reports no issues;
 - read-only preflight passed;
 - Cloudflare Pages deployment:
   `https://alpha-protocol-frontend.pages.dev/`;
@@ -181,17 +181,18 @@ Already complete:
 - a real Turnstile challenge and Phantom message-signature flow reached
   Supabase Auth;
 - the resulting Auth identity was read back as matching
-  `provider_id = identity_data.sub = web3:solana:<connected-wallet>`.
+  `provider_id = identity_data.sub = web3:solana:<connected-wallet>`;
 - the Phase 4K parser is deployed from commit
   `da21920783d5e56ea0da14f44511009b5bc1db09`;
 - the Phase 4K compatibility migration is active and the read-only preflight
   still passes.
+- lint-cleanup migration `202608020001` is applied remotely.
 
 Still closed:
 
 - database operations intake gate remains `disabled`;
 - Supabase Anonymous Sign-Ins remain disabled;
-- lint-cleanup migration `202608020001` is locally verified and not applied
+- Phase 4L gate-audit migration `202608020002` is local only and not applied
   remotely;
 - no public intake mutation has run.
 
@@ -200,6 +201,12 @@ database gate was closed. It revealed a fail-closed compatibility defect that
 Phase `2E-6B-4K` has now corrected without opening intake. Its remote schema
 lint follow-up removes only a redundant PL/pgSQL declaration. See
 `docs/supabase-web3-solana-identity-compatibility-v1.md`.
+
+Phase `2E-6B-4L` subsequently separates authenticated-session state from the
+independent database write gate. A valid wallet session may read its private
+history while the gate remains disabled; new submissions still require both
+the verified wallet and the enabled gate. See
+`docs/wallet-session-intake-gate-separation-and-controlled-staging-activation-v1.md`.
 
 ## 8. Reviewed remote activation order
 
