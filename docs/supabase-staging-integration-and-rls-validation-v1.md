@@ -18,7 +18,16 @@ remained disabled. A real Phantom authentication reached Supabase and exposed
 the canonical identity shape as `web3:solana:<address>` in `provider_id` and
 `identity_data.sub`. Phase `2E-6B-4K` corrects the fail-closed client and
 database parsers for that observed format. Migration `202607310001` is not yet
-applied remotely.
+applied remotely at that historical checkpoint; the current-state note below
+supersedes it.
+
+Current-state note (`2026-08-02`): the Phase 4K client is deployed from commit
+`da21920783d5e56ea0da14f44511009b5bc1db09`, and migration `202607310001`
+is applied to the dedicated Staging project. Migration parity and the read-only
+preflight passed. Linked schema lint found one redundant PL/pgSQL loop-variable
+declaration; follow-up migration `202608020001` removes only that declaration
+and remains pending remote application. The database intake gate remains
+disabled.
 
 ## 1. Purpose
 
@@ -412,18 +421,24 @@ Current staging status after final Phase 4H verification:
 
 Subsequent verified Staging state:
 
-- migration `202607300001_wallet_authenticated_operations_intake.sql` is also
-  applied and local/remote migration parity is confirmed;
-- remote database lint reports no schema errors after that migration;
+- migrations through
+  `202607310001_web3_solana_identity_subject_compatibility.sql` are applied and
+  local/remote migration parity is confirmed;
+- the Phase 4K client is deployed from commit
+  `da21920783d5e56ea0da14f44511009b5bc1db09`;
+- remote database lint reports one non-functional shadowed/unused loop-variable
+  warning after `202607310001`;
+- follow-up migration `202608020001` is locally verified and pending remote
+  application;
 - the read-only preflight still passes;
 - Cloudflare Pages serves the frontend at
   `https://alpha-protocol-frontend.pages.dev/`;
-- frontend public reads are configured, while
-  `VITE_OPERATIONS_INTAKE_MODE=disabled`;
+- frontend public reads, Turnstile, and `wallet-staging` mode are configured;
 - the database-side operations intake control remains disabled;
 - Supabase Anonymous Sign-Ins remain disabled;
-- Supabase Web3 Wallet and CAPTCHA remain disabled pending the reviewed
-  Turnstile activation sequence.
+- Supabase Web3 Wallet and CAPTCHA are enabled for the reviewed Staging flow;
+- a real Turnstile and Phantom authentication created the observed canonical
+  Web3 identity without opening intake.
 
 This phase verifies the selected off-chain authorization paths on the dedicated
 Supabase staging project. It does not activate production intake, deploy or

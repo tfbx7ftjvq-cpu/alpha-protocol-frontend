@@ -217,13 +217,15 @@ select ok(
         ilike '%leading_zero_bytes + non_zero_bytes <> 32%'
       and pg_get_functiondef(procedure.oid)
         not ilike '%identity_data ->> ''chain''%'
+      and pg_get_functiondef(procedure.oid)
+        not ilike '%character_index integer%'
     from pg_catalog.pg_proc procedure
     join pg_catalog.pg_namespace namespace
       on namespace.oid = procedure.pronamespace
     where namespace.nspname = 'public'
       and procedure.proname = 'current_verified_solana_wallet'
   ),
-  'wallet resolver uses the observed provider_id and identity_data.sub contract'
+  'wallet resolver uses the observed identity contract without a shadowed loop declaration'
 );
 
 select ok(

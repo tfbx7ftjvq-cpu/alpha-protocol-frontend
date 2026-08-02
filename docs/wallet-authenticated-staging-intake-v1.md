@@ -1,6 +1,6 @@
 # Alpha Protocol Wallet-Authenticated Staging Intake V1
 
-Status: local implementation complete; remote activation not performed
+Status: remote wallet authentication active; database intake remains locked
 Baseline commit: `3700ba73ef117fdbb66f8db10a56b9a31752f79b`
 Phase: `2E-6B-4I`
 Date: `2026-07-30`
@@ -17,6 +17,12 @@ stores the canonical Web3 identity as `web3:solana:<address>` in
 properties. Phase `2E-6B-4K` updates both parsers while keeping the database
 intake gate disabled. See
 `docs/supabase-web3-solana-identity-compatibility-v1.md`.
+
+Current-state note (`2026-08-02`): the Phase 4K client is deployed, migration
+`202607310001` is applied to Staging, migration parity and the read-only
+preflight passed, and the database intake gate remains disabled. A
+non-functional loop-variable lint warning is addressed by locally verified
+follow-up migration `202608020001`, which is not yet applied remotely.
 
 ## 1. Purpose
 
@@ -234,9 +240,10 @@ limitation rather than a reason to apply an unreviewed forced upgrade.
 Original Phase 4I implementation did not perform remote activation. Since that
 code-only phase, the following Staging preparation has been completed:
 
-- migration `202607300001` is applied to the dedicated Supabase Staging
-  project;
-- migration parity, remote lint, and the read-only preflight passed;
+- migrations through `202607310001` are applied to the dedicated Supabase
+  Staging project;
+- migration parity and the read-only preflight passed;
+- remote lint reported one redundant loop-variable declaration warning;
 - the exact Cloudflare Pages URL is configured for Auth;
 - a conservative Web3 Auth rate limit is configured;
 - the frontend is deployed at
@@ -246,15 +253,15 @@ code-only phase, the following Staging preparation has been completed:
 The following gates remain closed:
 
 - database `operations_intake_control.mode=disabled`;
-- migration `202607310001` has not been applied remotely;
+- lint-cleanup migration `202608020001` has not been applied remotely;
 - no public wallet-authenticated intake has run.
 
 Turnstile, Supabase CAPTCHA, the Solana Web3 provider, and frontend
 `wallet-staging` mode are configured. The browser challenge and Phantom
-signature reached Supabase, but the old parser rejected the real identity
-shape and signed the local application session out. Phase 4K fixes that
-compatibility boundary. A service-role key or Turnstile secret must never be
-placed in a browser variable.
+signature reached Supabase, and Phase 4K now parses the observed canonical
+identity subject. The database gate stays closed until the lint cleanup and
+final remote authentication checks complete. A service-role key or Turnstile
+secret must never be placed in a browser variable.
 
 ## 10. Official references
 

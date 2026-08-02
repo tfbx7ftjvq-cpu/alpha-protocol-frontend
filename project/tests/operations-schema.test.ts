@@ -23,17 +23,26 @@ const identityCompatibilityMigrationUrl = new URL(
   '../../supabase/migrations/202607310001_web3_solana_identity_subject_compatibility.sql',
   import.meta.url,
 );
+const walletResolverLintCleanupMigrationUrl = new URL(
+  '../../supabase/migrations/202608020001_web3_solana_wallet_resolver_lint_cleanup.sql',
+  import.meta.url,
+);
 const foundationSql = readFileSync(foundationMigrationUrl, 'utf8');
 const hardeningSql = readFileSync(hardeningMigrationUrl, 'utf8');
 const cleanupPrivilegesSql = readFileSync(cleanupPrivilegesMigrationUrl, 'utf8');
 const walletIntakeSql = readFileSync(walletIntakeMigrationUrl, 'utf8');
 const identityCompatibilitySql = readFileSync(identityCompatibilityMigrationUrl, 'utf8');
+const walletResolverLintCleanupSql = readFileSync(
+  walletResolverLintCleanupMigrationUrl,
+  'utf8',
+);
 const sql = [
   foundationSql,
   hardeningSql,
   cleanupPrivilegesSql,
   walletIntakeSql,
   identityCompatibilitySql,
+  walletResolverLintCleanupSql,
 ].join('\n');
 
 const expectedTables = [
@@ -276,6 +285,30 @@ test('wallet identity compatibility matches the observed Supabase provider subje
   );
   assert.doesNotMatch(
     identityCompatibilitySql,
+    /update public\.operations_intake_control/,
+  );
+});
+
+test('wallet resolver lint cleanup preserves identity checks without a shadowed declaration', () => {
+  for (const requiredFragment of [
+    /create or replace function public\.current_verified_solana_wallet\(\)/,
+    /security definer/,
+    /set search_path = ''/,
+    /provider_identifier is distinct from identity_subject/,
+    /identity_prefix constant text := 'web3:solana:';/,
+    /for character_index in 1\.\.char_length\(wallet_address\) loop/,
+    /leading_zero_bytes \+ non_zero_bytes <> 32/,
+    /grant execute on function public\.current_verified_solana_wallet\(\) to authenticated/,
+  ]) {
+    assert.match(walletResolverLintCleanupSql, requiredFragment);
+  }
+
+  assert.doesNotMatch(
+    walletResolverLintCleanupSql,
+    /character_index integer;/,
+  );
+  assert.doesNotMatch(
+    walletResolverLintCleanupSql,
     /update public\.operations_intake_control/,
   );
 });
@@ -911,6 +944,7 @@ async function createOperationsDatabase(): Promise<PGlite> {
   await database.exec(cleanupPrivilegesSql);
   await database.exec(walletIntakeSql);
   await database.exec(identityCompatibilitySql);
+  await database.exec(walletResolverLintCleanupSql);
   return database;
 }
 

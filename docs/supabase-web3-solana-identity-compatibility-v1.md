@@ -1,9 +1,9 @@
 # Alpha Protocol Supabase Solana Web3 Identity Compatibility V1
 
-Status: local fix verified; remote migration and deployment not performed
-Baseline commit: `cf8245bf0ba531d34e1ec9b0b9f4371522bd1da0`
+Status: remote compatibility fix active; local lint cleanup verified and pending remote application
+Baseline commit: `da21920783d5e56ea0da14f44511009b5bc1db09`
 Phase: `2E-6B-4K`
-Date: `2026-07-31`
+Date: `2026-08-02`
 
 ## 1. Observed Staging result
 
@@ -77,6 +77,22 @@ The migration explicitly does not update
 Existing owner RLS policies continue to compare every submitted
 `wallet_address` with this resolver.
 
+After `202607310001` was applied to Staging, the linked schema linter reported
+that the explicit `character_index integer` declaration was shadowed by the
+integer `FOR` loop variable that PostgreSQL creates automatically. The warning
+does not change resolver behavior, but it prevents a clean lint result.
+
+The follow-up migration is:
+
+```text
+supabase/migrations/202608020001_web3_solana_wallet_resolver_lint_cleanup.sql
+```
+
+It replaces the same function with the reviewed body minus only the redundant
+declaration. It retains `SECURITY DEFINER`, the empty fixed `search_path`, all
+identity and 32-byte checks, and the restricted function grants. It does not
+update `public.operations_intake_control`.
+
 ## 4. Adversarial coverage
 
 Local tests cover:
@@ -97,7 +113,7 @@ Local tests cover:
 Local verification result:
 
 ```text
-operations tests: 56 passed, 0 failed
+operations tests: 57 passed, 0 failed
 operations tooling TypeScript: passed
 application TypeScript: passed
 ESLint: passed
@@ -108,7 +124,7 @@ The complete `npm run operations:verify` command passed.
 
 ## 5. Remote state and next gate
 
-At the end of this phase:
+At the current checkpoint:
 
 - Cloudflare Pages remains deployed at
   `https://alpha-protocol-frontend.pages.dev/`;
@@ -116,24 +132,29 @@ At the end of this phase:
 - Supabase Anonymous Sign-Ins remain disabled;
 - frontend mode is `wallet-staging`;
 - database `operations_intake_control.mode` remains `disabled`;
-- migration `202607310001` is not applied remotely;
+- migration `202607310001` is applied remotely and migration parity was
+  confirmed;
+- the post-migration read-only preflight passed;
+- remote schema lint reported only the redundant loop-variable declaration;
+- follow-up migration `202608020001` is locally verified but not applied
+  remotely;
 - no operations intake row has been submitted;
 - no Solana transaction or treasury action has occurred.
 
 The reviewed order is:
 
-1. commit and deploy this parser fix;
-2. confirm the Pages build uses that commit;
-3. inspect migration parity and run a dry-run;
-4. separately confirm and apply migration `202607310001`;
-5. run remote schema lint and the read-only preflight;
+1. commit and push the lint-cleanup migration;
+2. inspect migration parity and run a dry-run against the exact Staging ref;
+3. separately confirm and apply migration `202608020001`;
+4. require remote schema lint to return no issues;
+5. rerun the read-only preflight;
 6. repeat Turnstile and Phantom authentication while the database gate stays
    disabled;
 7. verify the Auth identity and resolver result;
 8. only after a separate explicit decision, consider activating the database
    intake gate and running a controlled submission E2E.
 
-Do not activate the database gate as part of applying this compatibility
+Do not activate the database gate as part of applying either compatibility
 migration.
 
 ## 6. Boundaries

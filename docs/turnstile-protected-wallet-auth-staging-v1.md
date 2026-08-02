@@ -165,9 +165,9 @@ Already complete:
 
 - Supabase Staging project:
   `neevswvhndkalxkainxo`;
-- migrations through `202607300001` applied;
+- migrations through `202607310001` applied;
 - local/remote migration parity confirmed;
-- remote schema lint passed;
+- remote schema lint reported one redundant loop-variable declaration warning;
 - read-only preflight passed;
 - Cloudflare Pages deployment:
   `https://alpha-protocol-frontend.pages.dev/`;
@@ -182,22 +182,24 @@ Already complete:
   Supabase Auth;
 - the resulting Auth identity was read back as matching
   `provider_id = identity_data.sub = web3:solana:<connected-wallet>`.
+- the Phase 4K parser is deployed from commit
+  `da21920783d5e56ea0da14f44511009b5bc1db09`;
+- the Phase 4K compatibility migration is active and the read-only preflight
+  still passes.
 
 Still closed:
 
 - database operations intake gate remains `disabled`;
 - Supabase Anonymous Sign-Ins remain disabled;
-- compatibility migration `202607310001` is not applied remotely;
-- the deployed client still contains the pre-fix identity parser;
+- lint-cleanup migration `202608020001` is locally verified and not applied
+  remotely;
 - no public intake mutation has run.
 
 The first browser authentication was intentionally conducted while the
-database gate was closed. It revealed a compatibility defect: the client and
-database expected separate `identity_data.chain/address` values, while the
-real Supabase identity uses the canonical `provider_id` and
-`identity_data.sub` subject. The old client therefore failed closed after the
-valid signature. Phase `2E-6B-4K` corrects that parser without opening intake.
-See `docs/supabase-web3-solana-identity-compatibility-v1.md`.
+database gate was closed. It revealed a fail-closed compatibility defect that
+Phase `2E-6B-4K` has now corrected without opening intake. Its remote schema
+lint follow-up removes only a redundant PL/pgSQL declaration. See
+`docs/supabase-web3-solana-identity-compatibility-v1.md`.
 
 ## 8. Reviewed remote activation order
 
