@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 import {
+  assertNoPersistedE2ECaptchaToken,
   isMainModule,
   OPERATIONS_STAGING_CONFIRMATION,
   OPERATIONS_STAGING_GATE_ACTIVATION_CONFIRMATION,
@@ -20,6 +21,7 @@ const SERVICE_KEY = [
   'staging-test-value-without-credentials',
 ].join('_');
 const WEB3_URL = 'https://staging.alpha.example/operations';
+const CAPTCHA_TOKEN = 'turnstile-response-token-for-staging-e2e';
 
 function validEnvironment(): NodeJS.ProcessEnv {
   return {
@@ -84,6 +86,7 @@ test('public and service-role keys stay in separate configuration slots', () => 
       ...validEnvironment(),
       OPERATIONS_STAGING_SERVICE_ROLE_KEY: PUBLIC_KEY,
       OPERATIONS_STAGING_WEB3_URL: WEB3_URL,
+      OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN: CAPTCHA_TOKEN,
       CONFIRM_OPERATIONS_STAGING_E2E: OPERATIONS_STAGING_CONFIRMATION,
     }, 'e2e'),
     /service-role key/,
@@ -95,6 +98,7 @@ test('mutating E2E requires an exact confirmation and rejects VITE secret exposu
     ...validEnvironment(),
     OPERATIONS_STAGING_SERVICE_ROLE_KEY: SERVICE_KEY,
     OPERATIONS_STAGING_WEB3_URL: WEB3_URL,
+    OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN: CAPTCHA_TOKEN,
   };
 
   assert.throws(
@@ -117,6 +121,44 @@ test('mutating E2E requires an exact confirmation and rejects VITE secret exposu
   }, 'e2e');
   assert.equal(config.confirmedForWrites, true);
   assert.equal(config.web3Url, WEB3_URL);
+  assert.equal(config.e2eCaptchaToken, CAPTCHA_TOKEN);
+});
+
+test('mutating E2E requires a fresh process-only CAPTCHA token', () => {
+  const baseEnvironment = {
+    ...validEnvironment(),
+    OPERATIONS_STAGING_SERVICE_ROLE_KEY: SERVICE_KEY,
+    OPERATIONS_STAGING_WEB3_URL: WEB3_URL,
+    CONFIRM_OPERATIONS_STAGING_E2E: OPERATIONS_STAGING_CONFIRMATION,
+  };
+
+  assert.throws(
+    () => resolveOperationsStagingConfig(baseEnvironment, 'e2e'),
+    /OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN/,
+  );
+  assert.throws(
+    () => resolveOperationsStagingConfig({
+      ...baseEnvironment,
+      OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN: 'too-short',
+    }, 'e2e'),
+    /CAPTCHA_TOKEN 格式无效/,
+  );
+
+  const config = resolveOperationsStagingConfig({
+    ...baseEnvironment,
+    OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN: CAPTCHA_TOKEN,
+  }, 'e2e');
+  assert.equal(config.e2eCaptchaToken, CAPTCHA_TOKEN);
+
+  assert.throws(
+    () => assertNoPersistedE2ECaptchaToken(
+      `OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN=${CAPTCHA_TOKEN}`,
+    ),
+    /只能通过当前进程临时传入/,
+  );
+  assert.doesNotThrow(() => assertNoPersistedE2ECaptchaToken(
+    '# OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN must remain process-only',
+  ));
 });
 
 test('wallet E2E URL must be an exact HTTPS page without credentials or query data', () => {
@@ -130,6 +172,7 @@ test('wallet E2E URL must be an exact HTTPS page without credentials or query da
         ...validEnvironment(),
         OPERATIONS_STAGING_SERVICE_ROLE_KEY: SERVICE_KEY,
         OPERATIONS_STAGING_WEB3_URL: web3Url,
+        OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN: CAPTCHA_TOKEN,
         CONFIRM_OPERATIONS_STAGING_E2E: OPERATIONS_STAGING_CONFIRMATION,
       }, 'e2e'),
       /OPERATIONS_STAGING_WEB3_URL/,
@@ -142,6 +185,7 @@ test('staging errors redact service keys and JWT-shaped credentials', () => {
     ...validEnvironment(),
     OPERATIONS_STAGING_SERVICE_ROLE_KEY: SERVICE_KEY,
     OPERATIONS_STAGING_WEB3_URL: WEB3_URL,
+    OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN: CAPTCHA_TOKEN,
     CONFIRM_OPERATIONS_STAGING_E2E: OPERATIONS_STAGING_CONFIRMATION,
   }, 'e2e');
   const jwt = [
@@ -150,11 +194,12 @@ test('staging errors redact service keys and JWT-shaped credentials', () => {
     'signature_value',
   ].join('.');
   const sanitized = sanitizeStagingError(
-    new Error(`request leaked ${SERVICE_KEY} and ${jwt}`),
+    new Error(`request leaked ${SERVICE_KEY}, ${CAPTCHA_TOKEN}, and ${jwt}`),
     config,
   );
 
   assert.doesNotMatch(sanitized, /sb_secret_/);
+  assert.doesNotMatch(sanitized, new RegExp(CAPTCHA_TOKEN));
   assert.doesNotMatch(sanitized, /eyJhbGci/);
   assert.match(sanitized, /\[REDACTED\]/);
 });

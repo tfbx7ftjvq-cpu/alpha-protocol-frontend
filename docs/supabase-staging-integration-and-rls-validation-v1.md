@@ -21,14 +21,15 @@ database parsers for that observed format. Migration `202607310001` is not yet
 applied remotely at that historical checkpoint; the current-state note below
 supersedes it.
 
-Current-state note (`2026-08-02`): the Phase 4K client is deployed from commit
-`da21920783d5e56ea0da14f44511009b5bc1db09`, and migration `202607310001`
-is applied to the dedicated Staging project. Migration parity and the read-only
-preflight passed. Follow-up migration `202608020001` is remotely applied and
-linked schema lint is clean. The database intake gate remains disabled. Phase
-`2E-6B-4L` now implements local-only wallet-session/gate separation and an
-audited gate-control path; its migration `202608020002` is not remotely
-applied.
+Current-state note (`2026-08-02`): the Phase 4L client is deployed from commit
+`a962c4e18d4aaab45570de49078397fd0cdca119`, and migrations through
+`202608020002` are applied to the dedicated Staging project. Migration parity,
+linked schema lint, and the read-only preflight passed. The database intake
+gate was separately and explicitly activated to `wallet_staging` with one
+audited event. The first post-activation E2E stopped at CAPTCHA-protected test
+authentication before operations-row assertions. The locally verified
+CAPTCHA-compatible follow-up remains undeployed, so final remote E2E
+verification is pending.
 
 ## 1. Purpose
 
@@ -101,8 +102,19 @@ Required only for the mutating E2E:
 ```dotenv
 OPERATIONS_STAGING_SERVICE_ROLE_KEY=
 OPERATIONS_STAGING_WEB3_URL=https://<exact-allowlisted-staging-page>
+```
+
+Immediately before one confirmed run, supply these through the current process
+only:
+
+```text
+OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN
 CONFIRM_OPERATIONS_STAGING_E2E=I_UNDERSTAND_THIS_CREATES_AND_DELETES_STAGING_TEST_DATA
 ```
+
+The CAPTCHA response is deliberately absent from the example file and must not
+be added to `.env.operations-staging`. It is a short-lived, single-use value
+copied from a newly completed challenge on the reviewed Pages hostname.
 
 The URL must exactly equal:
 
@@ -119,6 +131,7 @@ The parser rejects:
 - a publishable/anon key in the service-role field;
 - the same value in both key fields;
 - any service-role/secret value exposed through a `VITE_*` variable;
+- a missing, malformed, or persisted E2E CAPTCHA response;
 - missing or inexact E2E confirmation.
 
 Never copy `OPERATIONS_STAGING_SERVICE_ROLE_KEY` into:
@@ -145,6 +158,9 @@ supabase/migrations/202607270001_offchain_operations_foundation.sql
 supabase/migrations/202607270002_operations_staging_hardening.sql
 supabase/migrations/202607290001_operations_staging_e2e_cleanup_privileges.sql
 supabase/migrations/202607300001_wallet_authenticated_operations_intake.sql
+supabase/migrations/202607310001_web3_solana_identity_subject_compatibility.sql
+supabase/migrations/202608020001_web3_solana_wallet_resolver_lint_cleanup.sql
+supabase/migrations/202608020002_operations_wallet_intake_gate_audit.sql
 ```
 
 The second migration fixes two findings identified while preparing real-role
@@ -152,8 +168,9 @@ tests. The third migration fixes the table-privilege boundary found by the
 first remote staging E2E cleanup attempt.
 The fourth migration belongs to follow-on Phase 4I. It creates a
 wallet-authenticated intake path but leaves its database-side gate disabled by
-default. The Phase 4H remote status below does not claim that migration has
-been applied.
+default. The fifth and sixth migrations align the resolver with the observed
+Supabase Solana Web3 subject and remove its lint warning. The seventh adds the
+auditable service-role-only intake-gate transition path without activating it.
 
 ### 4.1 Published-record downgrade
 
@@ -263,8 +280,13 @@ actors:
 - operator;
 - moderator;
 - Solana Web3 owner A;
-- Solana Web3 owner B;
 - one email-only negative-control owner.
+
+Operator, moderator, and the email-only negative control use admin-generated
+one-time magic-link sessions. The single ephemeral Web3 actor consumes one
+fresh human-completed Turnstile response. A second random Solana public key is
+used only as the switched-wallet negative input and does not create another
+Auth user or consume another CAPTCHA response.
 
 It validates:
 
@@ -273,9 +295,9 @@ It validates:
 - anonymous denial on private submissions;
 - confirmation that the reviewed database-side intake gate is enabled;
 - owner creation and read of a private submission;
-- rejection when owner A submits owner B's wallet;
+- rejection when the owner submits a different generated wallet;
 - rejection of an email-only owner that cannot prove wallet control;
-- owner B isolation from owner A's submission;
+- cross-user isolation from the wallet owner's submission;
 - rejection of self-asserted `wallet_verified=true`;
 - owner creation of a private governance discussion;
 - moderator SELECT visibility;
@@ -429,17 +451,24 @@ Subsequent verified Staging state:
   `da21920783d5e56ea0da14f44511009b5bc1db09`;
 - remote database lint reports no schema issues;
 - Phase 4L migration
-  `202608020002_operations_wallet_intake_gate_audit.sql` is locally verified,
-  remains unapplied remotely, and does not enable the gate when applied;
+  `202608020002_operations_wallet_intake_gate_audit.sql` is applied remotely,
+  local/remote migration parity is confirmed, and remote schema lint passed;
 - the read-only preflight still passes;
 - Cloudflare Pages serves the frontend at
   `https://alpha-protocol-frontend.pages.dev/`;
 - frontend public reads, Turnstile, and `wallet-staging` mode are configured;
-- the database-side operations intake control remains disabled;
+- the database-side operations intake control was explicitly activated to
+  `wallet_staging` with one auditable transition event;
 - Supabase Anonymous Sign-Ins remain disabled;
 - Supabase Web3 Wallet and CAPTCHA are enabled for the reviewed Staging flow;
 - a real Turnstile and Phantom authentication created the observed canonical
-  Web3 identity without opening intake.
+  Web3 identity;
+- the first post-activation E2E attempt was rejected at automated operator
+  authentication because CAPTCHA was enabled and the old runner supplied no
+  `captcha_token`; it did not reach operations-row assertions;
+- the CAPTCHA-compatible runner change passed 67 local operations tests,
+  both TypeScript checks, ESLint, and the production Vite build, but remains
+  undeployed, so the final post-activation wallet-intake E2E is not yet passed.
 
 This phase verifies the selected off-chain authorization paths on the dedicated
 Supabase staging project. It does not activate production intake, deploy or

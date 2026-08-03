@@ -48,6 +48,7 @@ export async function runOperationsStagingE2E(
     config.mode !== 'e2e'
     || !config.serviceRoleKey
     || !config.web3Url
+    || !config.e2eCaptchaToken
     || !config.confirmedForWrites
   ) {
     throw new Error('staging E2E 配置未满足写入确认与 service-role 要求');
@@ -110,8 +111,7 @@ export async function runOperationsStagingE2E(
     const ownerA = await createWalletActor(admin, config);
     createdUsers.push(ownerA.user.id);
 
-    const ownerB = await createWalletActor(admin, config);
-    createdUsers.push(ownerB.user.id);
+    const switchedWalletAddress = Keypair.generate().publicKey.toBase58();
 
     const emailOnlyOwner = await createActor(admin, config, runId, 'email-owner');
     createdUsers.push(emailOnlyOwner.user.id);
@@ -175,9 +175,9 @@ export async function runOperationsStagingE2E(
       .insert({
         task_id: rows.taskId,
         submitted_by: ownerA.user.id,
-        summary: 'This row must be rejected because the submitted wallet belongs to another actor.',
+        summary: 'This row must be rejected because the submitted wallet differs from the authenticated wallet.',
         deliverable_url: 'https://example.com/alpha-staging-switched-wallet',
-        wallet_address: requiredWallet(ownerB),
+        wallet_address: switchedWalletAddress,
         wallet_verified: false,
         status: 'submitted',
       });
@@ -212,7 +212,7 @@ export async function runOperationsStagingE2E(
     assertNoError(ownerRead.error, 'owner task submission read');
     assertions += 1;
 
-    const crossUserRead = await ownerB.client
+    const crossUserRead = await emailOnlyOwner.client
       .from('task_submissions')
       .select('id')
       .eq('id', rows.submissionId);
@@ -268,11 +268,11 @@ export async function runOperationsStagingE2E(
     );
     assertions += 1;
 
-    const unauthorizedModeration = await ownerB.client
+    const unauthorizedModeration = await emailOnlyOwner.client
       .from('governance_discussions')
       .update({
         moderation_status: 'rejected',
-        moderated_by: ownerB.user.id,
+        moderated_by: emailOnlyOwner.user.id,
       })
       .eq('id', rows.discussionId)
       .select('id');
@@ -358,10 +358,8 @@ async function createActor(
   operationsRole?: OperationsRole,
 ): Promise<TestActor> {
   const email = `alpha-operations-${runId}-${label}@example.com`;
-  const password = `Aa1!${randomBytes(24).toString('base64url')}`;
   const createResult = await admin.auth.admin.createUser({
     email,
-    password,
     email_confirm: true,
     app_metadata: operationsRole
       ? { operations_role: operationsRole }
@@ -380,11 +378,28 @@ async function createActor(
         persistSession: false,
       },
     });
-    const signInResult = await client.auth.signInWithPassword({ email, password });
+    const linkResult = await admin.auth.admin.generateLink({
+      type: 'magiclink',
+      email,
+    });
+    assertNoError(linkResult.error, `generate ${label} test session link`);
+    const hashedToken = linkResult.data.properties?.hashed_token;
+    if (!hashedToken) {
+      throw new Error(`generate ${label} test session link returned no token hash`);
+    }
+
+    const signInResult = await client.auth.verifyOtp({
+      token_hash: hashedToken,
+      type: 'magiclink',
+    });
     assertNoError(signInResult.error, `sign in ${label} test user`);
     if (!signInResult.data.user) {
       throw new Error(`sign in ${label} test user returned no user`);
     }
+    expect(
+      signInResult.data.user.id === createResult.data.user.id,
+      `sign in ${label} test user returned a different user`,
+    );
 
     return { user: signInResult.data.user, client, walletAddress: null };
   } catch (error) {
@@ -397,8 +412,10 @@ async function createWalletActor(
   admin: SupabaseClient,
   config: OperationsStagingConfig,
 ): Promise<TestActor> {
-  if (!config.web3Url) {
-    throw new Error('wallet actor requires OPERATIONS_STAGING_WEB3_URL');
+  if (!config.web3Url || !config.e2eCaptchaToken) {
+    throw new Error(
+      'wallet actor requires OPERATIONS_STAGING_WEB3_URL and a transient CAPTCHA token',
+    );
   }
 
   const client = createClient(config.supabaseUrl, config.publicKey, {
@@ -430,6 +447,7 @@ async function createWalletActor(
     wallet,
     options: {
       url: config.web3Url,
+      captchaToken: config.e2eCaptchaToken,
     },
   });
   assertNoError(signInResult.error, 'sign in ephemeral Solana wallet actor');

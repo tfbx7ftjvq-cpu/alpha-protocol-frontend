@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { normalizeTurnstileToken } from '../../src/features/operations/auth.ts';
 
 export const OPERATIONS_STAGING_CONFIRMATION =
   'I_UNDERSTAND_THIS_CREATES_AND_DELETES_STAGING_TEST_DATA';
@@ -23,6 +24,7 @@ export interface OperationsStagingConfig {
   publicKey: string;
   serviceRoleKey: string | null;
   web3Url: string | null;
+  e2eCaptchaToken: string | null;
   confirmedForWrites: boolean;
   confirmedForGateChange: boolean;
   gateChangeReference: string | null;
@@ -82,6 +84,9 @@ export function resolveOperationsStagingConfig(
   if (mode === 'e2e' && !env.OPERATIONS_STAGING_WEB3_URL?.trim()) {
     missing.push('OPERATIONS_STAGING_WEB3_URL');
   }
+  if (mode === 'e2e' && !env.OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN?.trim()) {
+    missing.push('OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN');
+  }
 
   if (missing.length > 0) {
     throw new OperationsStagingConfigError(
@@ -96,6 +101,9 @@ export function resolveOperationsStagingConfig(
   const serviceRoleKey = rawServiceKey || null;
   const web3Url = env.OPERATIONS_STAGING_WEB3_URL
     ? normalizeWeb3Url(env.OPERATIONS_STAGING_WEB3_URL)
+    : null;
+  const e2eCaptchaToken = mode === 'e2e'
+    ? normalizeE2ECaptchaToken(env.OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN!)
     : null;
 
   if (!PROJECT_REF_PATTERN.test(projectRef)) {
@@ -163,6 +171,7 @@ export function resolveOperationsStagingConfig(
     publicKey,
     serviceRoleKey,
     web3Url,
+    e2eCaptchaToken,
     confirmedForWrites,
     confirmedForGateChange,
     gateChangeReference,
@@ -192,9 +201,23 @@ export function assertStagingSecretIsolation(
     return;
   }
 
+  assertNoPersistedE2ECaptchaToken(readFileSync(envFile, 'utf8'));
+
   const examplePath = resolve(projectDirectory, '.env.operations-staging.example');
   if (!existsSync(examplePath)) {
     throw new OperationsStagingConfigError('staging 环境变量模板缺失');
+  }
+}
+
+export function assertNoPersistedE2ECaptchaToken(contents: string): void {
+  if (
+    /^\s*(?:export\s+)?OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN\s*=/mu.test(
+      contents,
+    )
+  ) {
+    throw new OperationsStagingConfigError(
+      'OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN 只能通过当前进程临时传入，不得写入 .env.operations-staging',
+    );
   }
 }
 
@@ -206,6 +229,7 @@ export function sanitizeStagingError(
   const secrets = [
     config?.publicKey,
     config?.serviceRoleKey,
+    config?.e2eCaptchaToken,
   ].filter((value): value is string => Boolean(value));
 
   for (const secret of secrets) {
@@ -353,6 +377,16 @@ function normalizeWeb3Url(rawUrl: string): string {
   }
 
   return parsed.href;
+}
+
+function normalizeE2ECaptchaToken(rawToken: string): string {
+  try {
+    return normalizeTurnstileToken(rawToken);
+  } catch {
+    throw new OperationsStagingConfigError(
+      'OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN 格式无效；请从当前 Pages Turnstile challenge 临时复制新 token',
+    );
+  }
 }
 
 function normalizeGateChangeReference(rawReference: string | undefined): string {

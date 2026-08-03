@@ -27,6 +27,7 @@ interface TurnstileApi {
       'timeout-callback': () => void;
     },
   ) => TurnstileWidgetId;
+  getResponse: (widgetId: TurnstileWidgetId) => string;
   remove: (widgetId: TurnstileWidgetId) => void;
   reset: (widgetId: TurnstileWidgetId) => void;
 }
@@ -65,6 +66,7 @@ export default function TurnstileChallenge({
 
   useEffect(() => {
     let cancelled = false;
+    let renderedContainer: HTMLDivElement | null = null;
 
     setStatus('loading');
     onTokenRef.current(null);
@@ -76,7 +78,8 @@ export default function TurnstileChallenge({
           return;
         }
 
-        widgetIdRef.current = turnstile.render(containerRef.current, {
+        renderedContainer = containerRef.current;
+        const widgetId = turnstile.render(renderedContainer, {
           sitekey: siteKey,
           action,
           theme: 'dark',
@@ -102,6 +105,8 @@ export default function TurnstileChallenge({
             'Turnstile 验证超时，请重新验证',
           ),
         });
+        widgetIdRef.current = widgetId;
+        renderedContainer.dataset.turnstileWidgetId = widgetId;
         setStatus('ready');
       })
       .catch(() => {
@@ -114,6 +119,7 @@ export default function TurnstileChallenge({
 
     return () => {
       cancelled = true;
+      renderedContainer?.removeAttribute('data-turnstile-widget-id');
       const widgetId = widgetIdRef.current;
       widgetIdRef.current = null;
       if (widgetId && window.turnstile) {

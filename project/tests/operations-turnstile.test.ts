@@ -24,6 +24,15 @@ test('Turnstile uses explicit rendering and handles the full token lifecycle', (
   assert.match(componentSource, /'response-field': false/);
   assert.match(componentSource, /'expired-callback'/);
   assert.match(componentSource, /'timeout-callback'/);
+  assert.match(componentSource, /getResponse: \(widgetId: TurnstileWidgetId\) => string/);
+  assert.match(
+    componentSource,
+    /renderedContainer\.dataset\.turnstileWidgetId = widgetId/,
+  );
+  assert.match(
+    componentSource,
+    /removeAttribute\('data-turnstile-widget-id'\)/,
+  );
   assert.match(componentSource, /\.remove\(widgetId\)/);
   assert.match(componentSource, /\.reset\(widgetId\)/);
 });

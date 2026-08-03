@@ -1,7 +1,7 @@
 # Alpha Protocol Wallet Session and Intake Gate Separation V1
 
-Status: local implementation verified; remote intake remains disabled
-Baseline commit: `818ed9f5b75ab8212abd285534f0b301cbef1b8d`
+Status: remote Staging gate active; CAPTCHA-compatible final E2E pending
+Baseline commit: `a962c4e18d4aaab45570de49078397fd0cdca119`
 Phase: `2E-6B-4L`
 Date: `2026-08-02`
 
@@ -18,8 +18,13 @@ A disabled gate is no longer treated as an authentication failure. A verified
 wallet session may remain visible and may read its own previously submitted
 records while all new submission forms remain locked.
 
-No remote migration, gate transition, Solana transaction, treasury action, or
-deployment is performed by this local phase.
+Subsequent separately confirmed operations deployed the Phase 4L client,
+applied migration `202608020002`, and activated the dedicated Staging gate to
+`wallet_staging`. The first post-activation E2E stopped before operations-row
+assertions because Supabase CAPTCHA rejected the old runner's password sign-in
+without a challenge token. This follow-up changes only local test tooling,
+frontend token handoff metadata, tests, and documentation; it performs no
+remote mutation, deployment, Solana transaction, or treasury action.
 
 ## 2. Required behavior
 
@@ -119,6 +124,52 @@ Remote work must remain split into independently confirmed checkpoints:
 Applying the migration and activating the gate are deliberately different
 operations. Confirmation of one never authorizes the other.
 
+### 5.1 CAPTCHA-compatible final E2E
+
+Supabase CAPTCHA must remain enabled. After this compatibility patch is
+reviewed, committed, and deployed to Pages:
+
+1. open `https://alpha-protocol-frontend.pages.dev/` and keep the reviewed
+   Phantom wallet connected;
+2. if an operations session is already active, use `退出运营会话` so a new
+   Turnstile widget is rendered;
+3. complete Turnstile, but do not click the wallet-signature button because
+   that would consume the response;
+4. in browser DevTools Console, copy the current response without printing it:
+
+```javascript
+copy(window.turnstile.getResponse(document.querySelector('[data-turnstile-widget-id]').dataset.turnstileWidgetId))
+```
+
+5. within five minutes, run the following in the trusted PowerShell session:
+
+```powershell
+cd E:\a\alpha-protocol-frontend\project
+$E2EExit = 1
+
+try {
+    $env:OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN = Get-Clipboard
+    $env:CONFIRM_OPERATIONS_STAGING_E2E = "I_UNDERSTAND_THIS_CREATES_AND_DELETES_STAGING_TEST_DATA"
+
+    npm run operations:staging:e2e
+    $E2EExit = $LASTEXITCODE
+}
+finally {
+    Remove-Item Env:OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN -ErrorAction SilentlyContinue
+    Remove-Item Env:CONFIRM_OPERATIONS_STAGING_E2E -ErrorAction SilentlyContinue
+    Set-Clipboard -Value ""
+}
+
+"E2E_EXIT=$E2EExit"
+```
+
+The runner rejects a token definition in `.env.operations-staging`; only the
+current process may hold it. Three non-wallet test roles use admin-generated
+one-time magic-link sessions. One ephemeral Solana Web3 actor consumes the one
+Turnstile response. The switched-wallet and cross-user negative cases do not
+require a second Web3 login, so CAPTCHA stays enabled and no test bypass is
+introduced.
+
 ## 6. Verification and boundaries
 
 Local adversarial coverage includes:
@@ -133,10 +184,20 @@ Local adversarial coverage includes:
 - exact two-event activation/disable history;
 - browser-role RPC and audit-table denial.
 
-Local verification result:
+Original Phase 4L local verification result:
 
 ```text
 operations tests: 64 passed, 0 failed
+operations tooling TypeScript: passed
+frontend TypeScript: passed
+ESLint: passed
+production Vite build: passed
+```
+
+CAPTCHA-compatible E2E follow-up verification result:
+
+```text
+operations tests: 67 passed, 0 failed
 operations tooling TypeScript: passed
 frontend TypeScript: passed
 ESLint: passed
@@ -148,12 +209,15 @@ At this checkpoint:
 - implemented: session/gate separation, controlled gate tooling, audit schema,
   adversarial tests, and operator documentation;
 - tested: local database simulation, TypeScript, lint, and production build;
-- deployed: the earlier Phase 4K frontend and migrations through
-  `202608020001` only;
-- not deployed: Phase 4L frontend changes and migration `202608020002`;
+- deployed: Phase 4L frontend commit `a962c4e` and migrations through
+  `202608020002` on the dedicated Supabase Staging project;
+- not deployed: this CAPTCHA-compatible E2E follow-up patch;
 - Devnet: no transaction, deployment, upgrade, initialization, or E2E action;
 - Mainnet: not entered and no transaction sent;
 - treasury: no authority change and no funds moved;
-- database intake gate: still remotely `disabled`.
+- database intake gate: remotely `wallet_staging`, with one audited activation
+  event;
+- final post-activation E2E: not passed yet; the previous attempt failed at
+  CAPTCHA-protected test authentication before operations-row assertions.
 
 This is not a Mainnet professional audit or legal review.

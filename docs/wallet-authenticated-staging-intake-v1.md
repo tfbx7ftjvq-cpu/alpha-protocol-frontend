@@ -18,12 +18,14 @@ properties. Phase `2E-6B-4K` updates both parsers while keeping the database
 intake gate disabled. See
 `docs/supabase-web3-solana-identity-compatibility-v1.md`.
 
-Current-state note (`2026-08-02`): the Phase 4K client is deployed, migration
-`202607310001` is applied to Staging, migration parity and the read-only
-preflight passed, migration `202608020001` is remotely applied, linked schema
-lint is clean, and the database intake gate remains disabled. Phase
-`2E-6B-4L` locally separates a valid wallet session from write-gate state and
-adds an audited gate-transition migration without applying it remotely. See
+Current-state note (`2026-08-02`): the Phase 4L client is deployed, migrations
+through `202608020002` are applied to Staging, migration parity, linked schema
+lint, and the read-only preflight passed. The database intake gate was
+separately and explicitly activated to `wallet_staging` with one audit event.
+The first post-activation E2E stopped at CAPTCHA-protected test authentication
+before operations-row assertions. A locally verified compatibility follow-up
+keeps CAPTCHA enabled and supplies one human-completed response only to the
+single temporary Web3 actor; final remote E2E verification remains pending. See
 `docs/wallet-session-intake-gate-separation-and-controlled-staging-activation-v1.md`.
 
 ## 1. Purpose
@@ -177,22 +179,38 @@ The mutating Staging runner now requires:
 OPERATIONS_STAGING_WEB3_URL=https://<exact-allowlisted-staging-page>
 ```
 
+It also requires one fresh Turnstile response in the current process only:
+
+```text
+OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN
+```
+
+That token must never be written to `.env.operations-staging`, an example
+file, Git, logs, screenshots, or documentation. The runner rejects a persisted
+definition and redacts the transient value from reported errors.
+
 It creates:
 
 - one email-authenticated operator;
 - one email-authenticated moderator;
-- two ephemeral Solana Web3 wallet actors;
+- one ephemeral Solana Web3 wallet actor;
 - one email-only negative-control user.
+
+The non-wallet roles receive admin-generated, one-time magic-link sessions.
+They do not perform CAPTCHA-less password sign-in. The single Web3 actor
+consumes the human-completed Turnstile response through Supabase Web3 Auth.
+A separately generated public key supplies the switched-wallet negative case
+without creating or authenticating a second Web3 user.
 
 In addition to the Phase 4H checks, it verifies:
 
 - a matching Web3 wallet can create its own intake row;
-- the same Auth user cannot submit the other actor's wallet;
+- the same Auth user cannot submit a different wallet;
 - an email-only user cannot satisfy the wallet-bound insert policy.
 
 The generated wallet keys exist only in process memory for the test. They are
 not funded, written to disk, or used for a Solana transaction. Cleanup still
-requires exact row IDs and deletes all temporary Auth users.
+requires exact row IDs and deletes all four temporary Auth users.
 
 ## 8. Local verification
 

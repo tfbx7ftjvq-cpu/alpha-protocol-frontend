@@ -69,6 +69,13 @@ The component:
 - resets the widget after every sign-in attempt;
 - never persists or logs a challenge token.
 
+For the explicitly confirmed Staging E2E only, the container exposes the
+public Turnstile widget id through `data-turnstile-widget-id`. This is not a
+response token or secret. It lets a trusted operator use the official
+`turnstile.getResponse(widgetId)` browser API to copy one already completed
+challenge directly into the current test process without adding the token to
+application state, storage, configuration files, or Git.
+
 Turnstile tokens are treated as single-use values. The UI clears the token
 before calling wallet authentication and resets the widget in a `finally`
 path, whether authentication succeeds or fails.
@@ -230,7 +237,9 @@ Do not skip or reorder these gates:
 12. review Auth logs and challenge behavior;
 13. explicitly activate the database intake gate with a non-empty auditable
     reference;
-14. explicitly confirm and run the mutating wallet RLS E2E;
+14. complete a fresh challenge, copy its response into the current operator
+    process, explicitly confirm, and run the mutating wallet RLS E2E within
+    the token lifetime;
 15. verify cleanup and zero temporary residue;
 16. only then decide whether the reviewed Staging deployment may retain
     `wallet-staging`.
@@ -255,8 +264,13 @@ Turnstile and Auth rate limits reduce automated abuse. They do not:
 - authorize treasury spending.
 
 The browser smoke test is required because a command-line E2E runner cannot
-legitimately mint a production Turnstile token. Production CAPTCHA must not be
-bypassed or hard-coded into test tooling.
+legitimately mint a production Turnstile token. The controlled runner may
+consume one response produced by a human-completed challenge on the reviewed
+Pages hostname. Cloudflare response tokens expire after five minutes and are
+single-use, so the value must be copied immediately before the run, supplied
+only through `OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN`, and cleared afterward.
+Production CAPTCHA must not be disabled, bypassed, hard-coded, or persisted in
+test tooling.
 
 ## 10. Deployment boundaries
 
