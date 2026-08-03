@@ -7,6 +7,7 @@ export type OperationsLoadStatus = 'unconfigured' | 'loading' | 'ready' | 'error
 
 const EMPTY_OVERVIEW: OperationsOverview = {
   tasks: [],
+  taskResults: [],
   riskReports: [],
   reliefUpdates: [],
   discussions: [],

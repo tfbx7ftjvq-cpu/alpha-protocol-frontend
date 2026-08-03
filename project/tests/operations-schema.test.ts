@@ -31,6 +31,10 @@ const intakeGateAuditMigrationUrl = new URL(
   '../../supabase/migrations/202608020002_operations_wallet_intake_gate_audit.sql',
   import.meta.url,
 );
+const taskModerationClosureMigrationUrl = new URL(
+  '../../supabase/migrations/202608030001_operations_task_moderation_closure.sql',
+  import.meta.url,
+);
 const foundationSql = readFileSync(foundationMigrationUrl, 'utf8');
 const hardeningSql = readFileSync(hardeningMigrationUrl, 'utf8');
 const cleanupPrivilegesSql = readFileSync(cleanupPrivilegesMigrationUrl, 'utf8');
@@ -41,6 +45,7 @@ const walletResolverLintCleanupSql = readFileSync(
   'utf8',
 );
 const intakeGateAuditSql = readFileSync(intakeGateAuditMigrationUrl, 'utf8');
+const taskModerationClosureSql = readFileSync(taskModerationClosureMigrationUrl, 'utf8');
 const sql = [
   foundationSql,
   hardeningSql,
@@ -49,6 +54,7 @@ const sql = [
   identityCompatibilitySql,
   walletResolverLintCleanupSql,
   intakeGateAuditSql,
+  taskModerationClosureSql,
 ].join('\n');
 
 const expectedTables = [
@@ -67,6 +73,8 @@ const expectedTables = [
   'governance_decisions',
   'treasury_execution_intents',
   'treasury_execution_receipts',
+  'task_submission_publications',
+  'operations_task_workflow_events',
 ];
 
 test('every operations table enables row-level security', () => {
@@ -103,6 +111,7 @@ test('sanitized publication tables contain no auth user foreign key', () => {
     'risk_publications',
     'relief_public_updates',
     'governance_discussion_publications',
+    'task_submission_publications',
   ]) {
     const definition = extractCreateTable(table);
     assert.doesNotMatch(definition, /references auth\.users/i);
@@ -117,6 +126,8 @@ test('publications, governance decisions, and receipts are append-only or immuta
     'governance_discussion_publications_immutable',
     'governance_decisions_immutable',
     'treasury_execution_receipts_immutable',
+    'task_submission_publications_immutable',
+    'operations_task_workflow_events_immutable',
   ]) {
     assert.match(sql, new RegExp(`create trigger ${trigger}`));
   }
@@ -362,6 +373,95 @@ test('intake gate changes use a service-role-only RPC and append-only audit hist
   );
 });
 
+test('public task results exclude private submission and Auth user identifiers', () => {
+  const publication = extractCreateTable('task_submission_publications');
+
+  assert.match(publication, /task_id uuid not null references public\.community_tasks\(id\)/);
+  assert.match(publication, /result_summary text not null/);
+  assert.match(publication, /wallet_address text check/);
+  assert.doesNotMatch(publication, /references auth\.users/i);
+  assert.doesNotMatch(publication, /submission_id|submitted_by|reviewed_by|actor_id/i);
+});
+
+test('task publications and private workflow events are immutable and separately readable', () => {
+  assert.match(taskModerationClosureSql, /create trigger task_submission_publications_immutable/);
+  assert.match(taskModerationClosureSql, /create trigger operations_task_workflow_events_immutable/);
+  assert.match(
+    extractPolicy('task_submission_publications_public_read', taskModerationClosureSql),
+    /to anon, authenticated[\s\S]*using \(true\)/,
+  );
+  assert.match(
+    extractPolicy('operations_task_workflow_events_staff_read', taskModerationClosureSql),
+    /'reviewer', 'operator', 'governance_admin'/,
+  );
+  assert.doesNotMatch(
+    taskModerationClosureSql,
+    /grant select on table public\.operations_task_workflow_events to anon/,
+  );
+});
+
+test('task workflow RPCs are denied to anon and granted only to authenticated sessions', () => {
+  for (const signature of [
+    'public\\.publish_community_task_v1\\(text, text, text, numeric, text, timestamptz, text\\)',
+    'public\\.review_task_submission_v1\\(uuid, text, text, text, text, text\\)',
+  ]) {
+    assert.match(taskModerationClosureSql, new RegExp(`revoke all on function ${signature} from anon;`));
+    assert.match(taskModerationClosureSql, new RegExp(`grant execute on function ${signature} to authenticated;`));
+    assert.doesNotMatch(taskModerationClosureSql, new RegExp(`grant execute on function ${signature} to anon;`));
+  }
+});
+
+test('task workflow RPC role checks explicitly reject missing users and NULL roles', () => {
+  const explicitRoleCheck = /if v_actor_id is null\s+or v_actor_role is null\s+or v_actor_role not in/g;
+  assert.equal([...taskModerationClosureSql.matchAll(explicitRoleCheck)].length, 2);
+  assert.match(
+    taskModerationClosureSql,
+    /NULL NOT IN \(\.\.\.\) evaluates to NULL and can[\s\S]*security-critical/,
+  );
+});
+
+test('direct staff mutations are revoked so task workflow changes must use RPCs', () => {
+  assert.match(
+    taskModerationClosureSql,
+    /revoke insert, update, delete on table public\.community_tasks from authenticated;/,
+  );
+  assert.match(
+    taskModerationClosureSql,
+    /revoke update, delete on table public\.task_submissions from authenticated;/,
+  );
+  assert.doesNotMatch(
+    taskModerationClosureSql,
+    /grant (?:insert|update|delete)[^;]*operations_task_workflow_events/i,
+  );
+});
+
+test('accepted task review requires consent and rejection cannot publish a result', () => {
+  assert.match(
+    taskModerationClosureSql,
+    /if not v_submission\.public_result_consent then[\s\S]*requires contributor public result consent/,
+  );
+  assert.match(
+    taskModerationClosureSql,
+    /rejected task submissions cannot publish a public result/,
+  );
+  assert.match(
+    taskModerationClosureSql,
+    /case when v_submission\.public_wallet_consent then v_submission\.wallet_address else null end/,
+  );
+  assert.match(taskModerationClosureSql, /accepted never means paid/);
+});
+
+test('task moderation closure contains no network sender or treasury mutation', () => {
+  assert.doesNotMatch(
+    taskModerationClosureSql,
+    /\bhttp_post\b|\bnet\.http\b|\bvault\.secrets\b|\bpg_net\b|\bsend_transaction\b|\bsendtransaction\b/i,
+  );
+  assert.doesNotMatch(
+    taskModerationClosureSql,
+    /\b(?:insert into|update|delete from)\s+public\.treasury_/i,
+  );
+});
+
 test('staging E2E cleanup privilege is narrow and excludes browser roles', async () => {
   assert.match(
     cleanupPrivilegesSql,
@@ -417,6 +517,461 @@ test('staging E2E cleanup privilege is narrow and excludes browser roles', async
   }
 });
 
+test('runtime task RPCs reject authenticated users without an operations role', async () => {
+  const database = await createOperationsDatabase();
+  const userId = '88888888-8888-4888-8888-888888888800';
+
+  try {
+    await database.exec(`
+      insert into auth.users (id) values ('${userId}');
+      select set_config('request.jwt.claim.sub', '${userId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${userId}","role":"authenticated"}',
+        false
+      );
+      set role authenticated;
+    `);
+
+    await assert.rejects(
+      database.query(`
+        select public.publish_community_task_v1(
+          'Unauthorized task',
+          'This task must not be published by an authenticated user without an operations role.',
+          'The runtime test expects this function call to fail before any task row is created.',
+          0,
+          'none',
+          null,
+          'phase-4m-no-role-publish'
+        );
+      `),
+      /operations role is not authorized to publish tasks/,
+    );
+
+    await assert.rejects(
+      database.query(`
+        select * from public.review_task_submission_v1(
+          '88888888-8888-4888-8888-888888888899',
+          'rejected',
+          'Unauthorized review attempt.',
+          null,
+          null,
+          'phase-4m-no-role-review'
+        );
+      `),
+      /operations role is not authorized to review task submissions/,
+    );
+  } finally {
+    await database.close();
+  }
+});
+
+test('runtime operator publishes a public task and one immutable audit event atomically', async () => {
+  const database = await createOperationsDatabase();
+  const operatorId = '88888888-8888-4888-8888-888888888801';
+
+  try {
+    await database.exec(`
+      insert into auth.users (id) values ('${operatorId}');
+      select set_config('request.jwt.claim.sub', '${operatorId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${operatorId}","role":"authenticated","app_metadata":{"operations_role":"operator"}}',
+        false
+      );
+      set role authenticated;
+    `);
+
+    const published = await database.query<{ task_id: string }>(`
+      select public.publish_community_task_v1(
+        'Audited runtime task',
+        'A public task summary created through the role-gated atomic publication function.',
+        'Contributors must provide a substantive result and a safe HTTPS deliverable reference.',
+        25.125,
+        'builders_pool',
+        null,
+        'phase-4m-runtime-publish-001'
+      ) as task_id;
+    `);
+    const taskId = published.rows[0]?.task_id;
+    assert.ok(taskId);
+
+    const task = await database.query<{
+      status: string;
+      publication_status: string;
+      reward_source: string;
+    }>(`
+      select status, publication_status, reward_source
+      from public.community_tasks
+      where id = '${taskId}';
+    `);
+    assert.deepEqual(task.rows, [{
+      status: 'open',
+      publication_status: 'published',
+      reward_source: 'builders_pool',
+    }]);
+
+    const events = await database.query<{
+      action: string;
+      actor_role: string;
+      event_reference: string;
+    }>(`
+      select action, actor_role, event_reference
+      from public.operations_task_workflow_events
+      where entity_reference = '${taskId}';
+    `);
+    assert.deepEqual(events.rows, [{
+      action: 'task_published',
+      actor_role: 'operator',
+      event_reference: 'phase-4m-runtime-publish-001',
+    }]);
+
+    await assert.rejects(
+      database.exec(`
+        insert into public.community_tasks (title, summary, requirements)
+        values (
+          'Direct task write',
+          'This direct authenticated insert must remain unavailable after migration.',
+          'The publication RPC is the only supported task creation path for staff.'
+        );
+      `),
+      /permission denied/,
+    );
+  } finally {
+    await database.close();
+  }
+});
+
+test('runtime accepted review publishes only the consented sanitized result and blocks replay', async () => {
+  const database = await createOperationsDatabase();
+  const operatorId = '88888888-8888-4888-8888-888888888802';
+  const ownerId = '88888888-8888-4888-8888-888888888803';
+  const reviewerId = '88888888-8888-4888-8888-888888888804';
+  const verifiedWallet = '11111111111111111111111111111111';
+
+  try {
+    await database.exec(`
+      insert into auth.users (id) values
+        ('${operatorId}'),
+        ('${ownerId}'),
+        ('${reviewerId}');
+      insert into auth.identities (id, user_id, provider, provider_id, identity_data)
+      values (
+        'identity-phase-4m-accepted-owner',
+        '${ownerId}',
+        'web3',
+        'web3:solana:${verifiedWallet}',
+        '{"sub":"web3:solana:${verifiedWallet}"}'
+      );
+      update public.operations_intake_control
+      set mode = 'wallet_staging', activation_reference = 'phase-4m accepted runtime fixture';
+      select set_config('request.jwt.claim.sub', '${operatorId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${operatorId}","role":"authenticated","app_metadata":{"operations_role":"operator"}}',
+        false
+      );
+      set role authenticated;
+    `);
+
+    const task = await database.query<{ task_id: string }>(`
+      select public.publish_community_task_v1(
+        'Consent-controlled task',
+        'This task is used to verify consent-controlled sanitized result publication.',
+        'The accepted result must omit the private submission id, user id, and wallet by default.',
+        0,
+        'none',
+        null,
+        'phase-4m-accepted-task'
+      ) as task_id;
+    `);
+    const taskId = task.rows[0]?.task_id;
+    assert.ok(taskId);
+
+    await database.exec(`
+      reset role;
+      select set_config('request.jwt.claim.sub', '${ownerId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${ownerId}","role":"authenticated"}',
+        false
+      );
+      set role authenticated;
+    `);
+    const submitted = await database.query<{ submission_id: string }>(`
+      insert into public.task_submissions (
+        task_id,
+        submitted_by,
+        summary,
+        deliverable_url,
+        wallet_address,
+        public_result_consent,
+        public_wallet_consent
+      ) values (
+        '${taskId}',
+        '${ownerId}',
+        'Private contributor details that must never be copied automatically into the public result.',
+        'https://private.example.com/phase-4m-accepted',
+        '${verifiedWallet}',
+        true,
+        false
+      )
+      returning id as submission_id;
+    `);
+    const submissionId = submitted.rows[0]?.submission_id;
+    assert.ok(submissionId);
+
+    await database.exec(`
+      reset role;
+      select set_config('request.jwt.claim.sub', '${reviewerId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${reviewerId}","role":"authenticated","app_metadata":{"operations_role":"reviewer"}}',
+        false
+      );
+      set role authenticated;
+    `);
+    const reviewed = await database.query<{
+      submission_id: string;
+      submission_status: string;
+      publication_id: string;
+    }>(`
+      select * from public.review_task_submission_v1(
+        '${submissionId}',
+        'accepted',
+        'The evidence was reviewed and the sanitized public description is appropriate.',
+        'A sanitized accepted result that contains no private contributor identity or payment promise.',
+        'https://public.example.com/phase-4m-accepted',
+        'phase-4m-accepted-review'
+      );
+    `);
+    assert.equal(reviewed.rows[0]?.submission_status, 'accepted');
+    assert.ok(reviewed.rows[0]?.publication_id);
+
+    const publication = await database.query<{
+      result_summary: string;
+      deliverable_url: string;
+      wallet_address: string | null;
+      review_reference: string;
+    }>(`
+      select result_summary, deliverable_url, wallet_address, review_reference
+      from public.task_submission_publications
+      where id = '${reviewed.rows[0]?.publication_id}';
+    `);
+    assert.deepEqual(publication.rows, [{
+      result_summary: 'A sanitized accepted result that contains no private contributor identity or payment promise.',
+      deliverable_url: 'https://public.example.com/phase-4m-accepted',
+      wallet_address: null,
+      review_reference: 'phase-4m-accepted-review',
+    }]);
+
+    const state = await database.query<{ status: string; event_count: number }>(`
+      select
+        submission.status,
+        (
+          select count(*)::integer
+          from public.operations_task_workflow_events event
+          where event.entity_reference = submission.id
+        ) as event_count
+      from public.task_submissions submission
+      where submission.id = '${submissionId}';
+    `);
+    assert.deepEqual(state.rows, [{ status: 'accepted', event_count: 2 }]);
+
+    await assert.rejects(
+      database.query(`
+        select * from public.review_task_submission_v1(
+          '${submissionId}',
+          'accepted',
+          'Replay attempt.',
+          'A replayed public summary that must never be published a second time.',
+          'https://public.example.com/replay',
+          'phase-4m-replay-review'
+        );
+      `),
+      /already in a terminal review state/,
+    );
+
+    await database.exec('reset role;');
+    await assert.rejects(
+      database.exec(`
+        update public.task_submission_publications
+        set result_summary = 'Mutated result summary that must be rejected.'
+        where id = '${reviewed.rows[0]?.publication_id}';
+      `),
+      /immutable operations record/,
+    );
+  } finally {
+    await database.close();
+  }
+});
+
+test('runtime self-review is denied and rejection creates no public result', async () => {
+  const database = await createOperationsDatabase();
+  const operatorId = '88888888-8888-4888-8888-888888888805';
+  const ownerId = '88888888-8888-4888-8888-888888888806';
+  const reviewerId = '88888888-8888-4888-8888-888888888807';
+  const verifiedWallet = '11111111111111111111111111111111';
+
+  try {
+    await database.exec(`
+      insert into auth.users (id) values
+        ('${operatorId}'),
+        ('${ownerId}'),
+        ('${reviewerId}');
+      insert into auth.identities (id, user_id, provider, provider_id, identity_data)
+      values (
+        'identity-phase-4m-rejected-owner',
+        '${ownerId}',
+        'web3',
+        'web3:solana:${verifiedWallet}',
+        '{"sub":"web3:solana:${verifiedWallet}"}'
+      );
+      update public.operations_intake_control
+      set mode = 'wallet_staging', activation_reference = 'phase-4m rejected runtime fixture';
+      select set_config('request.jwt.claim.sub', '${operatorId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${operatorId}","role":"authenticated","app_metadata":{"operations_role":"operator"}}',
+        false
+      );
+      set role authenticated;
+    `);
+
+    const task = await database.query<{ task_id: string }>(`
+      select public.publish_community_task_v1(
+        'Rejected result task',
+        'This task is used to verify self-review denial and the rejected review path.',
+        'A rejected submission must remain private and must never create a public task result.',
+        null,
+        'none',
+        null,
+        'phase-4m-rejected-task'
+      ) as task_id;
+    `);
+    const taskId = task.rows[0]?.task_id;
+    assert.ok(taskId);
+
+    await database.exec(`
+      reset role;
+      select set_config('request.jwt.claim.sub', '${ownerId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${ownerId}","role":"authenticated","app_metadata":{"operations_role":"reviewer"}}',
+        false
+      );
+      set role authenticated;
+    `);
+    const submitted = await database.query<{ submission_id: string }>(`
+      insert into public.task_submissions (
+        task_id,
+        submitted_by,
+        summary,
+        deliverable_url,
+        wallet_address,
+        public_result_consent,
+        public_wallet_consent
+      ) values (
+        '${taskId}',
+        '${ownerId}',
+        'A private rejected result that is intentionally not consented for public publication.',
+        'https://private.example.com/phase-4m-rejected',
+        '${verifiedWallet}',
+        false,
+        false
+      )
+      returning id as submission_id;
+    `);
+    const submissionId = submitted.rows[0]?.submission_id;
+    assert.ok(submissionId);
+
+    await assert.rejects(
+      database.query(`
+        select * from public.review_task_submission_v1(
+          '${submissionId}',
+          'rejected',
+          'A contributor cannot review their own result.',
+          null,
+          null,
+          'phase-4m-self-review'
+        );
+      `),
+      /reviewers cannot review their own task submission/,
+    );
+
+    await database.exec(`
+      reset role;
+      select set_config('request.jwt.claim.sub', '${reviewerId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${reviewerId}","role":"authenticated","app_metadata":{"operations_role":"reviewer"}}',
+        false
+      );
+      set role authenticated;
+    `);
+    await assert.rejects(
+      database.query(`
+        select * from public.review_task_submission_v1(
+          '${submissionId}',
+          'accepted',
+          'This acceptance must fail because the contributor did not consent to publication.',
+          'A sanitized summary is present but cannot override the contributor consent boundary.',
+          'https://public.example.com/no-consent',
+          'phase-4m-no-consent-review'
+        );
+      `),
+      /requires contributor public result consent/,
+    );
+
+    const rejected = await database.query<{
+      submission_status: string;
+      publication_id: string | null;
+    }>(`
+      select submission_status, publication_id
+      from public.review_task_submission_v1(
+        '${submissionId}',
+        'rejected',
+        'The submitted evidence did not satisfy the published task requirements.',
+        null,
+        null,
+        'phase-4m-rejected-review'
+      );
+    `);
+    assert.deepEqual(rejected.rows, [{ submission_status: 'rejected', publication_id: null }]);
+
+    const outcome = await database.query<{
+      publication_count: number;
+      rejection_event_count: number;
+    }>(`
+      select
+        (select count(*)::integer from public.task_submission_publications where task_id = '${taskId}') as publication_count,
+        (
+          select count(*)::integer
+          from public.operations_task_workflow_events
+          where entity_reference = '${submissionId}'
+            and action = 'submission_rejected'
+        ) as rejection_event_count;
+    `);
+    assert.deepEqual(outcome.rows, [{ publication_count: 0, rejection_event_count: 1 }]);
+
+    await assert.rejects(
+      database.query(`
+        select * from public.review_task_submission_v1(
+          '${submissionId}',
+          'rejected',
+          'Replay attempt.',
+          null,
+          null,
+          'phase-4m-rejected-replay'
+        );
+      `),
+      /already in a terminal review state/,
+    );
+  } finally {
+    await database.close();
+  }
+});
+
 test('all migrations create the expected schema, policy, and trigger totals', async () => {
   const database = await createOperationsDatabase();
   try {
@@ -442,9 +997,9 @@ test('all migrations create the expected schema, policy, and trigger totals', as
         and relation.relname = any(array[${expectedTables.map(quoteSql).join(', ')}]);
     `);
 
-    assert.equal(tableCount.rows[0]?.count, 15);
-    assert.equal(policyCount.rows[0]?.count, 37);
-    assert.equal(triggerCount.rows[0]?.count, 35);
+    assert.equal(tableCount.rows[0]?.count, 17);
+    assert.equal(policyCount.rows[0]?.count, 39);
+    assert.equal(triggerCount.rows[0]?.count, 37);
   } finally {
     await database.close();
   }
@@ -1107,6 +1662,7 @@ async function createOperationsDatabase(): Promise<PGlite> {
   await database.exec(identityCompatibilitySql);
   await database.exec(walletResolverLintCleanupSql);
   await database.exec(intakeGateAuditSql);
+  await database.exec(taskModerationClosureSql);
   return database;
 }
 

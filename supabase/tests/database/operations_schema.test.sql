@@ -27,6 +27,8 @@ select has_table('public'::name, 'governance_discussion_publications'::name);
 select has_table('public'::name, 'governance_decisions'::name);
 select has_table('public'::name, 'treasury_execution_intents'::name);
 select has_table('public'::name, 'treasury_execution_receipts'::name);
+select has_table('public'::name, 'task_submission_publications'::name);
+select has_table('public'::name, 'operations_task_workflow_events'::name);
 
 select is(
   (
@@ -48,11 +50,13 @@ select is(
         'governance_discussion_publications',
         'governance_decisions',
         'treasury_execution_intents',
-        'treasury_execution_receipts'
+        'treasury_execution_receipts',
+        'task_submission_publications',
+        'operations_task_workflow_events'
       ])
   ),
-  15,
-  'all 15 operations tables exist, including gate control and audit history'
+  17,
+  'all 17 operations tables exist, including task result and workflow audit separation'
 );
 
 select is(
@@ -76,11 +80,13 @@ select is(
         'governance_discussion_publications',
         'governance_decisions',
         'treasury_execution_intents',
-        'treasury_execution_receipts'
+        'treasury_execution_receipts',
+        'task_submission_publications',
+        'operations_task_workflow_events'
       ])
       and relation.relrowsecurity
   ),
-  15,
+  17,
   'RLS is enabled on every operations table'
 );
 
@@ -104,11 +110,13 @@ select is(
         'governance_discussion_publications',
         'governance_decisions',
         'treasury_execution_intents',
-        'treasury_execution_receipts'
+        'treasury_execution_receipts',
+        'task_submission_publications',
+        'operations_task_workflow_events'
       ])
   ),
-  37,
-  'the reviewed operations policy total is unchanged'
+  39,
+  'the reviewed operations policy total includes separated task publication and audit reads'
 );
 
 select is(
@@ -134,11 +142,13 @@ select is(
         'governance_discussion_publications',
         'governance_decisions',
         'treasury_execution_intents',
-        'treasury_execution_receipts'
+        'treasury_execution_receipts',
+        'task_submission_publications',
+        'operations_task_workflow_events'
       ])
   ),
-  35,
-  'the reviewed trigger total includes throttles, control touch, and immutable gate audit history'
+  37,
+  'the reviewed trigger total includes immutable task publications and task workflow events'
 );
 
 select ok(
@@ -345,6 +355,126 @@ select ok(
       and procedure.proname = 'protect_published_operations_record'
   ) like '%cannot be unpublished%',
   'published protection retains the reviewed failure boundary'
+);
+
+select ok(
+  has_table_privilege(
+    'anon',
+    'public.task_submission_publications',
+    'SELECT'
+  )
+    and has_table_privilege(
+      'authenticated',
+      'public.task_submission_publications',
+      'SELECT'
+    )
+    and not exists (
+      select 1
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'task_submission_publications'
+        and column_name = any(array[
+          'submission_id',
+          'submitted_by',
+          'reviewed_by',
+          'actor_id'
+        ])
+    ),
+  'public task results are readable and exclude private submission or Auth identifiers'
+);
+
+select ok(
+  not has_table_privilege(
+    'anon',
+    'public.operations_task_workflow_events',
+    'SELECT'
+  )
+    and has_table_privilege(
+      'authenticated',
+      'public.operations_task_workflow_events',
+      'SELECT'
+    )
+    and exists (
+      select 1
+      from pg_catalog.pg_trigger trigger
+      join pg_catalog.pg_class relation on relation.oid = trigger.tgrelid
+      join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+      where not trigger.tgisinternal
+        and namespace.nspname = 'public'
+        and relation.relname = 'operations_task_workflow_events'
+        and trigger.tgname = 'operations_task_workflow_events_immutable'
+    ),
+  'task workflow audit is private to staff policy scope and immutable'
+);
+
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.publish_community_task_v1(text,text,text,numeric,text,timestamp with time zone,text)',
+    'EXECUTE'
+  )
+    and not has_function_privilege(
+      'anon',
+      'public.publish_community_task_v1(text,text,text,numeric,text,timestamp with time zone,text)',
+      'EXECUTE'
+    )
+    and has_function_privilege(
+      'authenticated',
+      'public.review_task_submission_v1(uuid,text,text,text,text,text)',
+      'EXECUTE'
+    )
+    and not has_function_privilege(
+      'anon',
+      'public.review_task_submission_v1(uuid,text,text,text,text,text)',
+      'EXECUTE'
+    )
+    and not has_table_privilege(
+      'authenticated',
+      'public.community_tasks',
+      'INSERT,UPDATE,DELETE'
+    )
+    and not has_table_privilege(
+      'authenticated',
+      'public.task_submissions',
+      'UPDATE,DELETE'
+    ),
+  'authenticated staff must use the audited task workflow RPCs instead of direct writes'
+);
+
+select ok(
+  (
+    select pg_get_functiondef(procedure.oid)
+    from pg_catalog.pg_proc procedure
+    join pg_catalog.pg_namespace namespace
+      on namespace.oid = procedure.pronamespace
+    where namespace.nspname = 'public'
+      and procedure.proname = 'publish_community_task_v1'
+  ) ilike '%v_actor_role is null%'
+    and (
+      select pg_get_functiondef(procedure.oid)
+      from pg_catalog.pg_proc procedure
+      join pg_catalog.pg_namespace namespace
+        on namespace.oid = procedure.pronamespace
+      where namespace.nspname = 'public'
+        and procedure.proname = 'review_task_submission_v1'
+    ) ilike '%v_actor_role is null%'
+    and (
+      select pg_get_functiondef(procedure.oid)
+      from pg_catalog.pg_proc procedure
+      join pg_catalog.pg_namespace namespace
+        on namespace.oid = procedure.pronamespace
+      where namespace.nspname = 'public'
+        and procedure.proname = 'review_task_submission_v1'
+    ) ilike '%public_result_consent%'
+    and (
+      select pg_get_functiondef(procedure.oid)
+      from pg_catalog.pg_proc procedure
+      join pg_catalog.pg_namespace namespace
+        on namespace.oid = procedure.pronamespace
+      where namespace.nspname = 'public'
+        and procedure.proname = 'review_task_submission_v1'
+    ) ilike '%reviewers cannot review their own task submission%',
+  'task workflow RPCs explicitly reject NULL roles, require publication consent, and deny self-review'
 );
 
 select ok(

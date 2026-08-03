@@ -6,6 +6,9 @@ export type PublicRiskStatus = 'published' | 'resolved' | 'dismissed';
 export type PublicReliefOutcome = 'reviewing' | 'approved' | 'rejected' | 'paid' | 'cancelled';
 export type GovernanceDecisionValue = 'approved' | 'rejected' | 'cancelled';
 export type MyOperationsSubmissionKind = 'task' | 'risk' | 'relief' | 'discussion';
+export type OperationsStaffRole = 'reviewer' | 'operator' | 'governance_admin';
+export type TaskReviewDecision = 'accepted' | 'rejected';
+export type CommunityTaskRewardSource = 'builders_pool' | 'grant' | 'sponsor' | 'none';
 
 export interface CommunityTask {
   id: string;
@@ -13,8 +16,21 @@ export interface CommunityTask {
   summary: string;
   requirements: string;
   rewardBudgetUsdc: string | null;
+  rewardSource: string | null;
   status: CommunityTaskStatus;
   submissionDeadline: string | null;
+  publishedAt: string;
+}
+
+export interface PublicTaskResult {
+  id: string;
+  taskId: string;
+  taskTitle: string;
+  resultSummary: string;
+  deliverableUrl: string;
+  walletAddress: string | null;
+  reviewReference: string;
+  acceptedAt: string;
   publishedAt: string;
 }
 
@@ -57,6 +73,7 @@ export interface PublicGovernanceDecision {
 
 export interface OperationsOverview {
   tasks: CommunityTask[];
+  taskResults: PublicTaskResult[];
   riskReports: PublicRiskReport[];
   reliefUpdates: PublicReliefUpdate[];
   discussions: PublicDiscussion[];
@@ -78,6 +95,8 @@ export interface TaskSubmissionInput {
   summary: string;
   deliverableUrl: string;
   walletAddress: string;
+  publicResultConsent: boolean;
+  publicWalletConsent: boolean;
 }
 
 export interface RiskReportInput {
@@ -105,6 +124,76 @@ export interface ValidatedTaskSubmission {
   summary: string;
   deliverableUrl: string;
   walletAddress: string;
+  publicResultConsent: boolean;
+  publicWalletConsent: boolean;
+}
+
+export interface CommunityTaskPublicationInput {
+  title: string;
+  summary: string;
+  requirements: string;
+  rewardBudgetUsdc: string;
+  rewardSource: CommunityTaskRewardSource;
+  submissionDeadline: string;
+  auditReference: string;
+}
+
+export interface ValidatedCommunityTaskPublication {
+  title: string;
+  summary: string;
+  requirements: string;
+  rewardBudgetUsdc: string | null;
+  rewardSource: CommunityTaskRewardSource;
+  submissionDeadline: string | null;
+  auditReference: string;
+}
+
+export interface TaskSubmissionReviewInput {
+  submissionId: string;
+  decision: TaskReviewDecision;
+  reviewerNotes: string;
+  publicResultSummary: string;
+  publicDeliverableUrl: string;
+  auditReference: string;
+}
+
+export interface ValidatedTaskSubmissionReview {
+  submissionId: string;
+  decision: TaskReviewDecision;
+  reviewerNotes: string;
+  publicResultSummary: string | null;
+  publicDeliverableUrl: string | null;
+  auditReference: string;
+}
+
+export interface StaffTaskSubmission {
+  id: string;
+  taskId: string;
+  taskTitle: string;
+  summary: string;
+  deliverableUrl: string;
+  walletAddress: string;
+  publicResultConsent: boolean;
+  publicWalletConsent: boolean;
+  status: string;
+  submittedBy: string;
+  reviewerNotes: string | null;
+  createdAt: string;
+}
+
+export interface TaskWorkflowEvent {
+  eventId: string;
+  entityType: 'community_task' | 'task_submission';
+  entityReference: string;
+  action: 'task_published' | 'submission_accepted' | 'submission_rejected' | 'result_published';
+  actorRole: OperationsStaffRole;
+  eventReference: string;
+  createdAt: string;
+}
+
+export interface OperationsStaffWorkspace {
+  submissions: StaffTaskSubmission[];
+  events: TaskWorkflowEvent[];
 }
 
 export interface ValidatedRiskReport {
@@ -135,11 +224,73 @@ export class OperationsValidationError extends Error {
 }
 
 export function validateTaskSubmission(input: TaskSubmissionInput): ValidatedTaskSubmission {
+  if (input.publicWalletConsent && !input.publicResultConsent) {
+    throw new OperationsValidationError('公开钱包需要先同意公开脱敏成果');
+  }
+
   return {
     taskId: validateUuid(input.taskId, '任务'),
     summary: validateText(input.summary, '成果说明', 20, 5_000),
     deliverableUrl: validateHttpsUrl(input.deliverableUrl, '成果链接', true),
     walletAddress: validateSolanaAddress(input.walletAddress, '收款钱包', true),
+    publicResultConsent: input.publicResultConsent,
+    publicWalletConsent: input.publicWalletConsent,
+  };
+}
+
+export function validateCommunityTaskPublication(
+  input: CommunityTaskPublicationInput,
+): ValidatedCommunityTaskPublication {
+  const rewardSources: CommunityTaskRewardSource[] = [
+    'builders_pool',
+    'grant',
+    'sponsor',
+    'none',
+  ];
+  if (!rewardSources.includes(input.rewardSource)) {
+    throw new OperationsValidationError('任务奖励来源无效');
+  }
+
+  const deadline = input.submissionDeadline.trim();
+  if (deadline && (!Number.isFinite(Date.parse(deadline)) || Date.parse(deadline) <= Date.now())) {
+    throw new OperationsValidationError('任务截止时间必须是未来的有效时间');
+  }
+
+  return {
+    title: validateText(input.title, '任务标题', 4, 160),
+    summary: validateText(input.summary, '任务摘要', 20, 3_000),
+    requirements: validateText(input.requirements, '任务要求', 20, 5_000),
+    rewardBudgetUsdc: validateOptionalUsdcBudget(input.rewardBudgetUsdc),
+    rewardSource: input.rewardSource,
+    submissionDeadline: deadline ? new Date(deadline).toISOString() : null,
+    auditReference: validateAuditReference(input.auditReference, '任务发布审计引用', 180),
+  };
+}
+
+export function validateTaskSubmissionReview(
+  input: TaskSubmissionReviewInput,
+): ValidatedTaskSubmissionReview {
+  if (input.decision !== 'accepted' && input.decision !== 'rejected') {
+    throw new OperationsValidationError('审核决定必须是 accepted 或 rejected');
+  }
+
+  const publicSummary = input.publicResultSummary.trim();
+  const publicUrl = input.publicDeliverableUrl.trim();
+  if (input.decision === 'rejected' && (publicSummary || publicUrl)) {
+    throw new OperationsValidationError('拒绝任务时不能发布公开成果');
+  }
+
+  return {
+    submissionId: validateUuid(input.submissionId, '任务提交'),
+    decision: input.decision,
+    reviewerNotes: validateText(input.reviewerNotes, '审核说明', 1, 5_000),
+    publicResultSummary: input.decision === 'accepted'
+      ? validateText(publicSummary, '公开成果摘要', 20, 3_000)
+      : null,
+    publicDeliverableUrl: input.decision === 'accepted'
+      ? validateHttpsUrl(publicUrl, '公开成果链接', true)
+      : null,
+    auditReference: validateAuditReference(input.auditReference, '任务审核审计引用', 160),
   };
 }
 
@@ -233,6 +384,44 @@ export function validateUsdcAmount(rawValue: string): string {
 
   if (amount > MAX_USDC_REQUEST) {
     throw new OperationsValidationError(`申请金额不能超过 ${MAX_USDC_REQUEST} USDC`);
+  }
+
+  return value;
+}
+
+export function validateOptionalUsdcBudget(rawValue: string): string | null {
+  const value = rawValue.trim();
+  if (!value) {
+    return null;
+  }
+
+  if (!/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/.test(value)) {
+    throw new OperationsValidationError('任务预算必须是最多 6 位小数的非负 USDC 数字');
+  }
+
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount > MAX_USDC_REQUEST) {
+    throw new OperationsValidationError(`任务预算不能超过 ${MAX_USDC_REQUEST} USDC`);
+  }
+
+  return value;
+}
+
+export function validateAuditReference(
+  rawValue: string,
+  label: string,
+  maxLength: number,
+): string {
+  const value = rawValue.trim();
+  if (value.length < 10 || value.length > maxLength) {
+    throw new OperationsValidationError(`${label}必须为 10 到 ${maxLength} 个字符`);
+  }
+
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    if (codePoint < 32 || codePoint === 127) {
+      throw new OperationsValidationError(`${label}不能包含控制字符`);
+    }
   }
 
   return value;

@@ -22,6 +22,10 @@ import {
   WalletCards,
 } from 'lucide-react';
 import TurnstileChallenge from './TurnstileChallenge';
+import type {
+  CommunityTaskPublicationInput,
+  TaskSubmissionReviewInput,
+} from '../features/operations/domain';
 import {
   submitDiscussion,
   submitReliefApplication,
@@ -32,10 +36,11 @@ import { resolveOperationsWalletAccess } from '../features/operations/walletAcce
 import type { OperationsWalletAuthState } from '../hooks/useOperationsWalletAuth';
 import { useMyOperationsSubmissions } from '../hooks/useMyOperationsSubmissions';
 import { useOperations } from '../hooks/useOperations';
+import { useOperationsStaff } from '../hooks/useOperationsStaff';
 import { useOperationsWalletAuth } from '../hooks/useOperationsWalletAuth';
 import { operationsBackendConfig } from '../lib/operationsSupabase';
 
-type OperationsTab = 'tasks' | 'risk' | 'relief' | 'discussion' | 'mine' | 'decisions';
+type OperationsTab = 'tasks' | 'risk' | 'relief' | 'discussion' | 'mine' | 'decisions' | 'staff';
 type NoticeTone = 'success' | 'error';
 
 interface SubmissionNotice {
@@ -55,6 +60,8 @@ const TABS: {
   { key: 'mine', label: '我的提交', icon: UserRoundCheck },
   { key: 'decisions', label: '公开决定', icon: BookOpenCheck },
 ];
+
+const STAFF_TAB = { key: 'staff' as const, label: '运营审核', icon: ShieldCheck };
 
 const fieldClassName = [
   'w-full rounded border border-zinc-800 bg-zinc-950 px-3 py-2.5',
@@ -76,6 +83,7 @@ export default function OperationsDashboard() {
   const mySubmissions = useMyOperationsSubmissions(
     walletAccess.sessionVerified ? walletAuth.authenticatedWallet : null,
   );
+  const staff = useOperationsStaff(walletAuth.operationsRole);
   const intakeReady = walletAccess.intakeEnabled;
 
   const counts = useMemo(() => ({
@@ -85,7 +93,9 @@ export default function OperationsDashboard() {
     discussion: operations.overview.discussions.length,
     mine: mySubmissions.submissions.length,
     decisions: operations.overview.governanceDecisions.length,
-  }), [mySubmissions.submissions.length, operations.overview]);
+    staff: staff.workspace.submissions.length,
+  }), [mySubmissions.submissions.length, operations.overview, staff.workspace.submissions.length]);
+  const visibleTabs = walletAuth.operationsRole ? [...TABS, STAFF_TAB] : TABS;
 
   return (
     <div className="select-text space-y-6">
@@ -169,7 +179,7 @@ export default function OperationsDashboard() {
 
       <section className="rounded-xl border border-zinc-800 bg-zinc-950/70">
         <div className="flex overflow-x-auto border-b border-zinc-800">
-          {TABS.map((tab) => {
+          {visibleTabs.map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.key;
             return (
@@ -199,6 +209,7 @@ export default function OperationsDashboard() {
           {activeTab === 'tasks' && (
             <TasksPanel
               tasks={operations.overview.tasks}
+              taskResults={operations.overview.taskResults}
               loaded={operations.status === 'ready'}
               authenticatedWallet={intakeReady ? walletAuth.authenticatedWallet : null}
               onSubmitted={mySubmissions.refresh}
@@ -237,6 +248,13 @@ export default function OperationsDashboard() {
               loaded={operations.status === 'ready'}
             />
           )}
+          {activeTab === 'staff' && walletAuth.operationsRole && (
+            <StaffOperationsPanel
+              role={walletAuth.operationsRole}
+              state={staff}
+              onPublicDataChanged={operations.refresh}
+            />
+          )}
         </div>
       </section>
 
@@ -272,11 +290,13 @@ export default function OperationsDashboard() {
 
 function TasksPanel({
   tasks,
+  taskResults,
   loaded,
   authenticatedWallet,
   onSubmitted,
 }: {
   tasks: ReturnType<typeof useOperations>['overview']['tasks'];
+  taskResults: ReturnType<typeof useOperations>['overview']['taskResults'];
   loaded: boolean;
   authenticatedWallet: string | null;
   onSubmitted: () => Promise<void>;
@@ -286,6 +306,8 @@ function TasksPanel({
     summary: '',
     deliverableUrl: '',
     walletAddress: authenticatedWallet ?? '',
+    publicResultConsent: false,
+    publicWalletConsent: false,
   });
   const submission = useSubmission();
 
@@ -302,6 +324,8 @@ function TasksPanel({
         ...current,
         summary: '',
         deliverableUrl: '',
+        publicResultConsent: false,
+        publicWalletConsent: false,
       })),
     );
     if (succeeded) {
@@ -311,14 +335,15 @@ function TasksPanel({
 
   return (
     <TwoColumnPanel>
-      <PublicList
-        title="公开社区任务"
-        icon={ClipboardCheck}
-        loaded={loaded}
-        emptyText="当前没有已发布的开放任务。未使用示例任务填充。"
-      >
-        {tasks.map((task) => (
-          <article key={task.id} className="rounded border border-zinc-800 bg-zinc-950 p-4">
+      <div className="space-y-6">
+        <PublicList
+          title="公开社区任务"
+          icon={ClipboardCheck}
+          loaded={loaded}
+          emptyText="当前没有已发布的开放任务。未使用示例任务填充。"
+        >
+          {tasks.map((task) => (
+            <article key={task.id} className="rounded border border-zinc-800 bg-zinc-950 p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h4 className="text-sm font-black text-zinc-200">{task.title}</h4>
@@ -334,9 +359,32 @@ function TasksPanel({
               <summary className="cursor-pointer font-black text-zinc-400">查看验收要求</summary>
               <p className="mt-2 whitespace-pre-wrap leading-relaxed">{task.requirements}</p>
             </details>
-          </article>
-        ))}
-      </PublicList>
+            </article>
+          ))}
+        </PublicList>
+        <PublicList
+          title="经同意脱敏公开的任务成果"
+          icon={BadgeCheck}
+          loaded={loaded}
+          emptyText="当前没有经审核并获得公开同意的任务成果。"
+        >
+          {taskResults.map((result) => (
+            <article key={result.id} className="rounded border border-emerald-400/15 bg-emerald-400/[0.025] p-4">
+              <h4 className="text-sm font-black text-zinc-200">{result.taskTitle}</h4>
+              <p className="mt-2 whitespace-pre-wrap text-[11px] leading-relaxed text-zinc-500">
+                {result.resultSummary}
+              </p>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[10px] text-zinc-600">
+                <SafeLink href={result.deliverableUrl} label="公开成果" />
+                <span>{result.walletAddress ? `贡献钱包：${shorten(result.walletAddress)}` : '贡献钱包未公开'}</span>
+              </div>
+              <p className="mt-2 text-[9px] text-zinc-700">
+                审核引用：{result.reviewReference} · accepted 不代表已付款
+              </p>
+            </article>
+          ))}
+        </PublicList>
+      </div>
 
       <SubmissionForm
         title="提交任务成果"
@@ -382,6 +430,29 @@ function TasksPanel({
           value={form.walletAddress}
           label="已认证提交钱包（付款前仍需独立复核）"
         />
+        <label className="flex items-start gap-2 text-[10px] leading-relaxed text-zinc-500">
+          <input
+            type="checkbox"
+            checked={form.publicResultConsent}
+            onChange={(event) => setForm({
+              ...form,
+              publicResultConsent: event.target.checked,
+              publicWalletConsent: event.target.checked ? form.publicWalletConsent : false,
+            })}
+            className="mt-0.5"
+          />
+          我同意：仅在成果被接受后，审核者可公开脱敏摘要与成果 HTTPS 链接；原始私有提交不会公开。
+        </label>
+        <label className="flex items-start gap-2 text-[10px] leading-relaxed text-zinc-500">
+          <input
+            type="checkbox"
+            checked={form.publicWalletConsent}
+            disabled={!form.publicResultConsent}
+            onChange={(event) => setForm({ ...form, publicWalletConsent: event.target.checked })}
+            className="mt-0.5"
+          />
+          我另行同意在脱敏公开成果中展示当前钱包地址（可选；不影响审核）。
+        </label>
       </SubmissionForm>
     </TwoColumnPanel>
   );
@@ -930,6 +1001,219 @@ function DecisionsPanel({
           </article>
         ))}
       </div>
+    </div>
+  );
+}
+
+function StaffOperationsPanel({
+  role,
+  state,
+  onPublicDataChanged,
+}: {
+  role: NonNullable<OperationsWalletAuthState['operationsRole']>;
+  state: ReturnType<typeof useOperationsStaff>;
+  onPublicDataChanged: () => Promise<void>;
+}) {
+  const [taskForm, setTaskForm] = useState<CommunityTaskPublicationInput>({
+    title: '',
+    summary: '',
+    requirements: '',
+    rewardBudgetUsdc: '',
+    rewardSource: 'none',
+    submissionDeadline: '',
+    auditReference: '',
+  });
+  const [reviewForm, setReviewForm] = useState<TaskSubmissionReviewInput>({
+    submissionId: '',
+    decision: 'rejected',
+    reviewerNotes: '',
+    publicResultSummary: '',
+    publicDeliverableUrl: '',
+    auditReference: '',
+  });
+  const taskSubmission = useSubmission();
+  const reviewSubmission = useSubmission();
+  const selected = state.workspace.submissions.find((item) => item.id === reviewForm.submissionId);
+
+  async function handlePublish(event: FormEvent) {
+    event.preventDefault();
+    const succeeded = await taskSubmission.run(
+      async () => { await state.publishTask(taskForm); },
+      '社区任务已通过受控 RPC 发布并写入不可变审计事件。',
+      () => setTaskForm({
+        title: '',
+        summary: '',
+        requirements: '',
+        rewardBudgetUsdc: '',
+        rewardSource: 'none',
+        submissionDeadline: '',
+        auditReference: '',
+      }),
+    );
+    if (succeeded) {
+      await onPublicDataChanged();
+    }
+  }
+
+  async function handleReview(event: FormEvent) {
+    event.preventDefault();
+    const succeeded = await reviewSubmission.run(
+      () => state.reviewSubmission(reviewForm),
+      reviewForm.decision === 'accepted'
+        ? '成果已接受；仅经贡献者同意的脱敏结果已公开。accepted 不代表已付款。'
+        : '成果已拒绝并写入不可变审计事件；没有公开成果。',
+      () => setReviewForm({
+        submissionId: '',
+        decision: 'rejected',
+        reviewerNotes: '',
+        publicResultSummary: '',
+        publicDeliverableUrl: '',
+        auditReference: '',
+      }),
+    );
+    if (succeeded) {
+      await onPublicDataChanged();
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-3 rounded border border-violet-400/20 bg-violet-400/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="text-sm font-black text-violet-200">受控运营工作台</h3>
+          <p className="mt-1 text-[10px] text-zinc-500">
+            当前角色：{role}。所有发布与审核走 security-definer RPC、行锁和不可变审计事件；不触发付款。
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void state.refresh()}
+          disabled={state.loading}
+          className="inline-flex items-center justify-center gap-2 rounded border border-violet-400/25 px-3 py-2 text-[10px] font-black text-violet-200 disabled:opacity-40"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${state.loading ? 'animate-spin' : ''}`} />
+          刷新审核队列
+        </button>
+      </div>
+
+      {state.error && (
+        <div className="rounded border border-red-400/20 bg-red-400/5 p-3 text-[10px] text-red-200">
+          {state.error}
+        </div>
+      )}
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        {role !== 'reviewer' && (
+          <form onSubmit={handlePublish} className="space-y-3 rounded border border-zinc-800 bg-zinc-950 p-4">
+            <h4 className="text-sm font-black text-zinc-200">发布社区任务</h4>
+            <FormField label="任务标题（4–160 字）">
+              <input className={fieldClassName} value={taskForm.title} onChange={(event) => setTaskForm({ ...taskForm, title: event.target.value })} required />
+            </FormField>
+            <FormField label="公开摘要（20–3000 字）">
+              <textarea className={`${fieldClassName} min-h-24`} value={taskForm.summary} onChange={(event) => setTaskForm({ ...taskForm, summary: event.target.value })} required />
+            </FormField>
+            <FormField label="验收要求（20–5000 字）">
+              <textarea className={`${fieldClassName} min-h-28`} value={taskForm.requirements} onChange={(event) => setTaskForm({ ...taskForm, requirements: event.target.value })} required />
+            </FormField>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="预算上限 USDC（可空，0–1B）">
+                <input className={fieldClassName} value={taskForm.rewardBudgetUsdc} onChange={(event) => setTaskForm({ ...taskForm, rewardBudgetUsdc: event.target.value })} inputMode="decimal" />
+              </FormField>
+              <FormField label="奖励来源">
+                <select className={fieldClassName} value={taskForm.rewardSource} onChange={(event) => setTaskForm({ ...taskForm, rewardSource: event.target.value as CommunityTaskPublicationInput['rewardSource'] })}>
+                  <option value="none">none / 尚无资金</option>
+                  <option value="builders_pool">builders_pool</option>
+                  <option value="grant">grant</option>
+                  <option value="sponsor">sponsor</option>
+                </select>
+              </FormField>
+            </div>
+            <FormField label="提交截止时间（可空）">
+              <input type="datetime-local" className={fieldClassName} value={taskForm.submissionDeadline} onChange={(event) => setTaskForm({ ...taskForm, submissionDeadline: event.target.value })} />
+            </FormField>
+            <FormField label="唯一审计引用（10–180 字）">
+              <input className={fieldClassName} value={taskForm.auditReference} onChange={(event) => setTaskForm({ ...taskForm, auditReference: event.target.value })} required />
+            </FormField>
+            <button type="submit" disabled={state.submitting} className="w-full rounded border border-violet-400/30 bg-violet-400/10 px-4 py-2.5 text-xs font-black text-violet-200 disabled:opacity-40">
+              发布任务并记录审计事件
+            </button>
+            {taskSubmission.notice && <InlineNotice notice={taskSubmission.notice} />}
+          </form>
+        )}
+
+        <form onSubmit={handleReview} className="space-y-3 rounded border border-zinc-800 bg-zinc-950 p-4">
+          <h4 className="text-sm font-black text-zinc-200">审核任务成果</h4>
+          <FormField label="待审核提交">
+            <select className={fieldClassName} value={reviewForm.submissionId} onChange={(event) => setReviewForm({ ...reviewForm, submissionId: event.target.value })} required>
+              <option value="">选择私有提交</option>
+              {state.workspace.submissions.map((submission) => (
+                <option key={submission.id} value={submission.id}>{submission.taskTitle} · {shorten(submission.id)}</option>
+              ))}
+            </select>
+          </FormField>
+          {selected && (
+            <div className="rounded border border-zinc-900 bg-zinc-900/30 p-3 text-[10px] leading-relaxed text-zinc-500">
+              <p className="whitespace-pre-wrap">{selected.summary}</p>
+              <div className="mt-2 flex flex-wrap gap-3">
+                <SafeLink href={selected.deliverableUrl} label="私有提交成果" />
+                <span>公开成果同意：{selected.publicResultConsent ? '是' : '否'}</span>
+                <span>公开钱包同意：{selected.publicWalletConsent ? '是' : '否'}</span>
+              </div>
+            </div>
+          )}
+          <FormField label="审核决定">
+            <select className={fieldClassName} value={reviewForm.decision} onChange={(event) => setReviewForm({ ...reviewForm, decision: event.target.value as 'accepted' | 'rejected' })}>
+              <option value="rejected">rejected</option>
+              <option value="accepted" disabled={!selected?.publicResultConsent}>accepted（需贡献者公开成果同意）</option>
+            </select>
+          </FormField>
+          <FormField label="审核说明（必填）">
+            <textarea className={`${fieldClassName} min-h-24`} value={reviewForm.reviewerNotes} onChange={(event) => setReviewForm({ ...reviewForm, reviewerNotes: event.target.value })} required />
+          </FormField>
+          {reviewForm.decision === 'accepted' && (
+            <>
+              <FormField label="脱敏公开成果摘要（20–3000 字）">
+                <textarea className={`${fieldClassName} min-h-24`} value={reviewForm.publicResultSummary} onChange={(event) => setReviewForm({ ...reviewForm, publicResultSummary: event.target.value })} required />
+              </FormField>
+              <FormField label="安全 HTTPS 公开成果链接">
+                <input type="url" className={fieldClassName} value={reviewForm.publicDeliverableUrl} onChange={(event) => setReviewForm({ ...reviewForm, publicDeliverableUrl: event.target.value })} required />
+              </FormField>
+            </>
+          )}
+          <FormField label="唯一审计引用（10–160 字）">
+            <input className={fieldClassName} value={reviewForm.auditReference} onChange={(event) => setReviewForm({ ...reviewForm, auditReference: event.target.value })} required />
+          </FormField>
+          <button type="submit" disabled={state.submitting || !selected} className="w-full rounded border border-cyan-400/30 bg-cyan-400/10 px-4 py-2.5 text-xs font-black text-cyan-200 disabled:opacity-40">
+            提交审核决定（不执行付款）
+          </button>
+          {reviewSubmission.notice && <InlineNotice notice={reviewSubmission.notice} />}
+        </form>
+      </div>
+
+      <div className="rounded border border-zinc-800 bg-zinc-950 p-4">
+        <h4 className="text-sm font-black text-zinc-200">不可变任务工作流事件</h4>
+        {state.workspace.events.length === 0 ? (
+          <p className="mt-3 text-[10px] text-zinc-600">暂无审计事件。</p>
+        ) : (
+          <div className="mt-3 grid gap-2 lg:grid-cols-2">
+            {state.workspace.events.map((event) => (
+              <div key={event.eventId} className="rounded border border-zinc-900 p-3 text-[10px] text-zinc-500">
+                <div className="flex justify-between gap-2"><strong className="text-zinc-300">{event.action}</strong><span>{event.actorRole}</span></div>
+                <p className="mt-2 break-all">{event.eventReference}</p>
+                <p className="mt-1 text-zinc-700">{formatDate(event.createdAt)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function InlineNotice({ notice }: { notice: SubmissionNotice }) {
+  return (
+    <div className={`rounded border px-3 py-2 text-[10px] ${notice.tone === 'success' ? 'border-emerald-400/25 text-emerald-200' : 'border-red-400/25 text-red-200'}`}>
+      {notice.message}
     </div>
   );
 }

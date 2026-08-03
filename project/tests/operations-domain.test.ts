@@ -5,11 +5,15 @@ import {
   OperationsValidationError,
   isSolanaPublicKey,
   validateDiscussion,
+  validateAuditReference,
+  validateCommunityTaskPublication,
   validateHttpsUrl,
   validateReliefApplication,
   validateRiskReport,
   validateTaskSubmission,
+  validateTaskSubmissionReview,
   validateUsdcAmount,
+  validateOptionalUsdcBudget,
 } from '../src/features/operations/domain.ts';
 
 const VALID_WALLET = 'HrLBQxUD3XHkB3KABjHXTiBHuAe6jVP2UPqiwmpmH8EY';
@@ -63,6 +67,8 @@ test('task submission normalizes text and requires a valid task and wallet', () 
     summary: '  This delivery contains enough detail to pass validation.  ',
     deliverableUrl: 'https://github.com/example/repository/pull/1',
     walletAddress: VALID_WALLET,
+    publicResultConsent: true,
+    publicWalletConsent: false,
   });
 
   assert.equal(result.summary, 'This delivery contains enough detail to pass validation.');
@@ -75,8 +81,85 @@ test('task submission normalizes text and requires a valid task and wallet', () 
       summary: result.summary,
       deliverableUrl: result.deliverableUrl,
       walletAddress: result.walletAddress,
+      publicResultConsent: true,
+      publicWalletConsent: false,
     }),
     OperationsValidationError,
+  );
+});
+
+test('task submission requires separate public-result and wallet consent', () => {
+  assert.throws(
+    () => validateTaskSubmission({
+      taskId: VALID_TASK_ID,
+      summary: 'A complete task result with enough information for private review.',
+      deliverableUrl: 'https://example.org/task-result',
+      walletAddress: VALID_WALLET,
+      publicResultConsent: false,
+      publicWalletConsent: true,
+    }),
+    /公开钱包需要先同意公开脱敏成果/,
+  );
+});
+
+test('community task publication validates reward source, budget, and future deadline', () => {
+  const result = validateCommunityTaskPublication({
+    title: 'Review the public task workflow',
+    summary: 'Review the complete task workflow and document evidence-backed findings.',
+    requirements: 'Provide reproducible checks, a written result, and any known limitations.',
+    rewardBudgetUsdc: '0.000001',
+    rewardSource: 'builders_pool',
+    submissionDeadline: '2099-01-01T00:00:00.000Z',
+    auditReference: 'phase-4m-task-publication-001',
+  });
+  assert.equal(result.rewardBudgetUsdc, '0.000001');
+  assert.equal(result.rewardSource, 'builders_pool');
+  assert.throws(
+    () => validateCommunityTaskPublication({
+      ...result,
+      rewardBudgetUsdc: '1.0000001',
+      submissionDeadline: '',
+    }),
+    OperationsValidationError,
+  );
+});
+
+test('optional task budget accepts empty and zero but rejects overflow', () => {
+  assert.equal(validateOptionalUsdcBudget(''), null);
+  assert.equal(validateOptionalUsdcBudget('0'), '0');
+  assert.equal(validateOptionalUsdcBudget('1000000000.000000'), '1000000000.000000');
+  assert.throws(() => validateOptionalUsdcBudget('1000000000.000001'), OperationsValidationError);
+});
+
+test('accepted task review requires public fields while rejection forbids them', () => {
+  const accepted = validateTaskSubmissionReview({
+    submissionId: VALID_TASK_ID,
+    decision: 'accepted',
+    reviewerNotes: 'The evidence was independently reproduced.',
+    publicResultSummary: 'A sanitized public result that excludes private submission metadata.',
+    publicDeliverableUrl: 'https://example.org/public-result',
+    auditReference: 'phase-4m-review-accepted-001',
+  });
+  assert.equal(accepted.decision, 'accepted');
+  assert.throws(
+    () => validateTaskSubmissionReview({
+      ...accepted,
+      decision: 'rejected',
+      publicResultSummary: 'This must not be published after rejection.',
+      publicDeliverableUrl: '',
+    }),
+    /拒绝任务时不能发布公开成果/,
+  );
+});
+
+test('audit references reject control characters without regex ambiguity', () => {
+  assert.equal(
+    validateAuditReference('phase-4m-audit-reference', '审计引用', 160),
+    'phase-4m-audit-reference',
+  );
+  assert.throws(
+    () => validateAuditReference('phase-4m\naudit-reference', '审计引用', 160),
+    /控制字符/,
   );
 });
 
