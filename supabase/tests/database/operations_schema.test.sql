@@ -478,6 +478,77 @@ select ok(
 );
 
 select ok(
+  has_function_privilege(
+    'service_role',
+    'public.cleanup_operations_task_staging_e2e_v1(text,uuid,uuid[])',
+    'EXECUTE'
+  )
+    and not has_function_privilege(
+      'authenticated',
+      'public.cleanup_operations_task_staging_e2e_v1(text,uuid,uuid[])',
+      'EXECUTE'
+    )
+    and not has_function_privilege(
+      'anon',
+      'public.cleanup_operations_task_staging_e2e_v1(text,uuid,uuid[])',
+      'EXECUTE'
+    )
+    and not has_table_privilege(
+      'service_role',
+      'public.task_submission_publications',
+      'DELETE'
+    )
+    and not has_table_privilege(
+      'service_role',
+      'public.operations_task_workflow_events',
+      'DELETE'
+    )
+    and not has_table_privilege(
+      'service_role',
+      'public.task_submissions',
+      'DELETE'
+    )
+    and not has_table_privilege(
+      'service_role',
+      'public.community_tasks',
+      'DELETE'
+    ),
+  'exact Phase 4M Staging workflow cleanup is RPC-only and excluded from browser roles'
+);
+
+select ok(
+  (
+    select pg_get_functiondef(procedure.oid)
+    from pg_catalog.pg_proc procedure
+    join pg_catalog.pg_namespace namespace
+      on namespace.oid = procedure.pronamespace
+    where namespace.nspname = 'public'
+      and procedure.proname = 'protect_task_workflow_immutable_v1'
+  ) ilike '%current_user = cleanup_owner%'
+    and exists (
+      select 1
+      from pg_catalog.pg_trigger trigger
+      join pg_catalog.pg_class relation on relation.oid = trigger.tgrelid
+      join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+      where not trigger.tgisinternal
+        and namespace.nspname = 'public'
+        and relation.relname = 'task_submission_publications'
+        and trigger.tgname = 'task_submission_publications_immutable'
+    )
+    and exists (
+      select 1
+      from pg_catalog.pg_trigger trigger
+      join pg_catalog.pg_class relation on relation.oid = trigger.tgrelid
+      join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+      where not trigger.tgisinternal
+        and namespace.nspname = 'public'
+        and relation.relname = 'operations_task_workflow_events'
+        and trigger.tgname = 'operations_task_workflow_events_immutable'
+    ),
+  'task workflow immutability allows only the owner-bound controlled cleanup context'
+);
+
+select ok(
   not exists (
     select 1
     from pg_catalog.pg_proc procedure

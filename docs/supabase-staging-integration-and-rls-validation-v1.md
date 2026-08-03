@@ -31,6 +31,15 @@ authentication before operations-row assertions. The locally verified
 CAPTCHA-compatible follow-up remains undeployed, so final remote E2E
 verification is pending.
 
+Current-state note (`2026-08-04`): the CAPTCHA-compatible wallet-intake E2E
+subsequently passed 17 assertions with cleanup of three rows and four Auth
+users. The Phase 4M workflow is deployed by Cloudflare Production from commit
+`73441a640413414feab0355583b2d22e770fdf07`, and migration `202608030001` is
+applied on the dedicated Supabase Staging project with parity, lint, and
+read-only preflight passing. The Phase 4M task-workflow actor E2E has not yet
+run. Its strict cleanup migration `202608040001` and updated runner are local
+only and require separate review and explicit remote-mutation confirmations.
+
 ## 1. Purpose
 
 Phase 4F created the off-chain operations foundation. Phase 4G prepared a
@@ -161,6 +170,8 @@ supabase/migrations/202607300001_wallet_authenticated_operations_intake.sql
 supabase/migrations/202607310001_web3_solana_identity_subject_compatibility.sql
 supabase/migrations/202608020001_web3_solana_wallet_resolver_lint_cleanup.sql
 supabase/migrations/202608020002_operations_wallet_intake_gate_audit.sql
+supabase/migrations/202608030001_operations_task_moderation_closure.sql
+supabase/migrations/202608040001_operations_task_staging_e2e_cleanup.sql
 ```
 
 The second migration fixes two findings identified while preparing real-role
@@ -171,6 +182,9 @@ wallet-authenticated intake path but leaves its database-side gate disabled by
 default. The fifth and sixth migrations align the resolver with the observed
 Supabase Solana Web3 subject and remove its lint warning. The seventh adds the
 auditable service-role-only intake-gate transition path without activating it.
+The eighth adds the audited community-task publication and review workflow.
+The ninth adds only the strict service-role cleanup RPC required to remove the
+new immutable Phase 4M test fixtures after a confirmed actor-level Staging E2E.
 
 ### 4.1 Published-record downgrade
 
@@ -226,6 +240,12 @@ governance_discussions
 remains explicitly revoked from `anon` and `authenticated`. No browser-facing
 role receives a cleanup path.
 
+Phase 4M migration `202608040001` later supersedes the task and submission
+portion of this historical privilege: it revokes direct service-role DELETE on
+`community_tasks` and `task_submissions` and replaces it with one strict,
+atomic service-role cleanup RPC. The independent governance-discussion fixture
+continues using the older exact-id cleanup path.
+
 ## 5. Read-only preflight
 
 Run from `project`:
@@ -278,7 +298,7 @@ The E2E first reruns the read-only preflight. It then creates temporary Auth
 actors:
 
 - operator;
-- moderator;
+- reviewer;
 - Solana Web3 owner A;
 - one email-only negative-control owner.
 
@@ -288,29 +308,36 @@ fresh human-completed Turnstile response. A second random Solana public key is
 used only as the switched-wallet negative input and does not create another
 Auth user or consume another CAPTCHA response.
 
-It validates:
+The current Phase 4M runner validates:
 
-- operator creation of a published community task;
+- no-role and direct-table task publication denial;
+- operator task publication through the audited RPC;
 - public anonymous read of that task;
 - anonymous denial on private submissions;
 - confirmation that the reviewed database-side intake gate is enabled;
-- owner creation and read of a private submission;
+- owner creation and read of accepted-path and rejected-path submissions;
 - rejection when the owner submits a different generated wallet;
 - rejection of an email-only owner that cannot prove wallet control;
 - cross-user isolation from the wallet owner's submission;
 - rejection of self-asserted `wallet_verified=true`;
+- refreshed staff-role claims, no-role review denial, and self-review denial;
+- accepted review, terminal replay denial, and rejected review;
+- exactly one sanitized public result without private ids or wallet leakage;
+- no public result for rejection;
+- four exact private immutable audit events and anonymous audit denial;
+- direct publication, task, and submission mutation denial;
 - owner creation of a private governance discussion;
-- moderator SELECT visibility;
+- operator SELECT visibility;
 - rejection of unprivileged moderation;
-- successful moderator status transition;
-- allowed published-task lifecycle status transition;
-- rejection of publication downgrade;
-- rejection of published-content rewrite.
+- successful operator moderation status transition.
 
-Cleanup runs even when an assertion fails. It deletes test rows in dependency
-order and then deletes temporary Auth users. Each row deletion must return
-exactly the expected id before it is counted as successful. A cleanup error is
-reported and must be resolved before rerunning.
+Cleanup runs even when an assertion fails. The Phase 4M task graph is removed
+only through `cleanup_operations_task_staging_e2e_v1`, which validates the
+exact reserved fixture contents and identifiers before an atomic delete. The
+complete path requires one publication, four audit events, two submissions,
+and one task. The legacy discussion uses exact-id deletion proof, and temporary
+Auth users are deleted last. A cleanup error is reported and must be resolved
+before rerunning.
 
 The runner does not:
 
@@ -466,9 +493,20 @@ Subsequent verified Staging state:
 - the first post-activation E2E attempt was rejected at automated operator
   authentication because CAPTCHA was enabled and the old runner supplied no
   `captcha_token`; it did not reach operations-row assertions;
-- the CAPTCHA-compatible runner change passed 67 local operations tests,
-  both TypeScript checks, ESLint, and the production Vite build, but remains
-  undeployed, so the final post-activation wallet-intake E2E is not yet passed.
+- the CAPTCHA-compatible runner was subsequently deployed and the controlled
+  wallet-intake E2E passed 17 assertions, cleaned three rows and four temporary
+  Auth users, and performed no Solana transaction or treasury action;
+- Cloudflare Production commit
+  `73441a640413414feab0355583b2d22e770fdf07` was reported successfully
+  deployed;
+- Phase 4M migration
+  `202608030001_operations_task_moderation_closure.sql` is applied remotely;
+  migration parity, linked lint, and the read-only preflight passed;
+- the Phase 4M task-workflow actor E2E remains unexecuted because its strict
+  cleanup migration `202608040001` and follow-up tooling are still local and
+  require separate review and explicit remote-mutation confirmations;
+- the follow-up tooling passed 88 local operations tests, both TypeScript
+  checks, ESLint, and the production Vite build.
 
 This phase verifies the selected off-chain authorization paths on the dedicated
 Supabase staging project. It does not activate production intake, deploy or

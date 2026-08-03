@@ -35,6 +35,10 @@ const taskModerationClosureMigrationUrl = new URL(
   '../../supabase/migrations/202608030001_operations_task_moderation_closure.sql',
   import.meta.url,
 );
+const taskStagingE2ECleanupMigrationUrl = new URL(
+  '../../supabase/migrations/202608040001_operations_task_staging_e2e_cleanup.sql',
+  import.meta.url,
+);
 const foundationSql = readFileSync(foundationMigrationUrl, 'utf8');
 const hardeningSql = readFileSync(hardeningMigrationUrl, 'utf8');
 const cleanupPrivilegesSql = readFileSync(cleanupPrivilegesMigrationUrl, 'utf8');
@@ -46,6 +50,10 @@ const walletResolverLintCleanupSql = readFileSync(
 );
 const intakeGateAuditSql = readFileSync(intakeGateAuditMigrationUrl, 'utf8');
 const taskModerationClosureSql = readFileSync(taskModerationClosureMigrationUrl, 'utf8');
+const taskStagingE2ECleanupSql = readFileSync(
+  taskStagingE2ECleanupMigrationUrl,
+  'utf8',
+);
 const sql = [
   foundationSql,
   hardeningSql,
@@ -55,6 +63,7 @@ const sql = [
   walletResolverLintCleanupSql,
   intakeGateAuditSql,
   taskModerationClosureSql,
+  taskStagingE2ECleanupSql,
 ].join('\n');
 
 const expectedTables = [
@@ -462,6 +471,50 @@ test('task moderation closure contains no network sender or treasury mutation', 
   );
 });
 
+test('Phase 4M Staging cleanup is a narrow service-role RPC, not table access', () => {
+  assert.match(
+    taskStagingE2ECleanupSql,
+    /create or replace function public\.cleanup_operations_task_staging_e2e_v1\(/,
+  );
+  assert.match(taskStagingE2ECleanupSql, /security definer/);
+  assert.match(
+    taskStagingE2ECleanupSql,
+    /\^phase-2e-6b-4m-staging-e2e:\[0-9\]\{13\}-\[0-9a-f\]\{8\}\$/,
+  );
+  assert.match(
+    taskStagingE2ECleanupSql,
+    /pg_catalog\.pg_get_userbyid\(procedure\.proowner\)/,
+  );
+  assert.match(
+    taskStagingE2ECleanupSql,
+    /current_user = cleanup_owner/,
+  );
+  assert.match(
+    taskStagingE2ECleanupSql,
+    /revoke all on function public\.cleanup_operations_task_staging_e2e_v1\(text, uuid, uuid\[\]\)[\s\S]*from public, anon, authenticated, service_role;/,
+  );
+  assert.match(
+    taskStagingE2ECleanupSql,
+    /grant execute on function public\.cleanup_operations_task_staging_e2e_v1\(text, uuid, uuid\[\]\)[\s\S]*to service_role;/,
+  );
+  assert.doesNotMatch(
+    taskStagingE2ECleanupSql,
+    /grant (?:insert|update|delete)[^;]* on table/i,
+  );
+  assert.match(
+    taskStagingE2ECleanupSql,
+    /revoke delete on table[\s\S]*public\.task_submissions,[\s\S]*public\.community_tasks[\s\S]*from service_role;/,
+  );
+  assert.doesNotMatch(
+    taskStagingE2ECleanupSql,
+    /\bhttp_post\b|\bnet\.http\b|\bvault\.secrets\b|\bpg_net\b|\bsend_transaction\b|\bsendtransaction\b/i,
+  );
+  assert.doesNotMatch(
+    taskStagingE2ECleanupSql,
+    /\b(?:insert into|update|delete from)\s+public\.treasury_/i,
+  );
+});
+
 test('staging E2E cleanup privilege is narrow and excludes browser roles', async () => {
   assert.match(
     cleanupPrivilegesSql,
@@ -491,11 +544,9 @@ test('staging E2E cleanup privilege is narrow and excludes browser roles', async
       order by table_name, privilege_type;
     `);
     assert.deepEqual(serviceRolePrivileges.rows, [
-      { table_name: 'community_tasks', privilege_type: 'DELETE' },
       { table_name: 'community_tasks', privilege_type: 'SELECT' },
       { table_name: 'governance_discussions', privilege_type: 'DELETE' },
       { table_name: 'governance_discussions', privilege_type: 'SELECT' },
-      { table_name: 'task_submissions', privilege_type: 'DELETE' },
       { table_name: 'task_submissions', privilege_type: 'SELECT' },
     ]);
 
@@ -967,6 +1018,194 @@ test('runtime self-review is denied and rejection creates no public result', asy
       `),
       /already in a terminal review state/,
     );
+  } finally {
+    await database.close();
+  }
+});
+
+test('runtime Phase 4M cleanup removes only the exact audited Staging workflow', async () => {
+  const database = await createOperationsDatabase();
+  const operatorId = '99999999-9999-4999-8999-999999999901';
+  const ownerId = '99999999-9999-4999-8999-999999999902';
+  const reviewerId = '99999999-9999-4999-8999-999999999903';
+  const verifiedWallet = '11111111111111111111111111111111';
+  const runId = '1785800000000-deadbeef';
+  const runReference = `phase-2e-6b-4m-staging-e2e:${runId}`;
+
+  try {
+    await database.exec(`
+      insert into auth.users (id) values
+        ('${operatorId}'),
+        ('${ownerId}'),
+        ('${reviewerId}');
+      insert into auth.identities (id, user_id, provider, provider_id, identity_data)
+      values (
+        'identity-phase-4m-cleanup-owner',
+        '${ownerId}',
+        'web3',
+        'web3:solana:${verifiedWallet}',
+        '{"sub":"web3:solana:${verifiedWallet}"}'
+      );
+      update public.operations_intake_control
+      set mode = 'wallet_staging', activation_reference = 'phase-4m cleanup runtime fixture';
+      select set_config('request.jwt.claim.sub', '${operatorId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${operatorId}","role":"authenticated","app_metadata":{"operations_role":"operator"}}',
+        false
+      );
+      set role authenticated;
+    `);
+
+    const task = await database.query<{ task_id: string }>(`
+      select public.publish_community_task_v1(
+        'Staging task workflow ${runId}',
+        'Temporary Phase 4M Staging task for audited publication and review E2E ${runId}.',
+        'Submit only the two reserved example.com fixtures for this controlled Staging E2E run ${runId}.',
+        0,
+        'none',
+        '2099-01-01T00:00:00Z',
+        '${runReference}:task:publish'
+      ) as task_id;
+    `);
+    const taskId = task.rows[0]?.task_id;
+    assert.ok(taskId);
+
+    await database.exec(`
+      reset role;
+      select set_config('request.jwt.claim.sub', '${ownerId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${ownerId}","role":"authenticated"}',
+        false
+      );
+      set role authenticated;
+    `);
+    const submissions = await database.query<{ id: string; summary: string }>(`
+      insert into public.task_submissions (
+        task_id,
+        submitted_by,
+        summary,
+        deliverable_url,
+        wallet_address,
+        public_result_consent,
+        public_wallet_consent
+      ) values
+        (
+          '${taskId}',
+          '${ownerId}',
+          'Accepted Phase 4M Staging submission ${runId} for sanitized publication and immutable audit verification.',
+          'https://example.com/alpha-staging-task-${runId}-accepted',
+          '${verifiedWallet}',
+          true,
+          false
+        ),
+        (
+          '${taskId}',
+          '${ownerId}',
+          'Rejected Phase 4M Staging submission ${runId} for terminal-state and no-publication verification.',
+          'https://example.com/alpha-staging-task-${runId}-rejected',
+          '${verifiedWallet}',
+          false,
+          false
+        )
+      returning id, summary;
+    `);
+    const acceptedId = submissions.rows.find((row) => row.summary.startsWith('Accepted'))?.id;
+    const rejectedId = submissions.rows.find((row) => row.summary.startsWith('Rejected'))?.id;
+    assert.ok(acceptedId);
+    assert.ok(rejectedId);
+
+    await database.exec(`
+      reset role;
+      select set_config('request.jwt.claim.sub', '${reviewerId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${reviewerId}","role":"authenticated","app_metadata":{"operations_role":"reviewer"}}',
+        false
+      );
+      set role authenticated;
+    `);
+    const accepted = await database.query<{ publication_id: string }>(`
+      select publication_id
+      from public.review_task_submission_v1(
+        '${acceptedId}',
+        'accepted',
+        'The controlled Staging fixture satisfies the published task requirements.',
+        'Sanitized accepted result for Phase 4M Staging workflow ${runId}; no payment or treasury action occurred.',
+        'https://example.com/alpha-staging-task-${runId}-accepted',
+        '${runReference}:accepted'
+      );
+    `);
+    assert.ok(accepted.rows[0]?.publication_id);
+
+    await database.query(`
+      select *
+      from public.review_task_submission_v1(
+        '${rejectedId}',
+        'rejected',
+        'The second controlled Staging fixture is intentionally rejected.',
+        null,
+        null,
+        '${runReference}:rejected'
+      );
+    `);
+
+    await database.exec('reset role;');
+    await assert.rejects(
+      database.exec(`
+        delete from public.task_submission_publications
+        where id = '${accepted.rows[0]?.publication_id}';
+      `),
+      /immutable operations record/,
+    );
+
+    await database.exec('set role authenticated;');
+    await assert.rejects(
+      database.query(`
+        select * from public.cleanup_operations_task_staging_e2e_v1(
+          '${runReference}',
+          '${taskId}',
+          array['${acceptedId}'::uuid, '${rejectedId}'::uuid]
+        );
+      `),
+      /permission denied/,
+    );
+
+    await database.exec('reset role; set role service_role;');
+    const cleanup = await database.query<{
+      publications_deleted: number;
+      events_deleted: number;
+      submissions_deleted: number;
+      tasks_deleted: number;
+    }>(`
+      select * from public.cleanup_operations_task_staging_e2e_v1(
+        '${runReference}',
+        '${taskId}',
+        array['${acceptedId}'::uuid, '${rejectedId}'::uuid]
+      );
+    `);
+    assert.deepEqual(cleanup.rows, [{
+      publications_deleted: 1,
+      events_deleted: 4,
+      submissions_deleted: 2,
+      tasks_deleted: 1,
+    }]);
+
+    await database.exec('reset role;');
+    const remaining = await database.query<{ count: number }>(`
+      select (
+        (select count(*) from public.community_tasks where id = '${taskId}')
+        + (select count(*) from public.task_submissions where task_id = '${taskId}')
+        + (select count(*) from public.task_submission_publications where task_id = '${taskId}')
+        + (
+          select count(*)
+          from public.operations_task_workflow_events
+          where event_reference like '${runReference}:%'
+        )
+      )::integer as count;
+    `);
+    assert.equal(remaining.rows[0]?.count, 0);
   } finally {
     await database.close();
   }
@@ -1663,6 +1902,7 @@ async function createOperationsDatabase(): Promise<PGlite> {
   await database.exec(walletResolverLintCleanupSql);
   await database.exec(intakeGateAuditSql);
   await database.exec(taskModerationClosureSql);
+  await database.exec(taskStagingE2ECleanupSql);
   return database;
 }
 

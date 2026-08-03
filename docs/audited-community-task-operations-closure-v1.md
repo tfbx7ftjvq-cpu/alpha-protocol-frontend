@@ -1,7 +1,8 @@
 # Alpha Protocol Audited Community Task Operations Closure V1
 
-Status: local implementation and adversarial review complete; migration and UI not deployed
+Status: workflow code deployed to Cloudflare Production; Staging migration applied; actor-level Staging E2E tooling pending review and deployment
 Baseline commit: `5a31caeacf0e3b10f37d29ba409f7e58dfc8ff97`
+Deployed workflow checkpoint: `73441a640413414feab0355583b2d22e770fdf07`
 Phase: `2E-6B-4M`
 Date: `2026-08-04`
 
@@ -175,19 +176,39 @@ The new migration is:
 supabase/migrations/202608030001_operations_task_moderation_closure.sql
 ```
 
+The controlled actor-level Staging E2E requires one follow-up migration:
+
+```text
+supabase/migrations/202608040001_operations_task_staging_e2e_cleanup.sql
+```
+
+The follow-up does not add a product mutation path. It replaces the two task
+workflow immutability triggers with an owner-bound variant and exposes one
+`service_role`-only RPC that can delete only the exact reserved Phase 4M E2E
+fixture graph. Direct browser and direct service-role table mutations remain
+denied. The function rejects an invalid run reference, unexpected task or
+submission content, unrelated rows, prefix collisions, duplicate ids, and
+cleanup-count mismatches.
+
 Applying it is a remote database mutation and requires a separate human
 confirmation. Recommended order:
 
-1. review and commit the Phase 4M patch;
-2. deploy the reviewed frontend build while staff actions remain unused;
-3. verify the linked Supabase project is the dedicated Staging project;
-4. inspect `migration list`, run `db push --dry-run`, and run linked lint;
-5. apply only migration `202608030001` after explicit confirmation;
-6. confirm migration parity and read-only preflight;
-7. perform controlled operator publication, owner submission, acceptance,
-   rejection, replay, and cleanup checks in Staging;
-8. retain the independent intake gate as an emergency stop for all contributor
-   writes.
+1. verify the deployed frontend checkpoint is exactly `73441a6` or a reviewed
+   descendant;
+2. verify the linked Supabase project is the dedicated Staging project;
+3. confirm migration `202608030001` is already present remotely;
+4. review and commit the E2E tooling and cleanup migration;
+5. inspect `migration list`, run `db push --dry-run`, and run linked lint;
+6. apply only migration `202608040001` after explicit confirmation;
+7. confirm migration parity and rerun the read-only preflight;
+8. obtain one fresh, process-only Turnstile response and separately confirm the
+   mutating E2E;
+9. perform controlled task publication, two owner submissions, acceptance,
+   rejection, replay denial, immutable-record checks, and atomic cleanup;
+10. require the runner to report 31 assertions and cleanup of nine database
+    rows plus four temporary Auth users;
+11. retain the independent intake gate as an emergency stop for all
+    contributor writes.
 
 Migration application does not publish a task, review a submission, send a
 Solana transaction, or move funds.
@@ -223,18 +244,35 @@ production Vite build: passed
 git diff --check: passed
 ```
 
+The Phase 4M Staging E2E tooling follow-up was then verified separately:
+
+```text
+operations tests: 88 passed, 0 failed
+operations tooling TypeScript: passed
+frontend TypeScript: passed
+ESLint: passed
+production Vite build: passed
+git diff --check: passed
+```
+
 ## 9. Current status
 
 - implemented: task publication, private submission consent, role-gated
   review, sanitized public result, immutable audit history, staff UI, and
   adversarial tests;
-- tested: local domain checks, local PGlite migration/runtime tests,
-  TypeScript, lint, and production build;
-- deployed: no Phase 4M code or migration;
-- existing Supabase Staging: migrations through `202608020002`, with the wallet
-  intake gate previously activated to `wallet_staging` and its controlled E2E
-  reported as 17 assertions passed with cleanup complete;
-- Phase 4M migration `202608030001`: not applied anywhere;
+- locally tested at deployed checkpoint `73441a6`: 83 operations tests, both
+  TypeScript checks, ESLint, and the production build passed;
+- locally tested in the E2E tooling follow-up: 88 operations tests, both
+  TypeScript checks, ESLint, and the production build passed;
+- Cloudflare Production: commit `73441a6` was reported successfully deployed;
+- existing Supabase Staging: migrations through `202608030001` are applied,
+  migration parity, linked lint, and the read-only preflight passed, and the
+  wallet intake gate remains `wallet_staging`;
+- Phase 4M actor-level Staging E2E: not yet executed against the task workflow;
+- cleanup migration `202608040001`: implemented locally in the follow-up
+  tooling change, not applied remotely;
+- this local follow-up: no remote database mutation, no Auth user creation, no
+  Staging E2E write, no deploy, no commit, and no push;
 - Devnet: no program deployment, upgrade, initialization, or transaction in
   this phase;
 - Mainnet: not entered and no transaction sent;
