@@ -64,3 +64,34 @@ test('Phase 4M E2E refreshes role claims and verifies sanitized public output', 
   assert.match(e2eSource, /!\('reviewed_by' in publicResult\)/);
   assert.match(e2eSource, /task workflow audit did not contain the exact four expected actions/);
 });
+
+test('Phase 4N E2E exercises independent risk review and sanitized publication', () => {
+  assert.equal(
+    (e2eSource.match(/rpc\(\s*'review_risk_report_v1'/g) ?? []).length,
+    5,
+  );
+  assert.match(e2eSource, /const selfRiskReview = await ownerA\.client/);
+  assert.match(e2eSource, /const unauthorizedRiskReview = await emailOnlyOwner\.client/);
+  assert.match(e2eSource, /const directRiskRewrite = await operator\.client/);
+  assert.match(e2eSource, /!\('submitted_by' in riskPublication\)/);
+  assert.match(e2eSource, /!\('wallet_address' in riskPublication\)/);
+  assert.match(e2eSource, /!\('reviewer_notes' in riskPublication\)/);
+  assert.match(e2eSource, /dismissed report created a publication/);
+  assert.match(e2eSource, /terminal risk review was replayed/);
+});
+
+test('Phase 4N E2E uses exact risk fixture cleanup and expected totals', () => {
+  assert.match(
+    e2eSource,
+    /rpc\(\s*'cleanup_operations_risk_staging_e2e_v1'/,
+  );
+  assert.match(e2eSource, /counts\.publicationsDeleted !== 1/);
+  assert.match(e2eSource, /counts\.eventsDeleted !== 2/);
+  assert.match(e2eSource, /counts\.evidenceDeleted !== 1/);
+  assert.match(e2eSource, /counts\.reportsDeleted !== 2/);
+  assert.match(e2eSource, /primaryError === null/);
+
+  const increments = [...e2eSource.matchAll(/assertions \+= (\d+);/g)]
+    .reduce((total, match) => total + Number(match[1]), 0);
+  assert.equal(increments, 46);
+});

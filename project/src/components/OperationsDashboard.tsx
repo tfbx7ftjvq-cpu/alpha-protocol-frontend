@@ -24,11 +24,13 @@ import {
 import TurnstileChallenge from './TurnstileChallenge';
 import type {
   CommunityTaskPublicationInput,
+  RiskReportReviewInput,
   TaskSubmissionReviewInput,
 } from '../features/operations/domain';
 import {
   submitDiscussion,
   submitReliefApplication,
+  submitRiskEvidence,
   submitRiskReport,
   submitTaskResult,
 } from '../features/operations/repository';
@@ -93,8 +95,8 @@ export default function OperationsDashboard() {
     discussion: operations.overview.discussions.length,
     mine: mySubmissions.submissions.length,
     decisions: operations.overview.governanceDecisions.length,
-    staff: staff.workspace.submissions.length,
-  }), [mySubmissions.submissions.length, operations.overview, staff.workspace.submissions.length]);
+    staff: staff.workspace.submissions.length + staff.workspace.riskReports.length,
+  }), [mySubmissions.submissions.length, operations.overview, staff.workspace.riskReports.length, staff.workspace.submissions.length]);
   const visibleTabs = walletAuth.operationsRole ? [...TABS, STAFF_TAB] : TABS;
 
   return (
@@ -218,6 +220,7 @@ export default function OperationsDashboard() {
           {activeTab === 'risk' && (
             <RiskPanel
               reports={operations.overview.riskReports}
+              privateReports={mySubmissions.submissions.filter((submission) => submission.kind === 'risk')}
               loaded={operations.status === 'ready'}
               authenticatedWallet={intakeReady ? walletAuth.authenticatedWallet : null}
               onSubmitted={mySubmissions.refresh}
@@ -460,11 +463,13 @@ function TasksPanel({
 
 function RiskPanel({
   reports,
+  privateReports,
   loaded,
   authenticatedWallet,
   onSubmitted,
 }: {
   reports: ReturnType<typeof useOperations>['overview']['riskReports'];
+  privateReports: ReturnType<typeof useMyOperationsSubmissions>['submissions'];
   loaded: boolean;
   authenticatedWallet: string | null;
   onSubmitted: () => Promise<void>;
@@ -474,11 +479,22 @@ function RiskPanel({
     summary: '',
     referenceUrl: '',
     walletAddress: authenticatedWallet ?? '',
+    publicReportConsent: false,
+    publicReferenceConsent: false,
+  });
+  const [evidenceForm, setEvidenceForm] = useState({
+    riskReportId: '',
+    evidenceUrl: '',
+    contentSha256: '',
+    summary: '',
+    walletAddress: authenticatedWallet ?? '',
   });
   const submission = useSubmission();
+  const evidenceSubmission = useSubmission();
 
   usePrefillWallet(authenticatedWallet, (walletAddress) => {
     setForm((current) => ({ ...current, walletAddress }));
+    setEvidenceForm((current) => ({ ...current, walletAddress }));
   });
 
   async function handleSubmit(event: FormEvent) {
@@ -491,6 +507,26 @@ function RiskPanel({
         projectIdentifier: '',
         summary: '',
         referenceUrl: '',
+        publicReportConsent: false,
+        publicReferenceConsent: false,
+      })),
+    );
+    if (succeeded) {
+      await onSubmitted();
+    }
+  }
+
+  async function handleEvidenceSubmit(event: FormEvent) {
+    event.preventDefault();
+    const succeeded = await evidenceSubmission.run(
+      () => submitRiskEvidence(evidenceForm),
+      '补充证据已私密提交；证据不会自动公开，也不会自动形成风险定性。',
+      () => setEvidenceForm((current) => ({
+        ...current,
+        riskReportId: '',
+        evidenceUrl: '',
+        contentSha256: '',
+        summary: '',
       })),
     );
     if (succeeded) {
@@ -521,46 +557,101 @@ function RiskPanel({
         ))}
       </PublicList>
 
-      <SubmissionForm
-        title="私密提交风险报告"
-        description="举报只是线索，不等于诈骗定性。公开记录必须经过证据复核和明确治理依据。"
-        busy={submission.busy}
-        notice={submission.notice}
-        onSubmit={handleSubmit}
-        disabled={!authenticatedWallet}
-      >
-        <FormField label="项目名称 / Mint / Program / 交易标识">
-          <input
-            value={form.projectIdentifier}
-            onChange={(event) => setForm({ ...form, projectIdentifier: event.target.value })}
-            className={fieldClassName}
-            required
-          />
-        </FormField>
-        <FormField label="风险说明（30–5000 字）">
-          <textarea
-            value={form.summary}
-            onChange={(event) => setForm({ ...form, summary: event.target.value })}
-            className={`${fieldClassName} min-h-36 resize-y`}
-            placeholder="区分事实、推断与尚待验证的部分"
-            required
-          />
-        </FormField>
-        <FormField label="证据 HTTPS 链接">
-          <input
-            type="url"
-            value={form.referenceUrl}
-            onChange={(event) => setForm({ ...form, referenceUrl: event.target.value })}
-            className={fieldClassName}
-            placeholder="https://..."
-            required
-          />
-        </FormField>
-        <WalletField
-          value={form.walletAddress}
-          label="已认证提交钱包"
-        />
-      </SubmissionForm>
+      <div className="space-y-4">
+        <SubmissionForm
+          title="私密提交风险报告"
+          description="举报只是线索，不等于诈骗定性。公开记录必须经过独立复核、脱敏和明确治理依据。"
+          busy={submission.busy}
+          notice={submission.notice}
+          onSubmit={handleSubmit}
+          disabled={!authenticatedWallet}
+        >
+          <FormField label="项目名称 / Mint / Program / 交易标识">
+            <input
+              value={form.projectIdentifier}
+              onChange={(event) => setForm({ ...form, projectIdentifier: event.target.value })}
+              className={fieldClassName}
+              required
+            />
+          </FormField>
+          <FormField label="风险说明（30–5000 字）">
+            <textarea
+              value={form.summary}
+              onChange={(event) => setForm({ ...form, summary: event.target.value })}
+              className={`${fieldClassName} min-h-36 resize-y`}
+              placeholder="区分事实、推断与尚待验证的部分"
+              required
+            />
+          </FormField>
+          <FormField label="私有证据 HTTPS 链接">
+            <input
+              type="url"
+              value={form.referenceUrl}
+              onChange={(event) => setForm({ ...form, referenceUrl: event.target.value })}
+              className={fieldClassName}
+              placeholder="https://..."
+              required
+            />
+          </FormField>
+          <WalletField value={form.walletAddress} label="已认证提交钱包" />
+          <label className="flex items-start gap-2 text-[10px] leading-relaxed text-zinc-500">
+            <input
+              type="checkbox"
+              checked={form.publicReportConsent}
+              onChange={(event) => setForm({
+                ...form,
+                publicReportConsent: event.target.checked,
+                publicReferenceConsent: event.target.checked ? form.publicReferenceConsent : false,
+              })}
+              className="mt-0.5"
+            />
+            我同意：仅在独立审核认定后，审核者可另行撰写脱敏摘要并发布；原始举报内容不会直接公开。
+          </label>
+          <label className="flex items-start gap-2 text-[10px] leading-relaxed text-zinc-500">
+            <input
+              type="checkbox"
+              checked={form.publicReferenceConsent}
+              disabled={!form.publicReportConsent}
+              onChange={(event) => setForm({ ...form, publicReferenceConsent: event.target.checked })}
+              className="mt-0.5"
+            />
+            我另行同意审核者在确认链接安全且适合公开后，发布一个脱敏证据引用（可选）。
+          </label>
+        </SubmissionForm>
+
+        <SubmissionForm
+          title="追加私有风险证据"
+          description="只可追加到自己的未结案报告；每个钱包每小时最多 12 条。SHA-256 可用于固定证据版本。"
+          busy={evidenceSubmission.busy}
+          notice={evidenceSubmission.notice}
+          onSubmit={handleEvidenceSubmit}
+          disabled={!authenticatedWallet || privateReports.length === 0}
+        >
+          <FormField label="我的风险报告">
+            <select
+              value={evidenceForm.riskReportId}
+              onChange={(event) => setEvidenceForm({ ...evidenceForm, riskReportId: event.target.value })}
+              className={fieldClassName}
+              required
+            >
+              <option value="">选择报告</option>
+              {privateReports.map((report) => (
+                <option key={report.id} value={report.id}>{report.title} · {report.status}</option>
+              ))}
+            </select>
+          </FormField>
+          <FormField label="证据 HTTPS 链接">
+            <input type="url" value={evidenceForm.evidenceUrl} onChange={(event) => setEvidenceForm({ ...evidenceForm, evidenceUrl: event.target.value })} className={fieldClassName} required />
+          </FormField>
+          <FormField label="内容 SHA-256（可选，64 位小写十六进制）">
+            <input value={evidenceForm.contentSha256} onChange={(event) => setEvidenceForm({ ...evidenceForm, contentSha256: event.target.value })} className={fieldClassName} placeholder="0123…" />
+          </FormField>
+          <FormField label="证据说明（10–2000 字）">
+            <textarea value={evidenceForm.summary} onChange={(event) => setEvidenceForm({ ...evidenceForm, summary: event.target.value })} className={`${fieldClassName} min-h-24 resize-y`} required />
+          </FormField>
+          <WalletField value={evidenceForm.walletAddress} label="已认证提交钱包" />
+        </SubmissionForm>
+      </div>
     </TwoColumnPanel>
   );
 }
@@ -1031,9 +1122,20 @@ function StaffOperationsPanel({
     publicDeliverableUrl: '',
     auditReference: '',
   });
+  const [riskReviewForm, setRiskReviewForm] = useState<RiskReportReviewInput>({
+    riskReportId: '',
+    decision: 'dismissed',
+    reviewerNotes: '',
+    publicSummary: '',
+    publicReferenceUrl: '',
+    publicationBasis: '',
+    auditReference: '',
+  });
   const taskSubmission = useSubmission();
   const reviewSubmission = useSubmission();
+  const riskReviewSubmission = useSubmission();
   const selected = state.workspace.submissions.find((item) => item.id === reviewForm.submissionId);
+  const selectedRisk = state.workspace.riskReports.find((item) => item.id === riskReviewForm.riskReportId);
 
   async function handlePublish(event: FormEvent) {
     event.preventDefault();
@@ -1068,6 +1170,28 @@ function StaffOperationsPanel({
         reviewerNotes: '',
         publicResultSummary: '',
         publicDeliverableUrl: '',
+        auditReference: '',
+      }),
+    );
+    if (succeeded) {
+      await onPublicDataChanged();
+    }
+  }
+
+  async function handleRiskReview(event: FormEvent) {
+    event.preventDefault();
+    const succeeded = await riskReviewSubmission.run(
+      () => state.reviewRisk(riskReviewForm),
+      riskReviewForm.decision === 'published'
+        ? '风险报告已通过受控 RPC 结案；仅审核者撰写的脱敏记录已公开。'
+        : '风险报告已驳回并结案；没有生成公开风险记录。',
+      () => setRiskReviewForm({
+        riskReportId: '',
+        decision: 'dismissed',
+        reviewerNotes: '',
+        publicSummary: '',
+        publicReferenceUrl: '',
+        publicationBasis: '',
         auditReference: '',
       }),
     );
@@ -1190,6 +1314,75 @@ function StaffOperationsPanel({
         </form>
       </div>
 
+      <form onSubmit={handleRiskReview} className="space-y-3 rounded border border-red-400/20 bg-red-400/[0.025] p-4">
+        <div>
+          <h4 className="text-sm font-black text-red-100">独立审核风险报告</h4>
+          <p className="mt-1 text-[10px] leading-relaxed text-zinc-600">
+            原始举报与证据保持私有。审核决定经行锁和不可变事件记录；公开时必须另写脱敏摘要与依据。
+          </p>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="space-y-3">
+            <FormField label="待审核风险报告">
+              <select className={fieldClassName} value={riskReviewForm.riskReportId} onChange={(event) => setRiskReviewForm({ ...riskReviewForm, riskReportId: event.target.value })} required>
+                <option value="">选择私有举报</option>
+                {state.workspace.riskReports.map((report) => (
+                  <option key={report.id} value={report.id}>{report.projectIdentifier} · {report.reviewStatus}</option>
+                ))}
+              </select>
+            </FormField>
+            {selectedRisk && (
+              <div className="rounded border border-red-400/10 bg-zinc-950 p-3 text-[10px] leading-relaxed text-zinc-500">
+                <p className="whitespace-pre-wrap">{selectedRisk.summary}</p>
+                <div className="mt-2 flex flex-wrap gap-3">
+                  <SafeLink href={selectedRisk.referenceUrl} label="私有初始证据" />
+                  <span>补充证据：{selectedRisk.evidenceCount}</span>
+                  <span>公开摘要同意：{selectedRisk.publicReportConsent ? '是' : '否'}</span>
+                  <span>公开引用同意：{selectedRisk.publicReferenceConsent ? '是' : '否'}</span>
+                </div>
+              </div>
+            )}
+            <FormField label="审核决定">
+              <select className={fieldClassName} value={riskReviewForm.decision} onChange={(event) => setRiskReviewForm({
+                ...riskReviewForm,
+                decision: event.target.value as RiskReportReviewInput['decision'],
+                publicSummary: '',
+                publicReferenceUrl: '',
+                publicationBasis: '',
+              })}>
+                <option value="dismissed">dismissed / 不公开</option>
+                <option value="published" disabled={!selectedRisk?.publicReportConsent}>published / 发布脱敏结论</option>
+              </select>
+            </FormField>
+            <FormField label="私有审核说明（必填）">
+              <textarea className={`${fieldClassName} min-h-28`} value={riskReviewForm.reviewerNotes} onChange={(event) => setRiskReviewForm({ ...riskReviewForm, reviewerNotes: event.target.value })} required />
+            </FormField>
+          </div>
+          <div className="space-y-3">
+            {riskReviewForm.decision === 'published' && (
+              <>
+                <FormField label="审核者撰写的脱敏公开摘要（30–3000 字）">
+                  <textarea className={`${fieldClassName} min-h-28`} value={riskReviewForm.publicSummary} onChange={(event) => setRiskReviewForm({ ...riskReviewForm, publicSummary: event.target.value })} required />
+                </FormField>
+                <FormField label="安全公开依据 HTTPS 链接（需单独同意，可空）">
+                  <input type="url" className={fieldClassName} value={riskReviewForm.publicReferenceUrl} disabled={!selectedRisk?.publicReferenceConsent} onChange={(event) => setRiskReviewForm({ ...riskReviewForm, publicReferenceUrl: event.target.value })} />
+                </FormField>
+                <FormField label="公开依据说明（20–2000 字）">
+                  <textarea className={`${fieldClassName} min-h-24`} value={riskReviewForm.publicationBasis} onChange={(event) => setRiskReviewForm({ ...riskReviewForm, publicationBasis: event.target.value })} required />
+                </FormField>
+              </>
+            )}
+            <FormField label="唯一审计引用（10–180 字）">
+              <input className={fieldClassName} value={riskReviewForm.auditReference} onChange={(event) => setRiskReviewForm({ ...riskReviewForm, auditReference: event.target.value })} required />
+            </FormField>
+            <button type="submit" disabled={state.submitting || !selectedRisk} className="w-full rounded border border-red-400/30 bg-red-400/10 px-4 py-2.5 text-xs font-black text-red-100 disabled:opacity-40">
+              提交风险审核决定（不执行链上操作）
+            </button>
+            {riskReviewSubmission.notice && <InlineNotice notice={riskReviewSubmission.notice} />}
+          </div>
+        </div>
+      </form>
+
       <div className="rounded border border-zinc-800 bg-zinc-950 p-4">
         <h4 className="text-sm font-black text-zinc-200">不可变任务工作流事件</h4>
         {state.workspace.events.length === 0 ? (
@@ -1197,6 +1390,23 @@ function StaffOperationsPanel({
         ) : (
           <div className="mt-3 grid gap-2 lg:grid-cols-2">
             {state.workspace.events.map((event) => (
+              <div key={event.eventId} className="rounded border border-zinc-900 p-3 text-[10px] text-zinc-500">
+                <div className="flex justify-between gap-2"><strong className="text-zinc-300">{event.action}</strong><span>{event.actorRole}</span></div>
+                <p className="mt-2 break-all">{event.eventReference}</p>
+                <p className="mt-1 text-zinc-700">{formatDate(event.createdAt)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded border border-zinc-800 bg-zinc-950 p-4">
+        <h4 className="text-sm font-black text-zinc-200">不可变风险审核事件</h4>
+        {state.workspace.riskEvents.length === 0 ? (
+          <p className="mt-3 text-[10px] text-zinc-600">暂无风险审核事件。</p>
+        ) : (
+          <div className="mt-3 grid gap-2 lg:grid-cols-2">
+            {state.workspace.riskEvents.map((event) => (
               <div key={event.eventId} className="rounded border border-zinc-900 p-3 text-[10px] text-zinc-500">
                 <div className="flex justify-between gap-2"><strong className="text-zinc-300">{event.action}</strong><span>{event.actorRole}</span></div>
                 <p className="mt-2 break-all">{event.eventReference}</p>

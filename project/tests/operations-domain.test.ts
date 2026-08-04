@@ -10,6 +10,8 @@ import {
   validateHttpsUrl,
   validateReliefApplication,
   validateRiskReport,
+  validateRiskEvidence,
+  validateRiskReportReview,
   validateTaskSubmission,
   validateTaskSubmissionReview,
   validateUsdcAmount,
@@ -169,6 +171,8 @@ test('risk report requires the authenticated wallet and evidence', () => {
     summary: 'Observed behavior is documented separately from unverified interpretation.',
     referenceUrl: 'https://example.org/risk-evidence',
     walletAddress: VALID_WALLET,
+    publicReportConsent: true,
+    publicReferenceConsent: false,
   });
 
   assert.equal(result.walletAddress, VALID_WALLET);
@@ -178,6 +182,8 @@ test('risk report requires the authenticated wallet and evidence', () => {
       summary: result.summary,
       referenceUrl: '',
       walletAddress: VALID_WALLET,
+      publicReportConsent: true,
+      publicReferenceConsent: false,
     }),
     OperationsValidationError,
   );
@@ -187,8 +193,66 @@ test('risk report requires the authenticated wallet and evidence', () => {
       summary: result.summary,
       referenceUrl: result.referenceUrl,
       walletAddress: '',
+      publicReportConsent: true,
+      publicReferenceConsent: false,
     }),
     OperationsValidationError,
+  );
+});
+
+test('risk report requires separate consent before a public reference may be used', () => {
+  assert.throws(
+    () => validateRiskReport({
+      projectIdentifier: 'Example Project',
+      summary: 'Observed behavior is documented separately from unverified interpretation.',
+      referenceUrl: 'https://example.org/private-risk-evidence',
+      walletAddress: VALID_WALLET,
+      publicReportConsent: false,
+      publicReferenceConsent: true,
+    }),
+    /公开证据链接需要先同意公开脱敏风险记录/,
+  );
+});
+
+test('risk evidence validates ownership fields, optional hash, and private evidence URL', () => {
+  const result = validateRiskEvidence({
+    riskReportId: VALID_TASK_ID,
+    evidenceUrl: 'https://example.org/additional-risk-evidence',
+    contentSha256: 'a'.repeat(64),
+    summary: 'Additional evidence with enough context for independent private review.',
+    walletAddress: VALID_WALLET,
+  });
+  assert.equal(result.contentSha256, 'a'.repeat(64));
+  assert.equal(
+    validateRiskEvidence({ ...result, contentSha256: 'A'.repeat(64) }).contentSha256,
+    'a'.repeat(64),
+  );
+  assert.throws(
+    () => validateRiskEvidence({ ...result, contentSha256: 'g'.repeat(64) }),
+    OperationsValidationError,
+  );
+});
+
+test('published risk review requires sanitized public fields while dismissal forbids them', () => {
+  const published = validateRiskReportReview({
+    riskReportId: VALID_TASK_ID,
+    decision: 'published',
+    reviewerNotes: 'The private evidence was independently reviewed and the conclusion was documented.',
+    publicSummary: 'A sanitized public finding that excludes reporter identity and private evidence metadata.',
+    publicReferenceUrl: 'https://example.org/safe-public-risk-reference',
+    publicationBasis: 'Independent evidence review and documented governance criteria.',
+    auditReference: 'phase-4n-risk-published-001',
+  });
+  assert.equal(published.decision, 'published');
+  assert.throws(
+    () => validateRiskReportReview({
+      ...published,
+      decision: 'dismissed',
+      publicSummary: 'This public field is forbidden for a dismissed report.',
+      publicReferenceUrl: '',
+      publicationBasis: '',
+    }),
+    /驳回风险报告时不能创建公开记录/,
   );
 });
 

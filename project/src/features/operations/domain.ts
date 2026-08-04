@@ -8,6 +8,7 @@ export type GovernanceDecisionValue = 'approved' | 'rejected' | 'cancelled';
 export type MyOperationsSubmissionKind = 'task' | 'risk' | 'relief' | 'discussion';
 export type OperationsStaffRole = 'reviewer' | 'operator' | 'governance_admin';
 export type TaskReviewDecision = 'accepted' | 'rejected';
+export type RiskReviewDecision = 'published' | 'dismissed';
 export type CommunityTaskRewardSource = 'builders_pool' | 'grant' | 'sponsor' | 'none';
 
 export interface CommunityTask {
@@ -104,6 +105,16 @@ export interface RiskReportInput {
   summary: string;
   referenceUrl: string;
   walletAddress: string;
+  publicReportConsent: boolean;
+  publicReferenceConsent: boolean;
+}
+
+export interface RiskEvidenceInput {
+  riskReportId: string;
+  evidenceUrl: string;
+  contentSha256: string;
+  summary: string;
+  walletAddress: string;
 }
 
 export interface ReliefApplicationInput {
@@ -194,6 +205,8 @@ export interface TaskWorkflowEvent {
 export interface OperationsStaffWorkspace {
   submissions: StaffTaskSubmission[];
   events: TaskWorkflowEvent[];
+  riskReports: StaffRiskReport[];
+  riskEvents: RiskWorkflowEvent[];
 }
 
 export interface ValidatedRiskReport {
@@ -201,6 +214,60 @@ export interface ValidatedRiskReport {
   summary: string;
   referenceUrl: string;
   walletAddress: string;
+  publicReportConsent: boolean;
+  publicReferenceConsent: boolean;
+}
+
+export interface ValidatedRiskEvidence {
+  riskReportId: string;
+  evidenceUrl: string;
+  contentSha256: string | null;
+  summary: string;
+  walletAddress: string;
+}
+
+export interface StaffRiskReport {
+  id: string;
+  projectIdentifier: string;
+  summary: string;
+  referenceUrl: string;
+  walletAddress: string;
+  publicReportConsent: boolean;
+  publicReferenceConsent: boolean;
+  reviewStatus: string;
+  submittedBy: string;
+  reviewerNotes: string | null;
+  evidenceCount: number;
+  createdAt: string;
+}
+
+export interface RiskWorkflowEvent {
+  eventId: string;
+  riskReportId: string;
+  action: 'report_published' | 'report_dismissed';
+  actorRole: OperationsStaffRole;
+  eventReference: string;
+  createdAt: string;
+}
+
+export interface RiskReportReviewInput {
+  riskReportId: string;
+  decision: RiskReviewDecision;
+  reviewerNotes: string;
+  publicSummary: string;
+  publicReferenceUrl: string;
+  publicationBasis: string;
+  auditReference: string;
+}
+
+export interface ValidatedRiskReportReview {
+  riskReportId: string;
+  decision: RiskReviewDecision;
+  reviewerNotes: string;
+  publicSummary: string | null;
+  publicReferenceUrl: string | null;
+  publicationBasis: string | null;
+  auditReference: string;
 }
 
 export interface ValidatedReliefApplication {
@@ -295,11 +362,66 @@ export function validateTaskSubmissionReview(
 }
 
 export function validateRiskReport(input: RiskReportInput): ValidatedRiskReport {
+  if (input.publicReferenceConsent && !input.publicReportConsent) {
+    throw new OperationsValidationError('公开证据链接需要先同意公开脱敏风险记录');
+  }
+
   return {
     projectIdentifier: validateText(input.projectIdentifier, '项目标识', 2, 160),
     summary: validateText(input.summary, '风险说明', 30, 5_000),
     referenceUrl: validateHttpsUrl(input.referenceUrl, '证据链接', true),
     walletAddress: validateSolanaAddress(input.walletAddress, '认证提交钱包', true),
+    publicReportConsent: input.publicReportConsent,
+    publicReferenceConsent: input.publicReferenceConsent,
+  };
+}
+
+export function validateRiskEvidence(input: RiskEvidenceInput): ValidatedRiskEvidence {
+  const hash = input.contentSha256.trim().toLowerCase();
+  if (hash && !/^[0-9a-f]{64}$/.test(hash)) {
+    throw new OperationsValidationError('证据 SHA-256 必须是 64 位小写十六进制');
+  }
+
+  return {
+    riskReportId: validateUuid(input.riskReportId, '风险报告'),
+    evidenceUrl: validateHttpsUrl(input.evidenceUrl, '追加证据链接', true),
+    contentSha256: hash || null,
+    summary: validateText(input.summary, '追加证据说明', 10, 2_000),
+    walletAddress: validateSolanaAddress(input.walletAddress, '认证提交钱包', true),
+  };
+}
+
+export function validateRiskReportReview(
+  input: RiskReportReviewInput,
+): ValidatedRiskReportReview {
+  if (input.decision !== 'published' && input.decision !== 'dismissed') {
+    throw new OperationsValidationError('风险审核决定必须是 published 或 dismissed');
+  }
+
+  const publicSummary = input.publicSummary.trim();
+  const publicReferenceUrl = input.publicReferenceUrl.trim();
+  const publicationBasis = input.publicationBasis.trim();
+  if (
+    input.decision === 'dismissed'
+    && (publicSummary || publicReferenceUrl || publicationBasis)
+  ) {
+    throw new OperationsValidationError('驳回风险报告时不能创建公开记录');
+  }
+
+  return {
+    riskReportId: validateUuid(input.riskReportId, '风险报告'),
+    decision: input.decision,
+    reviewerNotes: validateText(input.reviewerNotes, '风险审核说明', 1, 5_000),
+    publicSummary: input.decision === 'published'
+      ? validateText(publicSummary, '脱敏公开风险摘要', 30, 5_000)
+      : null,
+    publicReferenceUrl: input.decision === 'published' && publicReferenceUrl
+      ? validateHttpsUrl(publicReferenceUrl, '公开依据链接', true)
+      : null,
+    publicationBasis: input.decision === 'published'
+      ? validateText(publicationBasis, '公开依据说明', 10, 1_000)
+      : null,
+    auditReference: validateAuditReference(input.auditReference, '风险审核审计引用', 160),
   };
 }
 

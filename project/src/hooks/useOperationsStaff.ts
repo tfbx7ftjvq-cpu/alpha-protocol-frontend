@@ -3,17 +3,21 @@ import type {
   CommunityTaskPublicationInput,
   OperationsStaffRole,
   OperationsStaffWorkspace,
+  RiskReportReviewInput,
   TaskSubmissionReviewInput,
 } from '../features/operations/domain';
 import {
   loadOperationsStaffWorkspace,
   publishCommunityTask,
   reviewTaskSubmission,
+  reviewRiskReport,
 } from '../features/operations/repository';
 
 const EMPTY_WORKSPACE: OperationsStaffWorkspace = {
   submissions: [],
   events: [],
+  riskReports: [],
+  riskEvents: [],
 };
 
 export interface OperationsStaffState {
@@ -24,6 +28,7 @@ export interface OperationsStaffState {
   refresh: () => Promise<void>;
   publishTask: (input: CommunityTaskPublicationInput) => Promise<string>;
   reviewSubmission: (input: TaskSubmissionReviewInput) => Promise<void>;
+  reviewRisk: (input: RiskReportReviewInput) => Promise<void>;
 }
 
 export function useOperationsStaff(
@@ -94,6 +99,24 @@ export function useOperationsStaff(
     }
   }, [refresh, role]);
 
+  const reviewRisk = useCallback(async (input: RiskReportReviewInput) => {
+    if (!role) {
+      throw new Error('当前钱包会话没有运营权限');
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await reviewRiskReport(input);
+      await refresh();
+    } catch (reviewError) {
+      const message = reviewError instanceof Error ? reviewError.message : '风险审核失败';
+      setError(message);
+      throw reviewError;
+    } finally {
+      setSubmitting(false);
+    }
+  }, [refresh, role]);
+
   return {
     workspace,
     loading,
@@ -102,5 +125,6 @@ export function useOperationsStaff(
     refresh,
     publishTask,
     reviewSubmission,
+    reviewRisk,
   };
 }

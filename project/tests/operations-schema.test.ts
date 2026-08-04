@@ -39,6 +39,14 @@ const taskStagingE2ECleanupMigrationUrl = new URL(
   '../../supabase/migrations/202608040001_operations_task_staging_e2e_cleanup.sql',
   import.meta.url,
 );
+const riskModerationClosureMigrationUrl = new URL(
+  '../../supabase/migrations/202608050001_operations_risk_moderation_closure.sql',
+  import.meta.url,
+);
+const riskStagingE2ECleanupMigrationUrl = new URL(
+  '../../supabase/migrations/202608050002_operations_risk_staging_e2e_cleanup.sql',
+  import.meta.url,
+);
 const foundationSql = readFileSync(foundationMigrationUrl, 'utf8');
 const hardeningSql = readFileSync(hardeningMigrationUrl, 'utf8');
 const cleanupPrivilegesSql = readFileSync(cleanupPrivilegesMigrationUrl, 'utf8');
@@ -54,6 +62,8 @@ const taskStagingE2ECleanupSql = readFileSync(
   taskStagingE2ECleanupMigrationUrl,
   'utf8',
 );
+const riskModerationClosureSql = readFileSync(riskModerationClosureMigrationUrl, 'utf8');
+const riskStagingE2ECleanupSql = readFileSync(riskStagingE2ECleanupMigrationUrl, 'utf8');
 const sql = [
   foundationSql,
   hardeningSql,
@@ -64,6 +74,8 @@ const sql = [
   intakeGateAuditSql,
   taskModerationClosureSql,
   taskStagingE2ECleanupSql,
+  riskModerationClosureSql,
+  riskStagingE2ECleanupSql,
 ].join('\n');
 
 const expectedTables = [
@@ -84,6 +96,7 @@ const expectedTables = [
   'treasury_execution_receipts',
   'task_submission_publications',
   'operations_task_workflow_events',
+  'operations_risk_workflow_events',
 ];
 
 test('every operations table enables row-level security', () => {
@@ -137,6 +150,7 @@ test('publications, governance decisions, and receipts are append-only or immuta
     'treasury_execution_receipts_immutable',
     'task_submission_publications_immutable',
     'operations_task_workflow_events_immutable',
+    'operations_risk_workflow_events_immutable',
   ]) {
     assert.match(sql, new RegExp(`create trigger ${trigger}`));
   }
@@ -512,6 +526,98 @@ test('Phase 4M Staging cleanup is a narrow service-role RPC, not table access', 
   assert.doesNotMatch(
     taskStagingE2ECleanupSql,
     /\b(?:insert into|update|delete from)\s+public\.treasury_/i,
+  );
+});
+
+test('risk review separates private evidence, sanitized publication, and immutable audit', () => {
+  const auditTable = extractCreateTable('operations_risk_workflow_events');
+  assert.match(auditTable, /risk_report_id uuid not null references public\.risk_reports\(id\)/);
+  assert.match(auditTable, /action in \('report_published', 'report_dismissed'\)/);
+  assert.match(
+    riskModerationClosureSql,
+    /create trigger operations_risk_workflow_events_immutable/,
+  );
+  assert.match(
+    extractPolicy('operations_risk_workflow_events_staff_read', riskModerationClosureSql),
+    /'reviewer', 'operator', 'governance_admin'/,
+  );
+  assert.doesNotMatch(
+    riskModerationClosureSql,
+    /grant select on table public\.operations_risk_workflow_events to anon/,
+  );
+});
+
+test('risk review RPC is role-gated, consent-bound, and denies self-review', () => {
+  assert.match(
+    riskModerationClosureSql,
+    /v_actor_id is null\s+or v_actor_role is null\s+or v_actor_role not in/,
+  );
+  assert.match(
+    riskModerationClosureSql,
+    /reviewers cannot review their own risk report/,
+  );
+  assert.match(
+    riskModerationClosureSql,
+    /sanitized risk publication requires reporter consent/,
+  );
+  assert.match(
+    riskModerationClosureSql,
+    /public reference URL requires separate reporter consent/,
+  );
+  assert.match(
+    riskModerationClosureSql,
+    /grant execute on function public\.review_risk_report_v1\(uuid, text, text, text, text, text, text\) to authenticated/,
+  );
+  assert.doesNotMatch(
+    riskModerationClosureSql,
+    /grant execute on function public\.review_risk_report_v1[^;]*to anon/,
+  );
+});
+
+test('risk workflow mutations use the audited RPC and contain no payment path', () => {
+  assert.match(
+    riskModerationClosureSql,
+    /revoke update, delete on table public\.risk_reports from authenticated/,
+  );
+  assert.match(
+    riskModerationClosureSql,
+    /revoke update, delete on table public\.risk_evidence from authenticated/,
+  );
+  assert.match(
+    riskModerationClosureSql,
+    /revoke insert, update, delete on table public\.risk_publications from authenticated/,
+  );
+  assert.doesNotMatch(
+    riskModerationClosureSql,
+    /\bhttp_post\b|\bnet\.http\b|\bvault\.secrets\b|\bpg_net\b|\bsend_transaction\b|\bsendtransaction\b/i,
+  );
+  assert.doesNotMatch(
+    riskModerationClosureSql,
+    /\b(?:insert into|update|delete from)\s+public\.treasury_/i,
+  );
+});
+
+test('Phase 4N Staging cleanup is exact, owner-bound, and RPC-only', () => {
+  assert.match(
+    riskStagingE2ECleanupSql,
+    /create or replace function public\.cleanup_operations_risk_staging_e2e_v1\(/,
+  );
+  assert.match(
+    riskStagingE2ECleanupSql,
+    /\^phase-2e-6b-4n-staging-e2e:\[0-9\]\{13\}-\[0-9a-f\]\{8\}\$/,
+  );
+  assert.match(riskStagingE2ECleanupSql, /current_user = cleanup_owner/);
+  assert.match(
+    riskStagingE2ECleanupSql,
+    /grant execute on function public\.cleanup_operations_risk_staging_e2e_v1\(text, uuid\[\]\)[\s\S]*to service_role/,
+  );
+  assert.doesNotMatch(
+    riskStagingE2ECleanupSql,
+    /grant execute on function public\.cleanup_operations_risk_staging_e2e_v1[^;]*to (?:anon|authenticated)/,
+  );
+  assert.doesNotMatch(
+    riskStagingE2ECleanupSql,
+    /grant (?:insert|update|delete)[^;]* on table/i,
   );
 });
 
@@ -1211,6 +1317,245 @@ test('runtime Phase 4M cleanup removes only the exact audited Staging workflow',
   }
 });
 
+test('runtime risk review enforces role, independence, consent, and sanitized output', async () => {
+  const database = await createOperationsDatabase();
+  const reporterId = '99999999-9999-4999-8999-999999999901';
+  const reviewerId = '99999999-9999-4999-8999-999999999902';
+  const noRoleId = '99999999-9999-4999-8999-999999999903';
+  const verifiedWallet = '11111111111111111111111111111111';
+
+  try {
+    await database.exec(`
+      insert into auth.users (id) values
+        ('${reporterId}'),
+        ('${reviewerId}'),
+        ('${noRoleId}');
+      insert into auth.identities (id, user_id, provider, provider_id, identity_data)
+      values (
+        'identity-phase-4n-risk-reporter',
+        '${reporterId}',
+        'web3',
+        'web3:solana:${verifiedWallet}',
+        '{"sub":"web3:solana:${verifiedWallet}"}'
+      );
+      update public.operations_intake_control
+      set mode = 'wallet_staging', activation_reference = 'phase-4n runtime fixture';
+      select set_config('request.jwt.claim.sub', '${reporterId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${reporterId}","role":"authenticated"}',
+        false
+      );
+      set role authenticated;
+    `);
+
+    const reports = await database.query<{ id: string; project_identifier: string }>(`
+      insert into public.risk_reports (
+        submitted_by,
+        project_identifier,
+        summary,
+        reference_url,
+        wallet_address,
+        public_report_consent,
+        public_reference_consent
+      ) values
+      (
+        '${reporterId}',
+        'Phase 4N publish fixture',
+        'Private source material for an independently reviewed risk report that must be sanitized before publication.',
+        'https://private.example.com/phase-4n-publish',
+        '${verifiedWallet}',
+        true,
+        true
+      ),
+      (
+        '${reporterId}',
+        'Phase 4N dismiss fixture',
+        'A second private risk report used to prove that dismissal produces an audit event without a public record.',
+        'https://private.example.com/phase-4n-dismiss',
+        '${verifiedWallet}',
+        false,
+        false
+      )
+      returning id, project_identifier;
+    `);
+    const publishReportId = reports.rows.find(
+      (row) => row.project_identifier === 'Phase 4N publish fixture',
+    )?.id;
+    const dismissReportId = reports.rows.find(
+      (row) => row.project_identifier === 'Phase 4N dismiss fixture',
+    )?.id;
+    assert.ok(publishReportId);
+    assert.ok(dismissReportId);
+
+    await database.exec(`
+      insert into public.risk_evidence (
+        risk_report_id,
+        submitted_by,
+        evidence_url,
+        content_sha256,
+        summary
+      ) values (
+        '${publishReportId}',
+        '${reporterId}',
+        'https://private.example.com/phase-4n-additional-evidence',
+        '${'a'.repeat(64)}',
+        'Additional private evidence retained only for the independent reviewer.'
+      );
+      reset role;
+      select set_config('request.jwt.claim.sub', '${noRoleId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${noRoleId}","role":"authenticated"}',
+        false
+      );
+      set role authenticated;
+    `);
+
+    await assert.rejects(
+      database.query(`
+        select * from public.review_risk_report_v1(
+          '${publishReportId}',
+          'published',
+          'Unauthorized review attempt.',
+          'A sanitized public finding that must not be written by an unprivileged user.',
+          null,
+          'Unauthorized publication basis.',
+          'phase-4n-no-role-review'
+        );
+      `),
+      /operations role is not authorized to review risk reports/,
+    );
+
+    await database.exec(`
+      reset role;
+      select set_config('request.jwt.claim.sub', '${reporterId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${reporterId}","role":"authenticated","app_metadata":{"operations_role":"reviewer"}}',
+        false
+      );
+      set role authenticated;
+    `);
+    await assert.rejects(
+      database.query(`
+        select * from public.review_risk_report_v1(
+          '${publishReportId}',
+          'published',
+          'Self-review attempt.',
+          'A sanitized public finding that must not be produced through self-review.',
+          null,
+          'Self-review is not an acceptable publication basis.',
+          'phase-4n-self-review'
+        );
+      `),
+      /reviewers cannot review their own risk report/,
+    );
+
+    await database.exec(`
+      reset role;
+      select set_config('request.jwt.claim.sub', '${reviewerId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${reviewerId}","role":"authenticated","app_metadata":{"operations_role":"reviewer"}}',
+        false
+      );
+      set role authenticated;
+    `);
+    const published = await database.query<{
+      risk_report_id: string;
+      review_status: string;
+      publication_id: string;
+    }>(`
+      select * from public.review_risk_report_v1(
+        '${publishReportId}',
+        'published',
+        'The private report and evidence were independently reviewed before public sanitization.',
+        'A sanitized public risk finding with reporter identity and private evidence metadata removed.',
+        'https://public.example.com/phase-4n-finding',
+        'Independent evidence review under the documented risk publication criteria.',
+        'phase-4n-runtime-published'
+      );
+    `);
+    assert.equal(published.rows[0]?.review_status, 'resolved');
+    assert.ok(published.rows[0]?.publication_id);
+
+    const dismissed = await database.query<{
+      risk_report_id: string;
+      review_status: string;
+      publication_id: string | null;
+    }>(`
+      select * from public.review_risk_report_v1(
+        '${dismissReportId}',
+        'dismissed',
+        'The available evidence did not satisfy the documented publication threshold.',
+        null,
+        null,
+        null,
+        'phase-4n-runtime-dismissed'
+      );
+    `);
+    assert.deepEqual(dismissed.rows, [{
+      risk_report_id: dismissReportId,
+      review_status: 'dismissed',
+      publication_id: null,
+    }]);
+
+    await database.exec('reset role;');
+    const publicRows = await database.query<{
+      project_identifier: string;
+      summary: string;
+      reference_url: string;
+    }>(`
+      select project_identifier, summary, reference_url
+      from public.risk_publications
+      where report_reference = 'phase-4n-runtime-published';
+    `);
+    assert.deepEqual(publicRows.rows, [{
+      project_identifier: 'Phase 4N publish fixture',
+      summary: 'A sanitized public risk finding with reporter identity and private evidence metadata removed.',
+      reference_url: 'https://public.example.com/phase-4n-finding',
+    }]);
+
+    const audit = await database.query<{ action: string; event_reference: string }>(`
+      select action, event_reference
+      from public.operations_risk_workflow_events
+      where risk_report_id in ('${publishReportId}', '${dismissReportId}')
+      order by event_reference;
+    `);
+    assert.deepEqual(audit.rows, [
+      { action: 'report_dismissed', event_reference: 'phase-4n-runtime-dismissed' },
+      { action: 'report_published', event_reference: 'phase-4n-runtime-published' },
+    ]);
+
+    await database.exec(`
+      select set_config('request.jwt.claim.sub', '${reviewerId}', false);
+      select set_config(
+        'request.jwt.claims',
+        '{"sub":"${reviewerId}","role":"authenticated","app_metadata":{"operations_role":"reviewer"}}',
+        false
+      );
+      set role authenticated;
+    `);
+    await assert.rejects(
+      database.query(`
+        select * from public.review_risk_report_v1(
+          '${publishReportId}',
+          'published',
+          'Replay attempt.',
+          'A replayed public summary that must never create a second immutable publication.',
+          null,
+          'Replay is not a valid publication basis.',
+          'phase-4n-runtime-replay'
+        );
+      `),
+      /already in a terminal review state/,
+    );
+  } finally {
+    await database.close();
+  }
+});
+
 test('all migrations create the expected schema, policy, and trigger totals', async () => {
   const database = await createOperationsDatabase();
   try {
@@ -1236,9 +1581,9 @@ test('all migrations create the expected schema, policy, and trigger totals', as
         and relation.relname = any(array[${expectedTables.map(quoteSql).join(', ')}]);
     `);
 
-    assert.equal(tableCount.rows[0]?.count, 17);
-    assert.equal(policyCount.rows[0]?.count, 39);
-    assert.equal(triggerCount.rows[0]?.count, 37);
+    assert.equal(tableCount.rows[0]?.count, 18);
+    assert.equal(policyCount.rows[0]?.count, 40);
+    assert.equal(triggerCount.rows[0]?.count, 39);
   } finally {
     await database.close();
   }
@@ -1903,6 +2248,8 @@ async function createOperationsDatabase(): Promise<PGlite> {
   await database.exec(intakeGateAuditSql);
   await database.exec(taskModerationClosureSql);
   await database.exec(taskStagingE2ECleanupSql);
+  await database.exec(riskModerationClosureSql);
+  await database.exec(riskStagingE2ECleanupSql);
   return database;
 }
 

@@ -16,13 +16,17 @@ import {
   type PublicRiskReport,
   type PublicTaskResult,
   type ReliefApplicationInput,
+  type RiskEvidenceInput,
   type RiskReportInput,
+  type RiskReportReviewInput,
   type TaskSubmissionInput,
   type TaskSubmissionReviewInput,
   validateCommunityTaskPublication,
   validateDiscussion,
   validateReliefApplication,
+  validateRiskEvidence,
   validateRiskReport,
+  validateRiskReportReview,
   validateTaskSubmission,
   validateTaskSubmissionReview,
 } from './domain';
@@ -143,7 +147,7 @@ export function resolveOperationsStaffRole(user: User | null): OperationsStaffRo
 
 export async function loadOperationsStaffWorkspace(): Promise<OperationsStaffWorkspace> {
   const { client } = await requireStaffSession();
-  const [submissionResult, taskResult, eventResult] = await Promise.all([
+  const [submissionResult, taskResult, eventResult, riskResult, evidenceResult, riskEventResult] = await Promise.all([
     client
       .from('task_submissions')
       .select('id,task_id,submitted_by,summary,deliverable_url,wallet_address,public_result_consent,public_wallet_consent,status,reviewer_notes,created_at')
@@ -159,12 +163,35 @@ export async function loadOperationsStaffWorkspace(): Promise<OperationsStaffWor
       .select('event_id,entity_type,entity_reference,action,actor_role,event_reference,created_at')
       .order('created_at', { ascending: false })
       .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
+    client
+      .from('risk_reports')
+      .select('id,submitted_by,project_identifier,summary,reference_url,wallet_address,public_report_consent,public_reference_consent,review_status,reviewer_notes,created_at')
+      .in('review_status', ['submitted', 'triaged', 'investigating'])
+      .eq('publication_status', 'private')
+      .order('created_at', { ascending: true })
+      .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
+    client
+      .from('risk_evidence')
+      .select('risk_report_id')
+      .limit(OPERATIONS_PUBLIC_RECORD_LIMIT * 12),
+    client
+      .from('operations_risk_workflow_events')
+      .select('event_id,risk_report_id,action,actor_role,event_reference,created_at')
+      .order('created_at', { ascending: false })
+      .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
   ]);
 
   assertNoQueryError(submissionResult.error, '待审核任务成果');
   assertNoQueryError(taskResult.error, '任务标题');
   assertNoQueryError(eventResult.error, '任务工作流审计记录');
+  assertNoQueryError(riskResult.error, '待审核风险报告');
+  assertNoQueryError(evidenceResult.error, '风险证据索引');
+  assertNoQueryError(riskEventResult.error, '风险工作流审计记录');
   const taskTitles = new Map((taskResult.data ?? []).map((row) => [row.id, row.title]));
+  const evidenceCounts = new Map<string, number>();
+  for (const row of evidenceResult.data ?? []) {
+    evidenceCounts.set(row.risk_report_id, (evidenceCounts.get(row.risk_report_id) ?? 0) + 1);
+  }
 
   return {
     submissions: (submissionResult.data ?? []).map((row) => ({
@@ -185,6 +212,28 @@ export async function loadOperationsStaffWorkspace(): Promise<OperationsStaffWor
       eventId: String(row.event_id),
       entityType: row.entity_type,
       entityReference: row.entity_reference,
+      action: row.action,
+      actorRole: row.actor_role,
+      eventReference: row.event_reference,
+      createdAt: row.created_at,
+    })),
+    riskReports: (riskResult.data ?? []).map((row) => ({
+      id: row.id,
+      projectIdentifier: row.project_identifier,
+      summary: row.summary,
+      referenceUrl: row.reference_url,
+      walletAddress: row.wallet_address,
+      publicReportConsent: row.public_report_consent,
+      publicReferenceConsent: row.public_reference_consent,
+      reviewStatus: row.review_status,
+      submittedBy: row.submitted_by,
+      reviewerNotes: row.reviewer_notes,
+      evidenceCount: evidenceCounts.get(row.id) ?? 0,
+      createdAt: row.created_at,
+    })),
+    riskEvents: (riskEventResult.data ?? []).map((row) => ({
+      eventId: String(row.event_id),
+      riskReportId: row.risk_report_id,
       action: row.action,
       actorRole: row.actor_role,
       eventReference: row.event_reference,
@@ -244,9 +293,40 @@ export async function submitRiskReport(input: RiskReportInput): Promise<void> {
     wallet_verified: false,
     review_status: 'submitted',
     publication_status: 'private',
+    public_report_consent: payload.publicReportConsent,
+    public_reference_consent: payload.publicReferenceConsent,
   });
 
   assertNoMutationError(error, '风险报告');
+}
+
+export async function submitRiskEvidence(input: RiskEvidenceInput): Promise<void> {
+  const payload = validateRiskEvidence(input);
+  const { client, user } = await requireIntakeSession(payload.walletAddress);
+  const { error } = await client.from('risk_evidence').insert({
+    risk_report_id: payload.riskReportId,
+    submitted_by: user.id,
+    evidence_url: payload.evidenceUrl,
+    content_sha256: payload.contentSha256,
+    summary: payload.summary,
+    is_public: false,
+  });
+  assertNoMutationError(error, '风险证据');
+}
+
+export async function reviewRiskReport(input: RiskReportReviewInput): Promise<void> {
+  const payload = validateRiskReportReview(input);
+  const { client } = await requireStaffSession();
+  const result = await client.rpc('review_risk_report_v1', {
+    p_risk_report_id: payload.riskReportId,
+    p_decision: payload.decision,
+    p_reviewer_notes: payload.reviewerNotes,
+    p_public_summary: payload.publicSummary,
+    p_public_reference_url: payload.publicReferenceUrl,
+    p_publication_basis: payload.publicationBasis,
+    p_audit_reference: payload.auditReference,
+  });
+  assertNoMutationError(result.error, '风险报告审核');
 }
 
 export async function submitReliefApplication(input: ReliefApplicationInput): Promise<void> {

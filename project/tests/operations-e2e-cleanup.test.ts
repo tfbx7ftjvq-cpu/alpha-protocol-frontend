@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   isExactCleanupDeletion,
+  readRiskWorkflowCleanupCounts,
   readTaskWorkflowCleanupCounts,
 } from '../scripts/operations-staging/e2e.ts';
 
@@ -25,6 +26,42 @@ test('staging cleanup only accepts one returned row with the expected id', () =>
     ),
     false,
   );
+});
+
+test('risk workflow cleanup accepts one complete non-negative count receipt', () => {
+  assert.deepEqual(
+    readRiskWorkflowCleanupCounts([{
+      publications_deleted: 1,
+      events_deleted: 2,
+      evidence_deleted: 1,
+      reports_deleted: 2,
+    }]),
+    {
+      publicationsDeleted: 1,
+      eventsDeleted: 2,
+      evidenceDeleted: 1,
+      reportsDeleted: 2,
+    },
+  );
+  for (const invalid of [
+    null,
+    [],
+    [{ publications_deleted: 1 }],
+    [{
+      publications_deleted: 1,
+      events_deleted: -2,
+      evidence_deleted: 1,
+      reports_deleted: 2,
+    }],
+    [{
+      publications_deleted: 1,
+      events_deleted: 2,
+      evidence_deleted: 1.5,
+      reports_deleted: 2,
+    }],
+  ]) {
+    assert.equal(readRiskWorkflowCleanupCounts(invalid), null);
+  }
 });
 
 test('task workflow cleanup accepts one complete non-negative count receipt', () => {

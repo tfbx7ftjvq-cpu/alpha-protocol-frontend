@@ -29,6 +29,7 @@ select has_table('public'::name, 'treasury_execution_intents'::name);
 select has_table('public'::name, 'treasury_execution_receipts'::name);
 select has_table('public'::name, 'task_submission_publications'::name);
 select has_table('public'::name, 'operations_task_workflow_events'::name);
+select has_table('public'::name, 'operations_risk_workflow_events'::name);
 
 select is(
   (
@@ -52,11 +53,12 @@ select is(
         'treasury_execution_intents',
         'treasury_execution_receipts',
         'task_submission_publications',
-        'operations_task_workflow_events'
+        'operations_task_workflow_events',
+        'operations_risk_workflow_events'
       ])
   ),
-  17,
-  'all 17 operations tables exist, including task result and workflow audit separation'
+  18,
+  'all 18 operations tables exist, including task and risk workflow audit separation'
 );
 
 select is(
@@ -82,11 +84,12 @@ select is(
         'treasury_execution_intents',
         'treasury_execution_receipts',
         'task_submission_publications',
-        'operations_task_workflow_events'
+        'operations_task_workflow_events',
+        'operations_risk_workflow_events'
       ])
       and relation.relrowsecurity
   ),
-  17,
+  18,
   'RLS is enabled on every operations table'
 );
 
@@ -112,11 +115,12 @@ select is(
         'treasury_execution_intents',
         'treasury_execution_receipts',
         'task_submission_publications',
-        'operations_task_workflow_events'
+        'operations_task_workflow_events',
+        'operations_risk_workflow_events'
       ])
   ),
-  39,
-  'the reviewed operations policy total includes separated task publication and audit reads'
+  40,
+  'the reviewed operations policy total includes separated task and risk audit reads'
 );
 
 select is(
@@ -144,11 +148,12 @@ select is(
         'treasury_execution_intents',
         'treasury_execution_receipts',
         'task_submission_publications',
-        'operations_task_workflow_events'
+        'operations_task_workflow_events',
+        'operations_risk_workflow_events'
       ])
   ),
-  37,
-  'the reviewed trigger total includes immutable task publications and task workflow events'
+  39,
+  'the reviewed trigger total includes risk evidence throttling and immutable workflow events'
 );
 
 select ok(
@@ -546,6 +551,134 @@ select ok(
         and trigger.tgname = 'operations_task_workflow_events_immutable'
     ),
   'task workflow immutability allows only the owner-bound controlled cleanup context'
+);
+
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.review_risk_report_v1(uuid,text,text,text,text,text,text)',
+    'EXECUTE'
+  )
+    and not has_function_privilege(
+      'anon',
+      'public.review_risk_report_v1(uuid,text,text,text,text,text,text)',
+      'EXECUTE'
+    )
+    and not has_table_privilege(
+      'authenticated',
+      'public.risk_reports',
+      'UPDATE,DELETE'
+    )
+    and not has_table_privilege(
+      'authenticated',
+      'public.risk_evidence',
+      'UPDATE,DELETE'
+    )
+    and not has_table_privilege(
+      'authenticated',
+      'public.risk_publications',
+      'INSERT,UPDATE,DELETE'
+    ),
+  'authenticated reviewers must use the audited risk review RPC instead of direct writes'
+);
+
+select ok(
+  not has_table_privilege(
+    'anon',
+    'public.operations_risk_workflow_events',
+    'SELECT'
+  )
+    and has_table_privilege(
+      'authenticated',
+      'public.operations_risk_workflow_events',
+      'SELECT'
+    )
+    and exists (
+      select 1
+      from pg_catalog.pg_trigger trigger
+      join pg_catalog.pg_class relation on relation.oid = trigger.tgrelid
+      join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+      where not trigger.tgisinternal
+        and namespace.nspname = 'public'
+        and relation.relname = 'operations_risk_workflow_events'
+        and trigger.tgname = 'operations_risk_workflow_events_immutable'
+    ),
+  'risk workflow audit is private to staff policy scope and immutable'
+);
+
+select ok(
+  (
+    select pg_get_functiondef(procedure.oid)
+    from pg_catalog.pg_proc procedure
+    join pg_catalog.pg_namespace namespace
+      on namespace.oid = procedure.pronamespace
+    where namespace.nspname = 'public'
+      and procedure.proname = 'review_risk_report_v1'
+  ) ilike '%v_actor_role is null%'
+    and (
+      select pg_get_functiondef(procedure.oid)
+      from pg_catalog.pg_proc procedure
+      join pg_catalog.pg_namespace namespace
+        on namespace.oid = procedure.pronamespace
+      where namespace.nspname = 'public'
+        and procedure.proname = 'review_risk_report_v1'
+    ) ilike '%reviewers cannot review their own risk report%'
+    and (
+      select pg_get_functiondef(procedure.oid)
+      from pg_catalog.pg_proc procedure
+      join pg_catalog.pg_namespace namespace
+        on namespace.oid = procedure.pronamespace
+      where namespace.nspname = 'public'
+        and procedure.proname = 'review_risk_report_v1'
+    ) ilike '%sanitized risk publication requires reporter consent%'
+    and (
+      select pg_get_functiondef(procedure.oid)
+      from pg_catalog.pg_proc procedure
+      join pg_catalog.pg_namespace namespace
+        on namespace.oid = procedure.pronamespace
+      where namespace.nspname = 'public'
+        and procedure.proname = 'review_risk_report_v1'
+    ) ilike '%public reference URL requires separate reporter consent%',
+  'risk review explicitly rejects NULL roles and self-review and requires separate publication consent'
+);
+
+select ok(
+  has_function_privilege(
+    'service_role',
+    'public.cleanup_operations_risk_staging_e2e_v1(text,uuid[])',
+    'EXECUTE'
+  )
+    and not has_function_privilege(
+      'authenticated',
+      'public.cleanup_operations_risk_staging_e2e_v1(text,uuid[])',
+      'EXECUTE'
+    )
+    and not has_function_privilege(
+      'anon',
+      'public.cleanup_operations_risk_staging_e2e_v1(text,uuid[])',
+      'EXECUTE'
+    )
+    and not has_table_privilege(
+      'service_role',
+      'public.risk_publications',
+      'DELETE'
+    )
+    and not has_table_privilege(
+      'service_role',
+      'public.operations_risk_workflow_events',
+      'DELETE'
+    )
+    and not has_table_privilege(
+      'service_role',
+      'public.risk_evidence',
+      'DELETE'
+    )
+    and not has_table_privilege(
+      'service_role',
+      'public.risk_reports',
+      'DELETE'
+    ),
+  'exact Phase 4N Staging risk cleanup is RPC-only and excluded from browser roles'
 );
 
 select ok(

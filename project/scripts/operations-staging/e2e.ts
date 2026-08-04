@@ -34,6 +34,8 @@ interface CreatedRows {
   publicationId: string | null;
   discussionId: string | null;
   runReference: string;
+  riskReportIds: string[];
+  riskRunReference: string;
 }
 
 interface TaskWorkflowCleanupCounts {
@@ -41,6 +43,13 @@ interface TaskWorkflowCleanupCounts {
   eventsDeleted: number;
   submissionsDeleted: number;
   tasksDeleted: number;
+}
+
+interface RiskWorkflowCleanupCounts {
+  publicationsDeleted: number;
+  eventsDeleted: number;
+  evidenceDeleted: number;
+  reportsDeleted: number;
 }
 
 export interface OperationsStagingE2EResult {
@@ -82,6 +91,7 @@ export async function runOperationsStagingE2E(
 
   const runId = `${Date.now()}-${randomBytes(4).toString('hex')}`;
   const runReference = `phase-2e-6b-4m-staging-e2e:${runId}`;
+  const riskRunReference = `phase-2e-6b-4n-staging-e2e:${runId}`;
   const createdUsers: string[] = [];
   const rows: CreatedRows = {
     taskId: null,
@@ -89,6 +99,8 @@ export async function runOperationsStagingE2E(
     publicationId: null,
     discussionId: null,
     runReference,
+    riskReportIds: [],
+    riskRunReference,
   };
   let assertions = 0;
   let primaryError: unknown = null;
@@ -542,6 +554,218 @@ export async function runOperationsStagingE2E(
     );
     assertions += 1;
 
+    const publishRiskIdentifier = `Staging risk publish ${runId}`;
+    const dismissRiskIdentifier = `Staging risk dismiss ${runId}`;
+    const publishRiskUrl = `https://example.com/alpha-staging-risk-${runId}-publish`;
+    const dismissRiskUrl = `https://example.com/alpha-staging-risk-${runId}-dismiss`;
+    const additionalRiskEvidenceUrl =
+      `https://example.com/alpha-staging-risk-${runId}-additional-evidence`;
+
+    const publishRiskInsert = await ownerA.client
+      .from('risk_reports')
+      .insert({
+        submitted_by: ownerA.user.id,
+        project_identifier: publishRiskIdentifier,
+        summary: `Private Phase 4N Staging risk report ${runId}; facts and unverified interpretation remain separated.`,
+        reference_url: publishRiskUrl,
+        wallet_address: requiredWallet(ownerA),
+        wallet_verified: false,
+        public_report_consent: true,
+        public_reference_consent: true,
+      })
+      .select('id')
+      .single();
+    assertNoError(publishRiskInsert.error, 'publish-path risk report insert');
+    const publishRiskId = requiredId(publishRiskInsert.data?.id, 'publish-path risk report');
+    rows.riskReportIds.push(publishRiskId);
+
+    const dismissRiskInsert = await ownerA.client
+      .from('risk_reports')
+      .insert({
+        submitted_by: ownerA.user.id,
+        project_identifier: dismissRiskIdentifier,
+        summary: `Private Phase 4N Staging dismissal report ${runId}; this fixture must never create a public record.`,
+        reference_url: dismissRiskUrl,
+        wallet_address: requiredWallet(ownerA),
+        wallet_verified: false,
+        public_report_consent: false,
+        public_reference_consent: false,
+      })
+      .select('id')
+      .single();
+    assertNoError(dismissRiskInsert.error, 'dismiss-path risk report insert');
+    const dismissRiskId = requiredId(dismissRiskInsert.data?.id, 'dismiss-path risk report');
+    rows.riskReportIds.push(dismissRiskId);
+    assertions += 2;
+
+    const evidenceInsert = await ownerA.client
+      .from('risk_evidence')
+      .insert({
+        risk_report_id: publishRiskId,
+        submitted_by: ownerA.user.id,
+        evidence_url: additionalRiskEvidenceUrl,
+        content_sha256: 'a'.repeat(64),
+        summary: `Additional private Phase 4N Staging evidence ${runId}.`,
+        is_public: false,
+      })
+      .select('id')
+      .single();
+    assertNoError(evidenceInsert.error, 'private risk evidence insert');
+    assertions += 1;
+
+    const anonPrivateRiskRead = await publicClient
+      .from('risk_reports')
+      .select('id')
+      .in('id', rows.riskReportIds);
+    expect(Boolean(anonPrivateRiskRead.error), 'anon unexpectedly read private risk reports');
+    assertions += 1;
+
+    const unauthorizedRiskReview = await emailOnlyOwner.client.rpc(
+      'review_risk_report_v1',
+      {
+        p_risk_report_id: dismissRiskId,
+        p_decision: 'dismissed',
+        p_reviewer_notes: 'This no-role risk review must be denied.',
+        p_public_summary: null,
+        p_public_reference_url: null,
+        p_publication_basis: null,
+        p_audit_reference: `${riskRunReference}:unauthorized`,
+      },
+    );
+    expect(Boolean(unauthorizedRiskReview.error), 'user without a role reviewed a risk report');
+    assertions += 1;
+
+    const selfRiskReview = await ownerA.client.rpc('review_risk_report_v1', {
+      p_risk_report_id: dismissRiskId,
+      p_decision: 'dismissed',
+      p_reviewer_notes: 'This self-review must be denied.',
+      p_public_summary: null,
+      p_public_reference_url: null,
+      p_publication_basis: null,
+      p_audit_reference: `${riskRunReference}:self-review`,
+    });
+    expect(Boolean(selfRiskReview.error), 'risk reporter completed a self-review');
+    assertions += 1;
+
+    const directRiskRewrite = await operator.client
+      .from('risk_reports')
+      .update({ reviewer_notes: 'Direct mutation must be denied.' })
+      .eq('id', publishRiskId)
+      .select('id');
+    expect(
+      Boolean(directRiskRewrite.error) || (directRiskRewrite.data ?? []).length === 0,
+      'operator bypassed the audited risk review RPC',
+    );
+    assertions += 1;
+
+    const publicRiskSummary =
+      `Sanitized Phase 4N Staging risk finding ${runId} with private reporter and evidence metadata removed.`;
+    const publishRiskReview = await reviewer.client.rpc('review_risk_report_v1', {
+      p_risk_report_id: publishRiskId,
+      p_decision: 'published',
+      p_reviewer_notes: 'Independent Staging reviewer examined the private report and evidence fixture.',
+      p_public_summary: publicRiskSummary,
+      p_public_reference_url: publishRiskUrl,
+      p_publication_basis: 'Controlled Phase 4N Staging evidence review with reporter publication consent.',
+      p_audit_reference: `${riskRunReference}:published`,
+    });
+    assertNoError(publishRiskReview.error, 'published risk review RPC');
+    const publishRiskReceipt = readSingleRpcRow(publishRiskReview.data, 'published risk review');
+    expect(
+      publishRiskReceipt.risk_report_id === publishRiskId
+        && publishRiskReceipt.review_status === 'resolved'
+        && typeof publishRiskReceipt.publication_id === 'string',
+      'published risk review returned an invalid receipt',
+    );
+    assertions += 1;
+
+    const dismissRiskReview = await reviewer.client.rpc('review_risk_report_v1', {
+      p_risk_report_id: dismissRiskId,
+      p_decision: 'dismissed',
+      p_reviewer_notes: 'Independent Staging reviewer dismissed this fixture without publication.',
+      p_public_summary: null,
+      p_public_reference_url: null,
+      p_publication_basis: null,
+      p_audit_reference: `${riskRunReference}:dismissed`,
+    });
+    assertNoError(dismissRiskReview.error, 'dismissed risk review RPC');
+    const dismissRiskReceipt = readSingleRpcRow(dismissRiskReview.data, 'dismissed risk review');
+    expect(
+      dismissRiskReceipt.risk_report_id === dismissRiskId
+        && dismissRiskReceipt.review_status === 'dismissed'
+        && dismissRiskReceipt.publication_id === null,
+      'dismissed risk review returned an invalid receipt',
+    );
+    assertions += 1;
+
+    const riskPublicationRead = await publicClient
+      .from('risk_publications')
+      .select('*')
+      .eq('report_reference', `${riskRunReference}:published`)
+      .single();
+    assertNoError(riskPublicationRead.error, 'anon sanitized risk publication read');
+    const riskPublication = readRecord(riskPublicationRead.data, 'sanitized risk publication');
+    expect(
+      riskPublication.project_identifier === publishRiskIdentifier
+        && riskPublication.summary === publicRiskSummary
+        && riskPublication.reference_url === publishRiskUrl
+        && !('submitted_by' in riskPublication)
+        && !('wallet_address' in riskPublication)
+        && !('reviewer_notes' in riskPublication),
+      'sanitized risk publication leaked private fields',
+    );
+    assertions += 1;
+
+    const dismissedRiskPublication = await publicClient
+      .from('risk_publications')
+      .select('id')
+      .eq('report_reference', `${riskRunReference}:dismissed`);
+    assertNoError(dismissedRiskPublication.error, 'dismissed risk publication absence read');
+    expect((dismissedRiskPublication.data ?? []).length === 0, 'dismissed report created a publication');
+    assertions += 1;
+
+    const replayRiskReview = await reviewer.client.rpc('review_risk_report_v1', {
+      p_risk_report_id: publishRiskId,
+      p_decision: 'dismissed',
+      p_reviewer_notes: 'Terminal risk review replay must be denied.',
+      p_public_summary: null,
+      p_public_reference_url: null,
+      p_publication_basis: null,
+      p_audit_reference: `${riskRunReference}:replay`,
+    });
+    expect(Boolean(replayRiskReview.error), 'terminal risk review was replayed');
+    assertions += 1;
+
+    const anonRiskEventsRead = await publicClient
+      .from('operations_risk_workflow_events')
+      .select('event_id')
+      .in('risk_report_id', rows.riskReportIds);
+    expect(Boolean(anonRiskEventsRead.error), 'anon unexpectedly read private risk audit events');
+    assertions += 1;
+
+    const staffRiskEventsRead = await reviewer.client
+      .from('operations_risk_workflow_events')
+      .select('action,event_reference')
+      .in('risk_report_id', rows.riskReportIds);
+    assertNoError(staffRiskEventsRead.error, 'staff risk audit event read');
+    expect(
+      hasExactRiskWorkflowActions(staffRiskEventsRead.data, riskRunReference),
+      'risk audit did not contain the exact publish and dismiss events',
+    );
+    assertions += 1;
+
+    const immutableRiskPublication = await reviewer.client
+      .from('risk_publications')
+      .update({ summary: `Rewritten risk publication ${runId}` })
+      .eq('report_reference', `${riskRunReference}:published`)
+      .select('id');
+    expect(
+      Boolean(immutableRiskPublication.error)
+        || (immutableRiskPublication.data ?? []).length === 0,
+      'reviewer rewrote an immutable risk publication',
+    );
+    assertions += 1;
+
     const discussionInsert = await ownerA.client
       .from('governance_discussions')
       .insert({
@@ -851,6 +1075,41 @@ async function cleanupStagingFixtures(
     errors.push('task workflow cleanup identifiers are inconsistent');
   }
 
+  if (rows.riskReportIds.length === 2) {
+    const riskCleanup = await admin.rpc(
+      'cleanup_operations_risk_staging_e2e_v1',
+      {
+        p_run_reference: rows.riskRunReference,
+        p_risk_report_ids: rows.riskReportIds,
+      },
+    );
+    if (riskCleanup.error) {
+      errors.push('risk workflow cleanup RPC failed');
+    } else {
+      const counts = readRiskWorkflowCleanupCounts(riskCleanup.data);
+      if (!counts) {
+        errors.push('risk workflow cleanup RPC returned invalid counts');
+      } else if (
+        requireCompleteWorkflow
+        && (
+          counts.publicationsDeleted !== 1
+          || counts.eventsDeleted !== 2
+          || counts.evidenceDeleted !== 1
+          || counts.reportsDeleted !== 2
+        )
+      ) {
+        errors.push('risk workflow cleanup RPC count mismatch');
+      } else {
+        rowsDeleted += counts.publicationsDeleted
+          + counts.eventsDeleted
+          + counts.evidenceDeleted
+          + counts.reportsDeleted;
+      }
+    }
+  } else if (rows.riskReportIds.length > 0) {
+    errors.push('risk workflow cleanup identifiers are inconsistent');
+  }
+
   for (const userId of [...userIds].reverse()) {
     const result = await admin.auth.admin.deleteUser(userId);
     if (result.error) {
@@ -893,6 +1152,36 @@ export function readTaskWorkflowCleanupCounts(
     eventsDeleted,
     submissionsDeleted,
     tasksDeleted,
+  };
+}
+
+export function readRiskWorkflowCleanupCounts(
+  data: unknown,
+): RiskWorkflowCleanupCounts | null {
+  if (!Array.isArray(data) || data.length !== 1) {
+    return null;
+  }
+  const row = readUnknownRecord(data[0]);
+  if (!row) {
+    return null;
+  }
+  const publicationsDeleted = readNonNegativeInteger(row.publications_deleted);
+  const eventsDeleted = readNonNegativeInteger(row.events_deleted);
+  const evidenceDeleted = readNonNegativeInteger(row.evidence_deleted);
+  const reportsDeleted = readNonNegativeInteger(row.reports_deleted);
+  if (
+    publicationsDeleted === null
+    || eventsDeleted === null
+    || evidenceDeleted === null
+    || reportsDeleted === null
+  ) {
+    return null;
+  }
+  return {
+    publicationsDeleted,
+    eventsDeleted,
+    evidenceDeleted,
+    reportsDeleted,
   };
 }
 
@@ -962,6 +1251,28 @@ function hasExactWorkflowActions(
     `submission_accepted:${runReference}:accepted:decision`,
     `submission_rejected:${runReference}:rejected:decision`,
     `task_published:${runReference}:task:publish`,
+  ].sort();
+  return actual.length === expected.length
+    && actual.every((value, index) => value === expected[index]);
+}
+
+function hasExactRiskWorkflowActions(
+  data: unknown,
+  runReference: string,
+): boolean {
+  if (!Array.isArray(data) || data.length !== 2) {
+    return false;
+  }
+  const actual = data.flatMap((value) => {
+    const record = readUnknownRecord(value);
+    return typeof record?.action === 'string'
+      && typeof record.event_reference === 'string'
+      ? [`${record.action}:${record.event_reference}`]
+      : [];
+  }).sort();
+  const expected = [
+    `report_dismissed:${runReference}:dismissed`,
+    `report_published:${runReference}:published`,
   ].sort();
   return actual.length === expected.length
     && actual.every((value, index) => value === expected[index]);
