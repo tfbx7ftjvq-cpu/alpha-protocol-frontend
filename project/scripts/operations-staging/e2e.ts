@@ -33,6 +33,7 @@ interface CreatedRows {
   submissionIds: string[];
   publicationId: string | null;
   discussionId: string | null;
+  discussionOwnerId: string | null;
   runReference: string;
   riskReportIds: string[];
   riskRunReference: string;
@@ -113,6 +114,7 @@ export async function runOperationsStagingE2E(
     submissionIds: [],
     publicationId: null,
     discussionId: null,
+    discussionOwnerId: null,
     runReference,
     riskReportIds: [],
     riskRunReference,
@@ -148,6 +150,9 @@ export async function runOperationsStagingE2E(
       'reviewer',
     );
     createdUsers.push(reviewer.user.id);
+
+    const moderator = await createActor(admin, config, runId, 'moderator', 'moderator');
+    createdUsers.push(moderator.user.id);
 
     const ownerA = await createWalletActor(admin, config);
     createdUsers.push(ownerA.user.id);
@@ -1041,61 +1046,53 @@ export async function runOperationsStagingE2E(
     );
     assertions += 1;
 
-    const discussionInsert = await ownerA.client
-      .from('governance_discussions')
-      .insert({
-        submitted_by: ownerA.user.id,
-        topic: `Staging moderation ${runId}`,
-        body: 'This private staging discussion verifies moderator SELECT and UPDATE policies.',
-        wallet_address: requiredWallet(ownerA),
-        wallet_verified: false,
-        moderation_status: 'pending',
-      })
-      .select('id')
-      .single();
+    const discussionInsert = await ownerA.client.rpc('submit_governance_discussion_v1', {
+      p_proposal_id: null,
+      p_topic: `Staging moderation ${runId}`,
+      p_body: 'This private staging discussion verifies independent moderator review and sanitized publication.',
+      p_public_body_consent: true,
+      p_public_wallet_consent: false,
+      p_submission_reference: `${runReference}:discussion-submitted`,
+    });
     assertNoError(discussionInsert.error, 'discussion insert');
-    rows.discussionId = requiredId(discussionInsert.data?.id, 'discussion');
+    rows.discussionId = requiredId(readSingleRpcRow(discussionInsert.data, 'discussion submission').discussion_id, 'discussion');
+    rows.discussionOwnerId = ownerA.user.id;
     assertions += 1;
 
     const operatorDiscussionRead = await operator.client
       .from('governance_discussions')
       .select('id,moderation_status')
-      .eq('id', rows.discussionId)
-      .single();
-    assertNoError(operatorDiscussionRead.error, 'operator discussion read');
+      .eq('id', rows.discussionId);
     expect(
-      operatorDiscussionRead.data?.moderation_status === 'pending',
-      'operator did not receive the pending discussion',
+      (operatorDiscussionRead.data ?? []).length === 0,
+      'operator read a moderator-only private discussion',
     );
     assertions += 1;
 
-    const unauthorizedModeration = await emailOnlyOwner.client
-      .from('governance_discussions')
-      .update({
-        moderation_status: 'rejected',
-        moderated_by: emailOnlyOwner.user.id,
-      })
-      .eq('id', rows.discussionId)
-      .select('id');
+    const unauthorizedModeration = await emailOnlyOwner.client.rpc('review_governance_discussion_v1', {
+      p_discussion_id: rows.discussionId, p_decision: 'rejected',
+      p_reviewer_notes: 'No-role moderation must fail.', p_public_topic: null,
+      p_public_body: null, p_publication_basis: null,
+      p_audit_reference: `${runReference}:discussion-unauthorized`,
+    });
     expect(
       Boolean(unauthorizedModeration.error)
-        || (unauthorizedModeration.data ?? []).length === 0,
+        || !unauthorizedModeration.data,
       'unprivileged user moderated another user discussion',
     );
     assertions += 1;
 
-    const authorizedModeration = await operator.client
-      .from('governance_discussions')
-      .update({
-        moderation_status: 'published',
-        moderated_by: operator.user.id,
-      })
-      .eq('id', rows.discussionId)
-      .select('id,moderation_status')
-      .single();
+    const authorizedModeration = await moderator.client.rpc('review_governance_discussion_v1', {
+      p_discussion_id: rows.discussionId, p_decision: 'published',
+      p_reviewer_notes: 'Independent moderator approved a separately sanitized public version.',
+      p_public_topic: `Sanitized staging moderation ${runId}`,
+      p_public_body: 'A sanitized governance discussion was independently reviewed; private source content remains isolated.',
+      p_publication_basis: 'Controlled Staging consent and moderator review.',
+      p_audit_reference: `${runReference}:discussion-published`,
+    });
     assertNoError(authorizedModeration.error, 'operator discussion update');
     expect(
-      authorizedModeration.data?.moderation_status === 'published',
+      readSingleRpcRow(authorizedModeration.data, 'discussion review').moderation_status === 'published',
       'operator moderation did not persist',
     );
     assertions += 1;
@@ -1299,18 +1296,18 @@ async function cleanupStagingFixtures(
   let rowsDeleted = 0;
   let usersDeleted = 0;
 
-  if (rows.discussionId) {
-    const result = await admin
-      .from('governance_discussions')
-      .delete()
-      .eq('id', rows.discussionId)
-      .select('id');
+  if (rows.discussionId && rows.discussionOwnerId) {
+    const result = await admin.rpc('cleanup_governance_discussion_staging_e2e_v1', {
+      p_run_reference: rows.runReference,
+      p_owner_id: rows.discussionOwnerId,
+      p_discussion_id: rows.discussionId,
+    });
     if (result.error) {
       errors.push('governance_discussions cleanup failed');
-    } else if (!isExactCleanupDeletion(result.data, rows.discussionId)) {
+    } else if (Number(readSingleRpcRow(result.data, 'discussion cleanup').discussions_deleted) !== 1) {
       errors.push('governance_discussions cleanup count mismatch');
     } else {
-      rowsDeleted += 1;
+      rowsDeleted += 4;
     }
   }
 

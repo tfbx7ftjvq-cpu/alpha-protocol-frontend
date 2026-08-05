@@ -5,6 +5,9 @@ import type {
   OperationsStaffWorkspace,
   RiskReportReviewInput,
   ReliefApplicationReviewInput,
+  GovernanceProposalReviewInput,
+  GovernanceDiscussionReviewInput,
+  GovernanceDecisionFinalizeInput,
   TaskSubmissionReviewInput,
 } from '../features/operations/domain';
 import {
@@ -13,6 +16,9 @@ import {
   reviewTaskSubmission,
   reviewRiskReport,
   reviewReliefApplication,
+  reviewGovernanceProposal,
+  reviewGovernanceDiscussion,
+  finalizeGovernanceDecision,
 } from '../features/operations/repository';
 
 const EMPTY_WORKSPACE: OperationsStaffWorkspace = {
@@ -22,6 +28,9 @@ const EMPTY_WORKSPACE: OperationsStaffWorkspace = {
   riskEvents: [],
   reliefApplications: [],
   reliefEvents: [],
+  proposalSubmissions: [],
+  discussions: [],
+  governanceEvents: [],
 };
 
 export interface OperationsStaffState {
@@ -34,6 +43,9 @@ export interface OperationsStaffState {
   reviewSubmission: (input: TaskSubmissionReviewInput) => Promise<void>;
   reviewRisk: (input: RiskReportReviewInput) => Promise<void>;
   reviewRelief: (input: ReliefApplicationReviewInput) => Promise<void>;
+  reviewProposal: (input: GovernanceProposalReviewInput) => Promise<void>;
+  reviewDiscussion: (input: GovernanceDiscussionReviewInput) => Promise<void>;
+  finalizeDecision: (input: GovernanceDecisionFinalizeInput) => Promise<void>;
 }
 
 export function useOperationsStaff(
@@ -140,6 +152,30 @@ export function useOperationsStaff(
     }
   }, [refresh, role]);
 
+  const reviewProposal = useCallback(async (input: GovernanceProposalReviewInput) => {
+    if (!role) throw new Error('当前钱包会话没有治理提案审核权限');
+    setSubmitting(true); setError(null);
+    try { await reviewGovernanceProposal(input); await refresh(); }
+    catch (reviewError) { setError(reviewError instanceof Error ? reviewError.message : '治理提案审核失败'); throw reviewError; }
+    finally { setSubmitting(false); }
+  }, [refresh, role]);
+
+  const reviewDiscussion = useCallback(async (input: GovernanceDiscussionReviewInput) => {
+    if (!role) throw new Error('当前钱包会话没有治理讨论审核权限');
+    setSubmitting(true); setError(null);
+    try { await reviewGovernanceDiscussion(input); await refresh(); }
+    catch (reviewError) { setError(reviewError instanceof Error ? reviewError.message : '治理讨论审核失败'); throw reviewError; }
+    finally { setSubmitting(false); }
+  }, [refresh, role]);
+
+  const finalizeDecision = useCallback(async (input: GovernanceDecisionFinalizeInput) => {
+    if (!role) throw new Error('当前钱包会话没有治理决定终局权限');
+    setSubmitting(true); setError(null);
+    try { await finalizeGovernanceDecision(input); await refresh(); }
+    catch (finalizeError) { setError(finalizeError instanceof Error ? finalizeError.message : '治理决定终局失败'); throw finalizeError; }
+    finally { setSubmitting(false); }
+  }, [refresh, role]);
+
   return {
     workspace,
     loading,
@@ -150,5 +186,8 @@ export function useOperationsStaff(
     reviewSubmission,
     reviewRisk,
     reviewRelief,
+    reviewProposal,
+    reviewDiscussion,
+    finalizeDecision,
   };
 }

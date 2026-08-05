@@ -14,6 +14,8 @@ select no_plan();
 
 select has_table('public'::name, 'operations_intake_control'::name);
 select has_table('public'::name, 'operations_intake_gate_events'::name);
+select has_table('public'::name, 'governance_proposal_submissions'::name);
+select has_table('public'::name, 'operations_governance_workflow_events'::name);
 select has_table('public'::name, 'community_tasks'::name);
 select has_table('public'::name, 'task_submissions'::name);
 select has_table('public'::name, 'risk_reports'::name);
@@ -815,6 +817,38 @@ select ok(
       )
   ),
   'operations schema contains no transaction sender or HTTP function'
+);
+
+select ok(
+  has_function_privilege('authenticated', 'public.submit_governance_proposal_v1(text,text,text,boolean,jsonb,text,boolean,text)', 'EXECUTE')
+    and has_function_privilege('authenticated', 'public.publish_governance_proposal_v1(uuid,text,text,text,text,text,text,text,text)', 'EXECUTE')
+    and has_function_privilege('authenticated', 'public.review_governance_discussion_v1(uuid,text,text,text,text,text,text)', 'EXECUTE')
+    and has_function_privilege('authenticated', 'public.finalize_governance_decision_v1(uuid,text,text,text,text)', 'EXECUTE')
+    and not has_table_privilege('authenticated', 'public.governance_proposals', 'INSERT,UPDATE,DELETE')
+    and not has_table_privilege('authenticated', 'public.governance_decisions', 'INSERT,UPDATE,DELETE'),
+  'governance mutation is RPC-only for authenticated wallet and staff sessions'
+);
+
+select ok(
+  (select pg_get_functiondef(p.oid) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'finalize_governance_decision_v1')
+      ilike '%sha256(convert_to(concat_ws%'
+    and (select pg_get_functiondef(p.oid) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = 'finalize_governance_decision_v1')
+      ilike '%execution_intent_created%false%execution_receipt_created%false%'
+    and (select pg_get_functiondef(p.oid) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = 'finalize_governance_decision_v1')
+      !~* '(insert into|update|delete from)[[:space:]]+public[.]treasury_',
+  'governance finalization deterministically binds SHA-256 and creates no execution state'
+);
+
+select ok(
+  has_function_privilege('service_role', 'public.cleanup_governance_operations_staging_e2e_v1(text,uuid,uuid[],uuid[])', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.cleanup_governance_operations_staging_e2e_v1(text,uuid,uuid[],uuid[])', 'EXECUTE')
+    and not has_function_privilege('anon', 'public.cleanup_governance_operations_staging_e2e_v1(text,uuid,uuid[],uuid[])', 'EXECUTE')
+    and not has_table_privilege('service_role', 'public.governance_proposal_submissions', 'DELETE')
+    and not has_table_privilege('service_role', 'public.operations_governance_workflow_events', 'DELETE'),
+  'Phase 2E-6C cleanup is exact service-role-only RPC access without table delete grants'
 );
 
 select * from finish();

@@ -1,5 +1,7 @@
 # Alpha Protocol Phase 2E-6B-4M Staging E2E Tooling V1
 
+> Phase 2E-6C extends this workflow with proposal publication, independent discussion moderation, deterministic decision binding, and owner-bound governance cleanup. The 6C runbook supersedes broad service-role discussion deletion.
+
 Status: local implementation and validation only; cleanup migration and remote E2E not deployed
 Baseline commit: `73441a640413414feab0355583b2d22e770fdf07`
 Phase: `2E-6B-4M`

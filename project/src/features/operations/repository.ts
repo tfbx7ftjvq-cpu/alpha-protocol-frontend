@@ -7,9 +7,14 @@ import {
   OPERATIONS_PUBLIC_RECORD_LIMIT,
   type CommunityTask,
   type DiscussionInput,
+  type GovernanceProposalInput,
+  type GovernanceProposalReviewInput,
+  type GovernanceDiscussionReviewInput,
+  type GovernanceDecisionFinalizeInput,
   type GovernanceDecisionValue,
   type OperationsOverview,
   type PublicDiscussion,
+  type PublicGovernanceProposal,
   type PublicGovernanceDecision,
   type PublicReliefOutcome,
   type PublicReliefUpdate,
@@ -24,6 +29,7 @@ import {
   type TaskSubmissionReviewInput,
   validateCommunityTaskPublication,
   validateDiscussion,
+  validateGovernanceProposal,
   validateReliefApplication,
   validateReliefApplicationReview,
   validateRiskEvidence,
@@ -86,12 +92,13 @@ export async function loadOperationsOverview(): Promise<OperationsOverview> {
       .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
     client
       .from('governance_proposals')
-      .select('id,title')
+      .select('id,title,summary,proposal_kind,public_source_reference,execution_required,execution_manifest_url,status,published_at')
       .eq('publication_status', 'published')
+      .order('published_at', { ascending: false })
       .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
     client
       .from('governance_decisions')
-      .select('id,proposal_id,decision,rationale,execution_required,execution_reference,decided_at')
+      .select('id,proposal_id,decision,rationale,decision_hash,execution_required,execution_reference,execution_manifest_sha256,finalization_reference,decided_at')
       .eq('publication_status', 'published')
       .order('decided_at', { ascending: false })
       .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
@@ -115,6 +122,7 @@ export async function loadOperationsOverview(): Promise<OperationsOverview> {
     riskReports: (riskResult.data ?? []).map(mapRiskReport),
     reliefUpdates: (reliefResult.data ?? []).map(mapReliefUpdate),
     discussions: (discussionResult.data ?? []).map(mapDiscussion),
+    governanceProposals: (proposalResult.data ?? []).map(mapProposal),
     governanceDecisions: (decisionResult.data ?? []).map((row) => mapDecision(
       row,
       proposals.get(row.proposal_id) ?? '未公开提案标题',
@@ -142,14 +150,14 @@ export async function submitTaskResult(input: TaskSubmissionInput): Promise<void
 
 export function resolveOperationsStaffRole(user: User | null): OperationsStaffRole | null {
   const role = user?.app_metadata?.operations_role;
-  return role === 'reviewer' || role === 'relief_reviewer' || role === 'operator' || role === 'governance_admin'
+  return role === 'reviewer' || role === 'relief_reviewer' || role === 'operator' || role === 'moderator' || role === 'governance_admin'
     ? role
     : null;
 }
 
 export async function loadOperationsStaffWorkspace(): Promise<OperationsStaffWorkspace> {
   const { client } = await requireStaffSession();
-  const [submissionResult, taskResult, eventResult, riskResult, evidenceResult, riskEventResult, reliefResult, reliefEventResult] = await Promise.all([
+  const [submissionResult, taskResult, eventResult, riskResult, evidenceResult, riskEventResult, reliefResult, reliefEventResult, proposalSubmissionResult, discussionResult, governanceEventResult] = await Promise.all([
     client
       .from('task_submissions')
       .select('id,task_id,submitted_by,summary,deliverable_url,wallet_address,public_result_consent,public_wallet_consent,status,reviewer_notes,created_at')
@@ -192,6 +200,23 @@ export async function loadOperationsStaffWorkspace(): Promise<OperationsStaffWor
       .select('event_id,relief_application_id,action,actor_role,event_reference,created_at')
       .order('created_at', { ascending: false })
       .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
+    client
+      .from('governance_proposal_submissions')
+      .select('id,submitted_by,title,private_summary,proposal_kind,execution_required,execution_manifest_sha256,public_proposal_consent,review_status,created_at')
+      .eq('review_status', 'pending')
+      .order('created_at', { ascending: true })
+      .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
+    client
+      .from('governance_discussions')
+      .select('id,proposal_id,submitted_by,topic,body,wallet_address,public_body_consent,public_wallet_consent,moderation_status,created_at')
+      .eq('moderation_status', 'pending')
+      .order('created_at', { ascending: true })
+      .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
+    client
+      .from('operations_governance_workflow_events')
+      .select('event_id,action,actor_role,event_reference,created_at')
+      .order('created_at', { ascending: false })
+      .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
   ]);
 
   assertNoQueryError(submissionResult.error, '待审核任务成果');
@@ -202,6 +227,9 @@ export async function loadOperationsStaffWorkspace(): Promise<OperationsStaffWor
   assertNoQueryError(riskEventResult.error, '风险工作流审计记录');
   assertNoQueryError(reliefResult.error, '待审核救助申请');
   assertNoQueryError(reliefEventResult.error, '救助工作流审计记录');
+  assertNoQueryError(proposalSubmissionResult.error, '待审核治理提案');
+  assertNoQueryError(discussionResult.error, '待审核治理讨论');
+  assertNoQueryError(governanceEventResult.error, '治理工作流审计记录');
   const taskTitles = new Map((taskResult.data ?? []).map((row) => [row.id, row.title]));
   const evidenceCounts = new Map<string, number>();
   for (const row of evidenceResult.data ?? []) {
@@ -269,6 +297,37 @@ export async function loadOperationsStaffWorkspace(): Promise<OperationsStaffWor
     reliefEvents: (reliefEventResult.data ?? []).map((row) => ({
       eventId: String(row.event_id),
       reliefApplicationId: row.relief_application_id,
+      action: row.action,
+      actorRole: row.actor_role,
+      eventReference: row.event_reference,
+      createdAt: row.created_at,
+    })),
+    proposalSubmissions: (proposalSubmissionResult.data ?? []).map((row) => ({
+      id: row.id,
+      title: row.title,
+      privateSummary: row.private_summary,
+      proposalKind: row.proposal_kind,
+      executionRequired: row.execution_required,
+      executionManifestSha256: row.execution_manifest_sha256,
+      publicProposalConsent: row.public_proposal_consent,
+      submittedBy: row.submitted_by,
+      reviewStatus: row.review_status,
+      createdAt: row.created_at,
+    })),
+    discussions: (discussionResult.data ?? []).map((row) => ({
+      id: row.id,
+      proposalId: row.proposal_id,
+      topic: row.topic,
+      body: row.body,
+      walletAddress: row.wallet_address,
+      publicBodyConsent: row.public_body_consent,
+      publicWalletConsent: row.public_wallet_consent,
+      submittedBy: row.submitted_by,
+      moderationStatus: row.moderation_status,
+      createdAt: row.created_at,
+    })),
+    governanceEvents: (governanceEventResult.data ?? []).map((row) => ({
+      eventId: String(row.event_id),
       action: row.action,
       actorRole: row.actor_role,
       eventReference: row.event_reference,
@@ -400,24 +459,82 @@ export async function reviewReliefApplication(
 
 export async function submitDiscussion(input: DiscussionInput): Promise<void> {
   const payload = validateDiscussion(input);
-  const { client, user } = await requireIntakeSession(payload.walletAddress);
-  const { error } = await client.from('governance_discussions').insert({
-    submitted_by: user.id,
-    topic: payload.topic,
-    body: payload.body,
-    wallet_address: payload.walletAddress,
-    wallet_verified: false,
-    moderation_status: 'pending',
+  const { client } = await requireIntakeSession(payload.walletAddress);
+  const { error } = await client.rpc('submit_governance_discussion_v1', {
+    p_proposal_id: payload.proposalId,
+    p_topic: payload.topic,
+    p_body: payload.body,
+    p_public_body_consent: payload.publicBodyConsent,
+    p_public_wallet_consent: payload.publicWalletConsent,
+    p_submission_reference: payload.submissionReference,
   });
 
   assertNoMutationError(error, '治理讨论');
+}
+
+export async function submitGovernanceProposal(input: GovernanceProposalInput): Promise<void> {
+  const payload = validateGovernanceProposal(input);
+  const { client } = await requireIntakeSession(payload.walletAddress);
+  const { error } = await client.rpc('submit_governance_proposal_v1', {
+    p_title: payload.title,
+    p_private_summary: payload.privateSummary,
+    p_proposal_kind: payload.proposalKind,
+    p_execution_required: payload.executionRequired,
+    p_private_execution_manifest: payload.privateExecutionManifest,
+    p_execution_manifest_sha256: payload.executionManifestSha256 || null,
+    p_public_proposal_consent: payload.publicProposalConsent,
+    p_submission_reference: payload.submissionReference,
+  });
+  assertNoMutationError(error, '治理提案');
+}
+
+export async function reviewGovernanceProposal(input: GovernanceProposalReviewInput): Promise<void> {
+  const { client } = await requireStaffSession();
+  const { error } = await client.rpc('publish_governance_proposal_v1', {
+    p_proposal_submission_id: input.proposalSubmissionId,
+    p_decision: input.decision,
+    p_reviewer_notes: input.reviewerNotes.trim(),
+    p_public_title: input.publicTitle.trim() || null,
+    p_public_summary: input.publicSummary.trim() || null,
+    p_public_source_reference: input.publicSourceReference.trim() || null,
+    p_execution_manifest_url: input.executionManifestUrl.trim() || null,
+    p_execution_manifest_sha256: input.executionManifestSha256.trim() || null,
+    p_audit_reference: input.auditReference.trim(),
+  });
+  assertNoMutationError(error, '治理提案审核');
+}
+
+export async function reviewGovernanceDiscussion(input: GovernanceDiscussionReviewInput): Promise<void> {
+  const { client } = await requireStaffSession();
+  const { error } = await client.rpc('review_governance_discussion_v1', {
+    p_discussion_id: input.discussionId,
+    p_decision: input.decision,
+    p_reviewer_notes: input.reviewerNotes.trim(),
+    p_public_topic: input.publicTopic.trim() || null,
+    p_public_body: input.publicBody.trim() || null,
+    p_publication_basis: input.publicationBasis.trim() || null,
+    p_audit_reference: input.auditReference.trim(),
+  });
+  assertNoMutationError(error, '治理讨论审核');
+}
+
+export async function finalizeGovernanceDecision(input: GovernanceDecisionFinalizeInput): Promise<void> {
+  const { client } = await requireStaffSession();
+  const { error } = await client.rpc('finalize_governance_decision_v1', {
+    p_proposal_id: input.proposalId,
+    p_decision: input.decision,
+    p_rationale: input.rationale.trim(),
+    p_execution_manifest_sha256: input.executionManifestSha256.trim() || null,
+    p_finalization_reference: input.finalizationReference.trim(),
+  });
+  assertNoMutationError(error, '治理决定终局确认');
 }
 
 export async function loadMyOperationsSubmissions(
   connectedWallet: string,
 ): Promise<MyOperationsSubmission[]> {
   const { client } = await requireIntakeSession(connectedWallet);
-  const [taskResult, riskResult, reliefResult, discussionResult] = await Promise.all([
+  const [taskResult, riskResult, reliefResult, proposalResult, discussionResult] = await Promise.all([
     client
       .from('task_submissions')
       .select('id,summary,status,reviewer_notes,created_at,updated_at')
@@ -434,8 +551,13 @@ export async function loadMyOperationsSubmissions(
       .order('created_at', { ascending: false })
       .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
     client
+      .from('governance_proposal_submissions')
+      .select('id,title,review_status,reviewer_notes,created_at,reviewed_at')
+      .order('created_at', { ascending: false })
+      .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
+    client
       .from('governance_discussions')
-      .select('id,topic,moderation_status,created_at,updated_at')
+      .select('id,topic,moderation_status,reviewer_notes,created_at,updated_at')
       .order('created_at', { ascending: false })
       .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
   ]);
@@ -443,6 +565,7 @@ export async function loadMyOperationsSubmissions(
   assertNoQueryError(taskResult.error, '我的任务提交');
   assertNoQueryError(riskResult.error, '我的风险报告');
   assertNoQueryError(reliefResult.error, '我的救助申请');
+  assertNoQueryError(proposalResult.error, '我的治理提案');
   assertNoQueryError(discussionResult.error, '我的治理讨论');
 
   return [
@@ -473,12 +596,21 @@ export async function loadMyOperationsSubmissions(
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     })),
+    ...(proposalResult.data ?? []).map((row) => ({
+      id: row.id,
+      kind: 'proposal' as const,
+      title: row.title,
+      status: row.review_status,
+      reviewerNotes: row.reviewer_notes,
+      createdAt: row.created_at,
+      updatedAt: row.reviewed_at ?? row.created_at,
+    })),
     ...(discussionResult.data ?? []).map((row) => ({
       id: row.id,
       kind: 'discussion' as const,
       title: row.topic,
       status: row.moderation_status,
-      reviewerNotes: null,
+      reviewerNotes: row.reviewer_notes,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     })),
@@ -685,6 +817,30 @@ function mapDiscussion(row: {
   };
 }
 
+function mapProposal(row: {
+  id: string;
+  title: string;
+  summary: string;
+  proposal_kind: PublicGovernanceProposal['proposalKind'];
+  public_source_reference: string | null;
+  execution_required: boolean;
+  execution_manifest_url: string | null;
+  status: string;
+  published_at: string;
+}): PublicGovernanceProposal {
+  return {
+    id: row.id,
+    title: row.title,
+    summary: row.summary,
+    proposalKind: row.proposal_kind,
+    publicSourceReference: row.public_source_reference,
+    executionRequired: row.execution_required,
+    executionManifestUrl: row.execution_manifest_url,
+    status: row.status,
+    publishedAt: row.published_at,
+  };
+}
+
 function mapDecision(
   row: {
     id: string;
@@ -693,6 +849,9 @@ function mapDecision(
     rationale: string;
     execution_required: boolean;
     execution_reference: string | null;
+    execution_manifest_sha256: string | null;
+    decision_hash: string;
+    finalization_reference: string;
     decided_at: string;
   },
   proposalTitle: string,
@@ -705,6 +864,9 @@ function mapDecision(
     rationale: row.rationale,
     executionRequired: row.execution_required,
     executionReference: row.execution_reference,
+    executionManifestSha256: row.execution_manifest_sha256,
+    decisionHash: row.decision_hash,
+    finalizationReference: row.finalization_reference,
     decidedAt: row.decided_at,
   };
 }

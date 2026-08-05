@@ -5,8 +5,9 @@ export type CommunityTaskStatus = 'open' | 'under_review';
 export type PublicRiskStatus = 'published' | 'resolved' | 'dismissed';
 export type PublicReliefOutcome = 'reviewing' | 'approved' | 'rejected' | 'paid' | 'cancelled';
 export type GovernanceDecisionValue = 'approved' | 'rejected' | 'cancelled';
-export type MyOperationsSubmissionKind = 'task' | 'risk' | 'relief' | 'discussion';
-export type OperationsStaffRole = 'reviewer' | 'relief_reviewer' | 'operator' | 'governance_admin';
+export type GovernanceProposalKind = 'task_acceptance' | 'risk_finding' | 'relief_recommendation' | 'builders_spend' | 'buyback_policy' | 'staking_policy' | 'protocol_parameter' | 'other';
+export type MyOperationsSubmissionKind = 'task' | 'risk' | 'relief' | 'proposal' | 'discussion';
+export type OperationsStaffRole = 'reviewer' | 'relief_reviewer' | 'operator' | 'moderator' | 'governance_admin';
 export type TaskReviewDecision = 'accepted' | 'rejected';
 export type RiskReviewDecision = 'published' | 'dismissed';
 export type ReliefReviewDecision = 'approved' | 'rejected';
@@ -62,6 +63,18 @@ export interface PublicDiscussion {
   publishedAt: string;
 }
 
+export interface PublicGovernanceProposal {
+  id: string;
+  title: string;
+  summary: string;
+  proposalKind: GovernanceProposalKind;
+  publicSourceReference: string | null;
+  executionRequired: boolean;
+  executionManifestUrl: string | null;
+  status: string;
+  publishedAt: string;
+}
+
 export interface PublicGovernanceDecision {
   id: string;
   proposalId: string;
@@ -70,6 +83,9 @@ export interface PublicGovernanceDecision {
   rationale: string;
   executionRequired: boolean;
   executionReference: string | null;
+  executionManifestSha256: string | null;
+  decisionHash: string;
+  finalizationReference: string;
   decidedAt: string;
 }
 
@@ -79,6 +95,7 @@ export interface OperationsOverview {
   riskReports: PublicRiskReport[];
   reliefUpdates: PublicReliefUpdate[];
   discussions: PublicDiscussion[];
+  governanceProposals: PublicGovernanceProposal[];
   governanceDecisions: PublicGovernanceDecision[];
 }
 
@@ -127,9 +144,55 @@ export interface ReliefApplicationInput {
 }
 
 export interface DiscussionInput {
+  proposalId?: string;
   topic: string;
   body: string;
   walletAddress: string;
+  publicBodyConsent?: boolean;
+  publicWalletConsent?: boolean;
+  submissionReference?: string;
+}
+
+export interface GovernanceProposalInput {
+  title: string;
+  privateSummary: string;
+  proposalKind: GovernanceProposalKind;
+  executionRequired: boolean;
+  privateExecutionManifest: string;
+  executionManifestSha256: string;
+  publicProposalConsent: boolean;
+  walletAddress: string;
+  submissionReference: string;
+}
+
+export interface GovernanceProposalReviewInput {
+  proposalSubmissionId: string;
+  decision: 'published' | 'rejected';
+  reviewerNotes: string;
+  publicTitle: string;
+  publicSummary: string;
+  publicSourceReference: string;
+  executionManifestUrl: string;
+  executionManifestSha256: string;
+  auditReference: string;
+}
+
+export interface GovernanceDiscussionReviewInput {
+  discussionId: string;
+  decision: 'published' | 'rejected';
+  reviewerNotes: string;
+  publicTopic: string;
+  publicBody: string;
+  publicationBasis: string;
+  auditReference: string;
+}
+
+export interface GovernanceDecisionFinalizeInput {
+  proposalId: string;
+  decision: GovernanceDecisionValue;
+  rationale: string;
+  executionManifestSha256: string;
+  finalizationReference: string;
 }
 
 export interface ValidatedTaskSubmission {
@@ -211,6 +274,43 @@ export interface OperationsStaffWorkspace {
   riskEvents: RiskWorkflowEvent[];
   reliefApplications: StaffReliefApplication[];
   reliefEvents: ReliefWorkflowEvent[];
+  proposalSubmissions: StaffGovernanceProposalSubmission[];
+  discussions: StaffGovernanceDiscussion[];
+  governanceEvents: GovernanceWorkflowEvent[];
+}
+
+export interface StaffGovernanceProposalSubmission {
+  id: string;
+  title: string;
+  privateSummary: string;
+  proposalKind: GovernanceProposalKind;
+  executionRequired: boolean;
+  executionManifestSha256: string | null;
+  publicProposalConsent: boolean;
+  submittedBy: string;
+  reviewStatus: string;
+  createdAt: string;
+}
+
+export interface StaffGovernanceDiscussion {
+  id: string;
+  proposalId: string | null;
+  topic: string;
+  body: string;
+  walletAddress: string;
+  publicBodyConsent: boolean;
+  publicWalletConsent: boolean;
+  submittedBy: string;
+  moderationStatus: string;
+  createdAt: string;
+}
+
+export interface GovernanceWorkflowEvent {
+  eventId: string;
+  action: string;
+  actorRole: OperationsStaffRole | 'wallet_submitter';
+  eventReference: string;
+  createdAt: string;
 }
 
 export interface ValidatedRiskReport {
@@ -325,9 +425,17 @@ export interface ValidatedReliefApplication {
 }
 
 export interface ValidatedDiscussion {
+  proposalId: string | null;
   topic: string;
   body: string;
   walletAddress: string;
+  publicBodyConsent: boolean;
+  publicWalletConsent: boolean;
+  submissionReference: string;
+}
+
+export interface ValidatedGovernanceProposal extends Omit<GovernanceProposalInput, 'privateExecutionManifest'> {
+  privateExecutionManifest: Record<string, unknown> | null;
 }
 
 export class OperationsValidationError extends Error {
@@ -516,10 +624,64 @@ export function validateReliefApplicationReview(
 }
 
 export function validateDiscussion(input: DiscussionInput): ValidatedDiscussion {
+  const publicBodyConsent = input.publicBodyConsent ?? false;
+  const publicWalletConsent = input.publicWalletConsent ?? false;
+  if (publicWalletConsent && !publicBodyConsent) {
+    throw new OperationsValidationError('公开发言钱包需要先同意公开脱敏讨论');
+  }
   return {
+    proposalId: input.proposalId?.trim()
+      ? validateUuid(input.proposalId, '治理提案')
+      : null,
     topic: validateText(input.topic, '讨论主题', 4, 160),
     body: validateText(input.body, '讨论内容', 20, 5_000),
     walletAddress: validateSolanaAddress(input.walletAddress, '认证发言钱包', true),
+    publicBodyConsent,
+    publicWalletConsent,
+    submissionReference: validateAuditReference(
+      input.submissionReference ?? 'legacy-discussion-submission',
+      '讨论提交审计引用',
+      200,
+    ),
+  };
+}
+
+export function validateGovernanceProposal(
+  input: GovernanceProposalInput,
+): ValidatedGovernanceProposal {
+  const kinds: GovernanceProposalKind[] = [
+    'task_acceptance', 'risk_finding', 'relief_recommendation', 'builders_spend',
+    'buyback_policy', 'staking_policy', 'protocol_parameter', 'other',
+  ];
+  if (!kinds.includes(input.proposalKind)) {
+    throw new OperationsValidationError('治理提案类型无效');
+  }
+  const hash = input.executionManifestSha256.trim().toLowerCase();
+  let manifest: Record<string, unknown> | null = null;
+  if (input.executionRequired) {
+    if (!/^[0-9a-f]{64}$/.test(hash)) {
+      throw new OperationsValidationError('执行 manifest SHA-256 必须是 64 位小写十六进制');
+    }
+    try {
+      const parsed: unknown = JSON.parse(input.privateExecutionManifest);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
+      manifest = parsed as Record<string, unknown>;
+    } catch {
+      throw new OperationsValidationError('私有执行 manifest 必须是 JSON 对象');
+    }
+  } else if (input.privateExecutionManifest.trim() || hash) {
+    throw new OperationsValidationError('无需执行的提案不能携带 execution manifest');
+  }
+  return {
+    title: validateText(input.title, '提案标题', 4, 160),
+    privateSummary: validateText(input.privateSummary, '私有提案正文', 20, 8_000),
+    proposalKind: input.proposalKind,
+    executionRequired: input.executionRequired,
+    privateExecutionManifest: manifest,
+    executionManifestSha256: hash,
+    publicProposalConsent: input.publicProposalConsent,
+    walletAddress: validateSolanaAddress(input.walletAddress, '认证提案钱包', true),
+    submissionReference: validateAuditReference(input.submissionReference, '提案提交审计引用', 200),
   };
 }
 

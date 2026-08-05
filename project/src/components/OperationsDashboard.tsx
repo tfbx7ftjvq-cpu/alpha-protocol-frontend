@@ -27,6 +27,10 @@ import type {
   RiskReportReviewInput,
   ReliefApplicationReviewInput,
   TaskSubmissionReviewInput,
+  GovernanceProposalInput,
+  GovernanceProposalReviewInput,
+  GovernanceDiscussionReviewInput,
+  GovernanceDecisionFinalizeInput,
 } from '../features/operations/domain';
 import {
   submitDiscussion,
@@ -34,6 +38,7 @@ import {
   submitRiskEvidence,
   submitRiskReport,
   submitTaskResult,
+  submitGovernanceProposal,
 } from '../features/operations/repository';
 import { resolveOperationsWalletAccess } from '../features/operations/walletAccess';
 import type { OperationsWalletAuthState } from '../hooks/useOperationsWalletAuth';
@@ -93,11 +98,11 @@ export default function OperationsDashboard() {
     tasks: operations.overview.tasks.length,
     risk: operations.overview.riskReports.length,
     relief: operations.overview.reliefUpdates.length,
-    discussion: operations.overview.discussions.length,
+    discussion: operations.overview.discussions.length + operations.overview.governanceProposals.length,
     mine: mySubmissions.submissions.length,
     decisions: operations.overview.governanceDecisions.length,
-    staff: staff.workspace.submissions.length + staff.workspace.riskReports.length + staff.workspace.reliefApplications.length,
-  }), [mySubmissions.submissions.length, operations.overview, staff.workspace.reliefApplications.length, staff.workspace.riskReports.length, staff.workspace.submissions.length]);
+    staff: staff.workspace.submissions.length + staff.workspace.riskReports.length + staff.workspace.reliefApplications.length + staff.workspace.proposalSubmissions.length + staff.workspace.discussions.length,
+  }), [mySubmissions.submissions.length, operations.overview, staff.workspace.discussions.length, staff.workspace.proposalSubmissions.length, staff.workspace.reliefApplications.length, staff.workspace.riskReports.length, staff.workspace.submissions.length]);
   const visibleTabs = walletAuth.operationsRole ? [...TABS, STAFF_TAB] : TABS;
 
   return (
@@ -238,6 +243,7 @@ export default function OperationsDashboard() {
           {activeTab === 'discussion' && (
             <DiscussionPanel
               discussions={operations.overview.discussions}
+              proposals={operations.overview.governanceProposals}
               loaded={operations.status === 'ready'}
               authenticatedWallet={intakeReady ? walletAuth.authenticatedWallet : null}
               onSubmitted={mySubmissions.refresh}
@@ -256,6 +262,7 @@ export default function OperationsDashboard() {
             <StaffOperationsPanel
               role={walletAuth.operationsRole}
               state={staff}
+              proposals={operations.overview.governanceProposals}
               onPublicDataChanged={operations.refresh}
             />
           )}
@@ -781,24 +788,37 @@ function ReliefPanel({
 
 function DiscussionPanel({
   discussions,
+  proposals,
   loaded,
   authenticatedWallet,
   onSubmitted,
 }: {
   discussions: ReturnType<typeof useOperations>['overview']['discussions'];
+  proposals: ReturnType<typeof useOperations>['overview']['governanceProposals'];
   loaded: boolean;
   authenticatedWallet: string | null;
   onSubmitted: () => Promise<void>;
 }) {
   const [form, setForm] = useState({
+    proposalId: '',
     topic: '',
     body: '',
     walletAddress: authenticatedWallet ?? '',
+    publicBodyConsent: false,
+    publicWalletConsent: false,
+    submissionReference: '',
+  });
+  const [proposalForm, setProposalForm] = useState<GovernanceProposalInput>({
+    title: '', privateSummary: '', proposalKind: 'other', executionRequired: false,
+    privateExecutionManifest: '', executionManifestSha256: '', publicProposalConsent: false,
+    walletAddress: authenticatedWallet ?? '', submissionReference: '',
   });
   const submission = useSubmission();
+  const proposalSubmission = useSubmission();
 
   usePrefillWallet(authenticatedWallet, (walletAddress) => {
     setForm((current) => ({ ...current, walletAddress }));
+    setProposalForm((current) => ({ ...current, walletAddress }));
   });
 
   async function handleSubmit(event: FormEvent) {
@@ -806,15 +826,40 @@ function DiscussionPanel({
     const succeeded = await submission.run(
       () => submitDiscussion(form),
       '讨论已进入审核队列；通过后才会出现在公开页面。',
-      () => setForm((current) => ({ ...current, topic: '', body: '' })),
+      () => setForm((current) => ({ ...current, topic: '', body: '', submissionReference: '' })),
     );
     if (succeeded) {
       await onSubmitted();
     }
   }
 
+  async function handleProposalSubmit(event: FormEvent) {
+    event.preventDefault();
+    const succeeded = await proposalSubmission.run(
+      () => submitGovernanceProposal(proposalForm),
+      '提案已进入私有审核队列；只有独立 operator 另写的净化版本才可能公开。',
+      () => setProposalForm((current) => ({ ...current, title: '', privateSummary: '', privateExecutionManifest: '', executionManifestSha256: '', publicProposalConsent: false, submissionReference: '' })),
+    );
+    if (succeeded) await onSubmitted();
+  }
+
   return (
     <TwoColumnPanel>
+      <div className="space-y-4">
+      <PublicList
+        title="公开治理提案"
+        icon={Landmark}
+        loaded={loaded}
+        emptyText="当前没有经独立审核发布的治理提案。"
+      >
+        {proposals.map((proposal) => (
+          <article key={proposal.id} className="rounded border border-violet-400/15 bg-violet-400/[0.025] p-4">
+            <div className="flex items-start justify-between gap-3"><h4 className="text-sm font-black text-zinc-200">{proposal.title}</h4><StatusBadge label={proposal.status} tone="cyan" /></div>
+            <p className="mt-3 whitespace-pre-wrap text-[11px] leading-relaxed text-zinc-500">{proposal.summary}</p>
+            <div className="mt-3 grid gap-1 text-[10px] text-zinc-600"><span>类型：{proposal.proposalKind}</span><span>需要独立执行：{proposal.executionRequired ? '是（当前尚未执行）' : '否'}</span><span>{formatDate(proposal.publishedAt)}</span></div>
+          </article>
+        ))}
+      </PublicList>
       <PublicList
         title="已审核公开讨论"
         icon={MessageSquareText}
@@ -832,6 +877,26 @@ function DiscussionPanel({
           </article>
         ))}
       </PublicList>
+      </div>
+
+      <div className="space-y-4">
+      <SubmissionForm
+        title="提交治理提案"
+        description="原始正文和 manifest 保持私有；公开版本必须由独立 operator 重新撰写。"
+        busy={proposalSubmission.busy}
+        notice={proposalSubmission.notice}
+        onSubmit={handleProposalSubmit}
+        disabled={!authenticatedWallet}
+      >
+        <FormField label="提案标题"><input className={fieldClassName} value={proposalForm.title} onChange={(event) => setProposalForm({ ...proposalForm, title: event.target.value })} required /></FormField>
+        <FormField label="私有原始提案正文（20–8000 字）"><textarea className={`${fieldClassName} min-h-32`} value={proposalForm.privateSummary} onChange={(event) => setProposalForm({ ...proposalForm, privateSummary: event.target.value })} required /></FormField>
+        <FormField label="提案类型"><select className={fieldClassName} value={proposalForm.proposalKind} onChange={(event) => setProposalForm({ ...proposalForm, proposalKind: event.target.value as GovernanceProposalInput['proposalKind'] })}><option value="other">other</option><option value="builders_spend">builders_spend</option><option value="protocol_parameter">protocol_parameter</option><option value="relief_recommendation">relief_recommendation</option><option value="buyback_policy">buyback_policy</option><option value="staking_policy">staking_policy</option></select></FormField>
+        <label className="flex gap-2 text-[10px] text-zinc-500"><input type="checkbox" checked={proposalForm.executionRequired} onChange={(event) => setProposalForm({ ...proposalForm, executionRequired: event.target.checked, privateExecutionManifest: '', executionManifestSha256: '' })} />需要后续独立 execution intent（批准本身不会执行）</label>
+        {proposalForm.executionRequired && <><FormField label="私有 execution manifest JSON"><textarea className={`${fieldClassName} min-h-28 font-mono`} value={proposalForm.privateExecutionManifest} onChange={(event) => setProposalForm({ ...proposalForm, privateExecutionManifest: event.target.value })} required /></FormField><FormField label="manifest SHA-256"><input className={`${fieldClassName} font-mono`} value={proposalForm.executionManifestSha256} onChange={(event) => setProposalForm({ ...proposalForm, executionManifestSha256: event.target.value })} pattern="[0-9a-f]{64}" required /></FormField></>}
+        <FormField label="唯一提交审计引用"><input className={fieldClassName} value={proposalForm.submissionReference} onChange={(event) => setProposalForm({ ...proposalForm, submissionReference: event.target.value })} required /></FormField>
+        <WalletField value={proposalForm.walletAddress} label="已认证提案钱包" />
+        <label className="flex gap-2 text-[10px] text-zinc-500"><input type="checkbox" checked={proposalForm.publicProposalConsent} onChange={(event) => setProposalForm({ ...proposalForm, publicProposalConsent: event.target.checked })} />同意独立审核者另写脱敏公开提案（不公开原文或私有 manifest）</label>
+      </SubmissionForm>
 
       <SubmissionForm
         title="提交治理讨论"
@@ -841,6 +906,7 @@ function DiscussionPanel({
         onSubmit={handleSubmit}
         disabled={!authenticatedWallet}
       >
+        <FormField label="关联公开提案（可选）"><select className={fieldClassName} value={form.proposalId} onChange={(event) => setForm({ ...form, proposalId: event.target.value })}><option value="">不关联</option>{proposals.filter((proposal) => proposal.status !== 'decided').map((proposal) => <option key={proposal.id} value={proposal.id}>{proposal.title}</option>)}</select></FormField>
         <FormField label="讨论主题">
           <input
             value={form.topic}
@@ -861,7 +927,11 @@ function DiscussionPanel({
           value={form.walletAddress}
           label="已认证发言钱包"
         />
+        <FormField label="唯一提交审计引用"><input className={fieldClassName} value={form.submissionReference} onChange={(event) => setForm({ ...form, submissionReference: event.target.value })} required /></FormField>
+        <label className="flex gap-2 text-[10px] text-zinc-500"><input type="checkbox" checked={form.publicBodyConsent} onChange={(event) => setForm({ ...form, publicBodyConsent: event.target.checked, publicWalletConsent: event.target.checked ? form.publicWalletConsent : false })} />同意 moderator 另写脱敏公开讨论</label>
+        <label className="flex gap-2 text-[10px] text-zinc-500"><input type="checkbox" disabled={!form.publicBodyConsent} checked={form.publicWalletConsent} onChange={(event) => setForm({ ...form, publicWalletConsent: event.target.checked })} />另行同意公开认证钱包地址</label>
       </SubmissionForm>
+      </div>
     </TwoColumnPanel>
   );
 }
@@ -988,6 +1058,7 @@ function MySubmissionsPanel({
     task: '任务成果',
     risk: '风险报告',
     relief: '救助申请',
+    proposal: '治理提案',
     discussion: '治理讨论',
   } as const;
 
@@ -1099,6 +1170,10 @@ function DecisionsPanel({
             <div className="mt-4 grid gap-2 rounded border border-zinc-900 p-3 text-[10px] text-zinc-600">
               <span>需要资金执行：{decision.executionRequired ? '是' : '否'}</span>
               <span>执行引用：{decision.executionReference ?? '无'}</span>
+              <span className="break-all">manifest SHA-256：{decision.executionManifestSha256 ?? '不适用'}</span>
+              <span className="break-all">决定 SHA-256：{decision.decisionHash}</span>
+              <span>终局审计引用：{decision.finalizationReference}</span>
+              <span className="font-bold text-yellow-200">执行状态：未由本决定执行；需独立 intent、签名、确认与 receipt</span>
               <span>决定时间：{formatDate(decision.decidedAt)}</span>
             </div>
           </article>
@@ -1111,10 +1186,12 @@ function DecisionsPanel({
 function StaffOperationsPanel({
   role,
   state,
+  proposals,
   onPublicDataChanged,
 }: {
   role: NonNullable<OperationsWalletAuthState['operationsRole']>;
   state: ReturnType<typeof useOperationsStaff>;
+  proposals: ReturnType<typeof useOperations>['overview']['governanceProposals'];
   onPublicDataChanged: () => Promise<void>;
 }) {
   const [taskForm, setTaskForm] = useState<CommunityTaskPublicationInput>({
@@ -1152,13 +1229,22 @@ function StaffOperationsPanel({
     publicationBasis: '',
     auditReference: '',
   });
+  const [proposalReviewForm, setProposalReviewForm] = useState<GovernanceProposalReviewInput>({ proposalSubmissionId: '', decision: 'rejected', reviewerNotes: '', publicTitle: '', publicSummary: '', publicSourceReference: '', executionManifestUrl: '', executionManifestSha256: '', auditReference: '' });
+  const [discussionReviewForm, setDiscussionReviewForm] = useState<GovernanceDiscussionReviewInput>({ discussionId: '', decision: 'rejected', reviewerNotes: '', publicTopic: '', publicBody: '', publicationBasis: '', auditReference: '' });
+  const [decisionForm, setDecisionForm] = useState<GovernanceDecisionFinalizeInput>({ proposalId: '', decision: 'rejected', rationale: '', executionManifestSha256: '', finalizationReference: '' });
   const taskSubmission = useSubmission();
   const reviewSubmission = useSubmission();
   const riskReviewSubmission = useSubmission();
   const reliefReviewSubmission = useSubmission();
+  const proposalReviewSubmission = useSubmission();
+  const discussionReviewSubmission = useSubmission();
+  const decisionSubmission = useSubmission();
   const selected = state.workspace.submissions.find((item) => item.id === reviewForm.submissionId);
   const selectedRisk = state.workspace.riskReports.find((item) => item.id === riskReviewForm.riskReportId);
   const selectedRelief = state.workspace.reliefApplications.find((item) => item.id === reliefReviewForm.reliefApplicationId);
+  const selectedProposalSubmission = state.workspace.proposalSubmissions.find((item) => item.id === proposalReviewForm.proposalSubmissionId);
+  const selectedDiscussion = state.workspace.discussions.find((item) => item.id === discussionReviewForm.discussionId);
+  const selectedDecisionProposal = proposals.find((item) => item.id === decisionForm.proposalId);
 
   async function handlePublish(event: FormEvent) {
     event.preventDefault();
@@ -1243,6 +1329,24 @@ function StaffOperationsPanel({
     if (succeeded) await onPublicDataChanged();
   }
 
+  async function handleProposalReview(event: FormEvent) {
+    event.preventDefault();
+    const succeeded = await proposalReviewSubmission.run(() => state.reviewProposal(proposalReviewForm), proposalReviewForm.decision === 'published' ? '脱敏治理提案已发布；未创建 execution intent 或 receipt。' : '治理提案已拒绝且保持私有。', () => setProposalReviewForm({ proposalSubmissionId: '', decision: 'rejected', reviewerNotes: '', publicTitle: '', publicSummary: '', publicSourceReference: '', executionManifestUrl: '', executionManifestSha256: '', auditReference: '' }));
+    if (succeeded) await onPublicDataChanged();
+  }
+
+  async function handleDiscussionReview(event: FormEvent) {
+    event.preventDefault();
+    const succeeded = await discussionReviewSubmission.run(() => state.reviewDiscussion(discussionReviewForm), discussionReviewForm.decision === 'published' ? 'moderator 撰写的脱敏讨论已发布。' : '治理讨论已拒绝且未公开。', () => setDiscussionReviewForm({ discussionId: '', decision: 'rejected', reviewerNotes: '', publicTopic: '', publicBody: '', publicationBasis: '', auditReference: '' }));
+    if (succeeded) await onPublicDataChanged();
+  }
+
+  async function handleDecisionFinalize(event: FormEvent) {
+    event.preventDefault();
+    const succeeded = await decisionSubmission.run(() => state.finalizeDecision(decisionForm), '治理决定已不可变终局记录；批准不等于付款或链上执行。', () => setDecisionForm({ proposalId: '', decision: 'rejected', rationale: '', executionManifestSha256: '', finalizationReference: '' }));
+    if (succeeded) await onPublicDataChanged();
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 rounded border border-violet-400/20 bg-violet-400/5 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1269,8 +1373,46 @@ function StaffOperationsPanel({
         </div>
       )}
 
+      <div className="grid gap-4 xl:grid-cols-3">
+        {(role === 'operator' || role === 'governance_admin') && (
+          <form onSubmit={handleProposalReview} className="space-y-3 rounded border border-violet-400/20 bg-violet-400/[0.025] p-4">
+            <h4 className="text-sm font-black text-violet-100">独立审核并发布提案</h4>
+            <FormField label="私有提案"><select className={fieldClassName} value={proposalReviewForm.proposalSubmissionId} onChange={(event) => setProposalReviewForm({ ...proposalReviewForm, proposalSubmissionId: event.target.value })} required><option value="">选择待审核提案</option>{state.workspace.proposalSubmissions.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></FormField>
+            {selectedProposalSubmission && <div className="rounded border border-zinc-800 p-3 text-[10px] text-zinc-500"><p className="whitespace-pre-wrap">{selectedProposalSubmission.privateSummary}</p><p className="mt-2">执行：{selectedProposalSubmission.executionRequired ? `需要 · ${selectedProposalSubmission.executionManifestSha256}` : '不需要'}；公开同意：{selectedProposalSubmission.publicProposalConsent ? '是' : '否'}</p></div>}
+            <FormField label="决定"><select className={fieldClassName} value={proposalReviewForm.decision} onChange={(event) => setProposalReviewForm({ ...proposalReviewForm, decision: event.target.value as GovernanceProposalReviewInput['decision'] })}><option value="rejected">rejected</option><option value="published" disabled={!selectedProposalSubmission?.publicProposalConsent}>published</option></select></FormField>
+            <FormField label="私有审核说明"><textarea className={`${fieldClassName} min-h-20`} value={proposalReviewForm.reviewerNotes} onChange={(event) => setProposalReviewForm({ ...proposalReviewForm, reviewerNotes: event.target.value })} required /></FormField>
+            {proposalReviewForm.decision === 'published' && <><FormField label="脱敏公开标题"><input className={fieldClassName} value={proposalReviewForm.publicTitle} onChange={(event) => setProposalReviewForm({ ...proposalReviewForm, publicTitle: event.target.value })} required /></FormField><FormField label="审核者重写的脱敏摘要"><textarea className={`${fieldClassName} min-h-24`} value={proposalReviewForm.publicSummary} onChange={(event) => setProposalReviewForm({ ...proposalReviewForm, publicSummary: event.target.value })} required /></FormField><FormField label="公开来源引用"><input className={fieldClassName} value={proposalReviewForm.publicSourceReference} onChange={(event) => setProposalReviewForm({ ...proposalReviewForm, publicSourceReference: event.target.value })} /></FormField>{selectedProposalSubmission?.executionRequired && <><FormField label="只读 manifest HTTPS URL"><input type="url" className={fieldClassName} value={proposalReviewForm.executionManifestUrl} onChange={(event) => setProposalReviewForm({ ...proposalReviewForm, executionManifestUrl: event.target.value })} required /></FormField><FormField label="匹配私有 manifest SHA-256"><input className={`${fieldClassName} font-mono`} value={proposalReviewForm.executionManifestSha256} onChange={(event) => setProposalReviewForm({ ...proposalReviewForm, executionManifestSha256: event.target.value })} required /></FormField></>}</>}
+            <FormField label="唯一审核引用"><input className={fieldClassName} value={proposalReviewForm.auditReference} onChange={(event) => setProposalReviewForm({ ...proposalReviewForm, auditReference: event.target.value })} required /></FormField>
+            <button disabled={state.submitting || !selectedProposalSubmission} className="w-full rounded border border-violet-400/30 px-3 py-2 text-xs font-black text-violet-200 disabled:opacity-40">提交提案审核</button>{proposalReviewSubmission.notice && <InlineNotice notice={proposalReviewSubmission.notice} />}
+          </form>
+        )}
+        {(role === 'moderator' || role === 'governance_admin') && (
+          <form onSubmit={handleDiscussionReview} className="space-y-3 rounded border border-cyan-400/20 bg-cyan-400/[0.025] p-4">
+            <h4 className="text-sm font-black text-cyan-100">moderator 独立审核讨论</h4>
+            <FormField label="私有讨论"><select className={fieldClassName} value={discussionReviewForm.discussionId} onChange={(event) => setDiscussionReviewForm({ ...discussionReviewForm, discussionId: event.target.value })} required><option value="">选择待审核讨论</option>{state.workspace.discussions.map((item) => <option key={item.id} value={item.id}>{item.topic}</option>)}</select></FormField>
+            {selectedDiscussion && <div className="rounded border border-zinc-800 p-3 text-[10px] text-zinc-500"><p className="whitespace-pre-wrap">{selectedDiscussion.body}</p><p className="mt-2">正文公开同意：{selectedDiscussion.publicBodyConsent ? '是' : '否'}；钱包公开同意：{selectedDiscussion.publicWalletConsent ? '是' : '否'}</p></div>}
+            <FormField label="决定"><select className={fieldClassName} value={discussionReviewForm.decision} onChange={(event) => setDiscussionReviewForm({ ...discussionReviewForm, decision: event.target.value as GovernanceDiscussionReviewInput['decision'] })}><option value="rejected">rejected</option><option value="published" disabled={!selectedDiscussion?.publicBodyConsent}>published</option></select></FormField>
+            <FormField label="私有审核说明"><textarea className={`${fieldClassName} min-h-20`} value={discussionReviewForm.reviewerNotes} onChange={(event) => setDiscussionReviewForm({ ...discussionReviewForm, reviewerNotes: event.target.value })} required /></FormField>
+            {discussionReviewForm.decision === 'published' && <><FormField label="脱敏公开主题"><input className={fieldClassName} value={discussionReviewForm.publicTopic} onChange={(event) => setDiscussionReviewForm({ ...discussionReviewForm, publicTopic: event.target.value })} required /></FormField><FormField label="moderator 重写的脱敏正文"><textarea className={`${fieldClassName} min-h-24`} value={discussionReviewForm.publicBody} onChange={(event) => setDiscussionReviewForm({ ...discussionReviewForm, publicBody: event.target.value })} required /></FormField><FormField label="公开依据"><textarea className={`${fieldClassName} min-h-20`} value={discussionReviewForm.publicationBasis} onChange={(event) => setDiscussionReviewForm({ ...discussionReviewForm, publicationBasis: event.target.value })} required /></FormField></>}
+            <FormField label="唯一审核引用"><input className={fieldClassName} value={discussionReviewForm.auditReference} onChange={(event) => setDiscussionReviewForm({ ...discussionReviewForm, auditReference: event.target.value })} required /></FormField>
+            <button disabled={state.submitting || !selectedDiscussion} className="w-full rounded border border-cyan-400/30 px-3 py-2 text-xs font-black text-cyan-200 disabled:opacity-40">提交讨论审核</button>{discussionReviewSubmission.notice && <InlineNotice notice={discussionReviewSubmission.notice} />}
+          </form>
+        )}
+        {role === 'governance_admin' && (
+          <form onSubmit={handleDecisionFinalize} className="space-y-3 rounded border border-yellow-400/20 bg-yellow-400/[0.025] p-4">
+            <h4 className="text-sm font-black text-yellow-100">独立终局治理决定</h4><p className="text-[10px] text-zinc-500">服务端拒绝提案提交者或发布者自终局。批准不会创建 intent、receipt、付款或交易。</p>
+            <FormField label="公开提案"><select className={fieldClassName} value={decisionForm.proposalId} onChange={(event) => setDecisionForm({ ...decisionForm, proposalId: event.target.value, executionManifestSha256: '' })} required><option value="">选择未决定提案</option>{proposals.filter((item) => item.status !== 'decided').map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></FormField>
+            <FormField label="决定"><select className={fieldClassName} value={decisionForm.decision} onChange={(event) => setDecisionForm({ ...decisionForm, decision: event.target.value as GovernanceDecisionFinalizeInput['decision'] })}><option value="approved">approved（不等于执行）</option><option value="rejected">rejected</option><option value="cancelled">cancelled</option></select></FormField>
+            <FormField label="公开理由（20–5000 字）"><textarea className={`${fieldClassName} min-h-28`} value={decisionForm.rationale} onChange={(event) => setDecisionForm({ ...decisionForm, rationale: event.target.value })} required /></FormField>
+            {selectedDecisionProposal?.executionRequired && <FormField label="与提案完全一致的 manifest SHA-256"><input className={`${fieldClassName} font-mono`} value={decisionForm.executionManifestSha256} onChange={(event) => setDecisionForm({ ...decisionForm, executionManifestSha256: event.target.value })} required /></FormField>}
+            <FormField label="唯一终局引用"><input className={fieldClassName} value={decisionForm.finalizationReference} onChange={(event) => setDecisionForm({ ...decisionForm, finalizationReference: event.target.value })} required /></FormField>
+            <button disabled={state.submitting || !selectedDecisionProposal} className="w-full rounded border border-yellow-400/30 px-3 py-2 text-xs font-black text-yellow-200 disabled:opacity-40">记录不可变决定（不执行）</button>{decisionSubmission.notice && <InlineNotice notice={decisionSubmission.notice} />}
+          </form>
+        )}
+      </div>
+
       <div className="grid gap-6 xl:grid-cols-2">
-        {role !== 'reviewer' && role !== 'relief_reviewer' && (
+        {(role === 'operator' || role === 'governance_admin') && (
           <form onSubmit={handlePublish} className="space-y-3 rounded border border-zinc-800 bg-zinc-950 p-4">
             <h4 className="text-sm font-black text-zinc-200">发布社区任务</h4>
             <FormField label="任务标题（4–160 字）">
@@ -1541,6 +1683,12 @@ function StaffOperationsPanel({
             ))}
           </div>
         )}
+      </div>
+
+      <div className="rounded border border-violet-400/20 bg-zinc-950 p-4">
+        <h4 className="text-sm font-black text-violet-100">append-only 治理工作流事件</h4>
+        <p className="mt-1 text-[10px] text-zinc-600">这些事件是审核审计，不是付款或 execution receipt。</p>
+        {state.workspace.governanceEvents.length === 0 ? <p className="mt-3 text-[10px] text-zinc-600">当前角色范围内暂无治理事件。</p> : <div className="mt-3 grid gap-2 lg:grid-cols-2">{state.workspace.governanceEvents.map((event) => <div key={event.eventId} className="rounded border border-zinc-900 p-3 text-[10px] text-zinc-500"><div className="flex justify-between gap-2"><strong className="text-zinc-300">{event.action}</strong><span>{event.actorRole}</span></div><p className="mt-2 break-all">{event.eventReference}</p><p className="mt-1 text-zinc-700">{formatDate(event.createdAt)}</p></div>)}</div>}
       </div>
     </div>
   );

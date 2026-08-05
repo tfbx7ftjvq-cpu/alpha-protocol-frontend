@@ -10,16 +10,16 @@ create schema if not exists extensions;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(5);
+select plan(6);
 
 select ok(
   has_table_privilege('service_role', 'public.task_submissions', 'SELECT')
     and has_table_privilege('service_role', 'public.governance_discussions', 'SELECT')
-    and has_table_privilege('service_role', 'public.governance_discussions', 'DELETE')
+    and not has_table_privilege('service_role', 'public.governance_discussions', 'DELETE')
     and has_table_privilege('service_role', 'public.community_tasks', 'SELECT')
     and not has_table_privilege('service_role', 'public.task_submissions', 'DELETE')
     and not has_table_privilege('service_role', 'public.community_tasks', 'DELETE'),
-  'service_role keeps only the legacy discussion delete and task workflow read scope'
+  'service_role has no broad discussion delete and keeps task workflow read scope'
 );
 
 select ok(
@@ -30,6 +30,14 @@ select ok(
     and not has_table_privilege('authenticated', 'public.governance_discussions', 'DELETE')
     and not has_table_privilege('authenticated', 'public.community_tasks', 'DELETE'),
   'anon and authenticated cannot use the staging E2E cleanup privilege'
+);
+
+select ok(
+  has_function_privilege('service_role', 'public.cleanup_governance_operations_staging_e2e_v1(text,uuid,uuid[],uuid[])', 'EXECUTE')
+    and has_function_privilege('service_role', 'public.cleanup_governance_discussion_staging_e2e_v1(text,uuid,uuid)', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.cleanup_governance_operations_staging_e2e_v1(text,uuid,uuid[],uuid[])', 'EXECUTE')
+    and not has_function_privilege('anon', 'public.cleanup_governance_discussion_staging_e2e_v1(text,uuid,uuid)', 'EXECUTE'),
+  'governance cleanup is only available through exact service-role RPCs'
 );
 
 select ok(

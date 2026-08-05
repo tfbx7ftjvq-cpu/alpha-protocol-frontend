@@ -124,3 +124,18 @@ test('Phase 4O E2E proves relief approval is not payment and cleans exact fixtur
     .reduce((total, match) => total + Number(match[1]), 0);
   assert.equal(increments, 61);
 });
+
+test('governance discussion E2E uses an independent moderator and audited RPCs', () => {
+  assert.match(e2eSource, /const moderator = await createActor\(admin, config, runId, 'moderator', 'moderator'\)/);
+  assert.match(e2eSource, /ownerA\.client\.rpc\('submit_governance_discussion_v1'/);
+  assert.match(e2eSource, /moderator\.client\.rpc\('review_governance_discussion_v1'/);
+  assert.match(e2eSource, /operator read a moderator-only private discussion/);
+  assert.doesNotMatch(e2eSource, /operator\.client[\s\S]{0,80}\.from\('governance_discussions'\)[\s\S]{0,120}\.update\(/);
+});
+
+test('governance discussion cleanup is exact RPC-only and owner-bound', () => {
+  assert.match(e2eSource, /cleanup_governance_discussion_staging_e2e_v1/);
+  assert.match(e2eSource, /p_owner_id: rows\.discussionOwnerId/);
+  assert.match(e2eSource, /p_discussion_id: rows\.discussionId/);
+  assert.doesNotMatch(e2eSource, /\.from\('governance_discussions'\)\s*\.delete\(/);
+});

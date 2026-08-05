@@ -59,6 +59,10 @@ const reliefStagingE2EPaymentGuardMigrationUrl = new URL(
   '../../supabase/migrations/202608060003_operations_relief_staging_e2e_payment_guard.sql',
   import.meta.url,
 );
+const governanceOperationsMigrationUrl = new URL(
+  '../../supabase/migrations/202608070001_governance_operations_audited_execution_preparation.sql',
+  import.meta.url,
+);
 const foundationSql = readFileSync(foundationMigrationUrl, 'utf8');
 const hardeningSql = readFileSync(hardeningMigrationUrl, 'utf8');
 const cleanupPrivilegesSql = readFileSync(cleanupPrivilegesMigrationUrl, 'utf8');
@@ -88,6 +92,7 @@ const reliefStagingE2EPaymentGuardSql = readFileSync(
   reliefStagingE2EPaymentGuardMigrationUrl,
   'utf8',
 );
+const governanceOperationsSql = readFileSync(governanceOperationsMigrationUrl, 'utf8');
 const sql = [
   foundationSql,
   hardeningSql,
@@ -103,6 +108,7 @@ const sql = [
   reliefModerationClosureSql,
   reliefStagingE2ECleanupSql,
   reliefStagingE2EPaymentGuardSql,
+  governanceOperationsSql,
 ].join('\n');
 
 const expectedTables = [
@@ -125,6 +131,8 @@ const expectedTables = [
   'operations_task_workflow_events',
   'operations_risk_workflow_events',
   'operations_relief_workflow_events',
+  'governance_proposal_submissions',
+  'operations_governance_workflow_events',
 ];
 
 test('every operations table enables row-level security', () => {
@@ -902,7 +910,6 @@ test('staging E2E cleanup privilege is narrow and excludes browser roles', async
     `);
     assert.deepEqual(serviceRolePrivileges.rows, [
       { table_name: 'community_tasks', privilege_type: 'SELECT' },
-      { table_name: 'governance_discussions', privilege_type: 'DELETE' },
       { table_name: 'governance_discussions', privilege_type: 'SELECT' },
       { table_name: 'task_submissions', privilege_type: 'SELECT' },
     ]);
@@ -1832,9 +1839,9 @@ test('all migrations create the expected schema, policy, and trigger totals', as
         and relation.relname = any(array[${expectedTables.map(quoteSql).join(', ')}]);
     `);
 
-    assert.equal(tableCount.rows[0]?.count, 19);
-    assert.equal(policyCount.rows[0]?.count, 41);
-    assert.equal(triggerCount.rows[0]?.count, 40);
+    assert.equal(tableCount.rows[0]?.count, 21);
+    assert.equal(policyCount.rows[0]?.count, 44);
+    assert.equal(triggerCount.rows[0]?.count, 44);
   } finally {
     await database.close();
   }
@@ -2430,6 +2437,180 @@ test('runtime rejects published downgrade and allows moderator private discussio
   }
 });
 
+test('runtime governance workflow enforces independent roles, deterministic binding, and no execution side effects', async () => {
+  const database = await createOperationsDatabase();
+  const ownerId = '61000000-0000-4000-8000-000000000001';
+  const operatorId = '61000000-0000-4000-8000-000000000002';
+  const moderatorId = '61000000-0000-4000-8000-000000000003';
+  const adminId = '61000000-0000-4000-8000-000000000004';
+  const wallet = '11111111111111111111111111111111';
+  const manifestHash = 'a'.repeat(64);
+
+  async function assume(userId: string, operationsRole?: string): Promise<void> {
+    await database.exec('reset role;');
+    const metadata = operationsRole
+      ? `,"app_metadata":{"operations_role":"${operationsRole}"}`
+      : '';
+    await database.exec(`
+      select set_config('request.jwt.claim.sub', '${userId}', false);
+      select set_config('request.jwt.claims', '{"sub":"${userId}"${metadata}}', false);
+      set role authenticated;
+    `);
+  }
+
+  try {
+    await database.exec(`
+      insert into auth.users (id) values
+        ('${ownerId}'), ('${operatorId}'), ('${moderatorId}'), ('${adminId}');
+      insert into auth.identities (id, user_id, provider, provider_id, identity_data)
+      values ('governance-owner-wallet', '${ownerId}', 'web3',
+        'web3:solana:${wallet}', '{"sub":"web3:solana:${wallet}"}');
+      update public.operations_intake_control set mode = 'wallet_staging',
+        activation_reference = 'local Phase 2E-6C runtime workflow';
+    `);
+    await assume(ownerId);
+    const proposal = await database.query<{ proposal_submission_id: string }>(`
+      select proposal_submission_id from public.submit_governance_proposal_v1(
+        'Runtime private proposal',
+        'Private proposal source material that must never appear in the public sanitized record.',
+        'builders_spend', true, '{"amount":"10","asset":"USDC"}'::jsonb,
+        '${manifestHash}', true, 'runtime-6c:proposal-submitted'
+      );
+    `);
+    const proposalSubmissionId = proposal.rows[0]!.proposal_submission_id;
+    const discussion = await database.query<{ discussion_id: string }>(`
+      select discussion_id from public.submit_governance_discussion_v1(
+        null, 'Runtime private discussion',
+        'Private discussion source material for independent moderator review.',
+        true, false, 'runtime-6c:discussion-submitted'
+      );
+    `);
+    const discussionId = discussion.rows[0]!.discussion_id;
+
+    await assume(ownerId, 'operator');
+    await assert.rejects(database.exec(`select * from public.publish_governance_proposal_v1(
+      '${proposalSubmissionId}', 'rejected', 'self review', null, null, null, null, null,
+      'runtime-6c:proposal-self-review');`), /cannot review their own governance proposal/);
+
+    await assume(operatorId, 'operator');
+    const published = await database.query<{ public_proposal_id: string }>(`
+      select public_proposal_id from public.publish_governance_proposal_v1(
+        '${proposalSubmissionId}', 'published', 'Independent operator review completed.',
+        'Sanitized runtime proposal',
+        'A separately written public summary with all private source details removed.',
+        'runtime-public-source', 'https://example.com/runtime-manifest.json',
+        '${manifestHash}', 'runtime-6c:proposal-published'
+      );
+    `);
+    const publicProposalId = published.rows[0]!.public_proposal_id;
+
+    await assert.rejects(database.exec(`select * from public.review_governance_discussion_v1(
+      '${discussionId}', 'published', 'operator must fail', 'Public topic',
+      'A sufficiently long public discussion body.', 'Publication basis text',
+      'runtime-6c:discussion-operator');`), /not authorized to review governance discussions/);
+
+    await assume(moderatorId, 'moderator');
+    await database.exec(`select * from public.review_governance_discussion_v1(
+      '${discussionId}', 'published', 'Independent moderator review completed.',
+      'Sanitized runtime discussion',
+      'A separately written sanitized discussion that contains no private source material.',
+      'Independent moderation with explicit publication consent.',
+      'runtime-6c:discussion-published');`);
+
+    await assume(operatorId, 'governance_admin');
+    await assert.rejects(database.exec(`select * from public.finalize_governance_decision_v1(
+      '${publicProposalId}', 'approved',
+      'This finalization must fail because the publisher cannot also finalize.',
+      '${manifestHash}', 'runtime-6c:decision-self-finalize');`), /finalizer must be independent/);
+
+    await assume(adminId, 'governance_admin');
+    await assert.rejects(database.exec(`select * from public.finalize_governance_decision_v1(
+      '${publicProposalId}', 'approved',
+      'This finalization must fail because its manifest binding is incorrect.',
+      '${'b'.repeat(64)}', 'runtime-6c:decision-bad-manifest');`), /does not match/);
+    const finalized = await database.query<{
+      decision_hash: string;
+      execution_intent_created: boolean;
+      execution_receipt_created: boolean;
+    }>(`select decision_hash, execution_intent_created, execution_receipt_created
+      from public.finalize_governance_decision_v1(
+        '${publicProposalId}', 'approved',
+        'Independent final decision with deterministic manifest binding and no execution side effect.',
+        '${manifestHash}', 'runtime-6c:decision-finalized');`);
+    assert.match(finalized.rows[0]!.decision_hash, /^[0-9a-f]{64}$/);
+    assert.equal(finalized.rows[0]!.execution_intent_created, false);
+    assert.equal(finalized.rows[0]!.execution_receipt_created, false);
+    const sideEffects = await database.query<{ intents: number; receipts: number }>(`
+      select (select count(*)::int from public.treasury_execution_intents) intents,
+        (select count(*)::int from public.treasury_execution_receipts) receipts;
+    `);
+    assert.deepEqual(sideEffects.rows[0], { intents: 0, receipts: 0 });
+    await assert.rejects(database.exec(`delete from public.governance_decisions
+      where proposal_id = '${publicProposalId}';`), /permission denied|immutable governance record/);
+    await database.exec('reset role;');
+  } finally {
+    await database.close();
+  }
+});
+
+test('runtime Phase 2E-6C cleanup is exact, owner-bound, and service-role-only', async () => {
+  const database = await createOperationsDatabase();
+  const ownerId = '62000000-0000-4000-8000-000000000001';
+  const wrongOwnerId = '62000000-0000-4000-8000-000000000002';
+  const runId = '1700000000000-abcdef12';
+  const runReference = `phase-2e-6c-staging-e2e:${runId}`;
+  try {
+    await database.exec(`
+      insert into auth.users (id) values ('${ownerId}'), ('${wrongOwnerId}');
+      update public.operations_intake_control set mode = 'wallet_staging',
+        activation_reference = 'local Phase 2E-6C cleanup runtime';
+      select set_config('request.jwt.claim.sub', '${ownerId}', false);
+      insert into public.governance_proposal_submissions (
+        id, submitted_by, wallet_address, title, private_summary, proposal_kind,
+        public_proposal_consent
+      ) values
+        ('62000000-0000-4000-8000-000000000011', '${ownerId}',
+          '11111111111111111111111111111111', 'Staging governance publish ${runId}',
+          'Exact private publish fixture for controlled owner-bound cleanup.', 'other', true),
+        ('62000000-0000-4000-8000-000000000012', '${ownerId}',
+          '11111111111111111111111111111111', 'Staging governance reject ${runId}',
+          'Exact private reject fixture for controlled owner-bound cleanup.', 'other', false);
+      insert into public.governance_discussions (
+        id, submitted_by, topic, body, wallet_address, public_body_consent
+      ) values
+        ('62000000-0000-4000-8000-000000000021', '${ownerId}',
+          'Staging discussion publish ${runId}',
+          'Exact private publish discussion for controlled owner-bound cleanup.',
+          '11111111111111111111111111111111', true),
+        ('62000000-0000-4000-8000-000000000022', '${ownerId}',
+          'Staging discussion reject ${runId}',
+          'Exact private reject discussion for controlled owner-bound cleanup.',
+          '11111111111111111111111111111111', false);
+      set role service_role;
+    `);
+    await assert.rejects(database.exec(`select * from public.cleanup_governance_operations_staging_e2e_v1(
+      '${runReference}', '${wrongOwnerId}',
+      array['62000000-0000-4000-8000-000000000011'::uuid,'62000000-0000-4000-8000-000000000012'::uuid],
+      array['62000000-0000-4000-8000-000000000021'::uuid,'62000000-0000-4000-8000-000000000022'::uuid]);
+    `), /not exact owner-bound/);
+    const cleanup = await database.query<{ discussions_deleted: number; proposal_submissions_deleted: number }>(`
+      select discussions_deleted, proposal_submissions_deleted
+      from public.cleanup_governance_operations_staging_e2e_v1(
+        '${runReference}', '${ownerId}',
+        array['62000000-0000-4000-8000-000000000011'::uuid,'62000000-0000-4000-8000-000000000012'::uuid],
+        array['62000000-0000-4000-8000-000000000021'::uuid,'62000000-0000-4000-8000-000000000022'::uuid]);
+    `);
+    assert.deepEqual(cleanup.rows[0], { discussions_deleted: 2, proposal_submissions_deleted: 2 });
+    await database.exec('reset role;');
+    await assert.rejects(database.exec(`set role authenticated;
+      select * from public.cleanup_governance_operations_staging_e2e_v1(
+        '${runReference}', '${ownerId}', '{}'::uuid[], '{}'::uuid[]);`), /permission denied/);
+    await database.exec('reset role;');
+  } finally {
+    await database.close();
+  }
+});
+
 function extractCreateTable(table: string): string {
   const match = sql.match(
     new RegExp(`create table public\\.${table} \\([\\s\\S]*?\\n\\);`),
@@ -2504,6 +2685,7 @@ async function createOperationsDatabase(): Promise<PGlite> {
   await database.exec(reliefModerationClosureSql);
   await database.exec(reliefStagingE2ECleanupSql);
   await database.exec(reliefStagingE2EPaymentGuardSql);
+  await database.exec(governanceOperationsSql);
   return database;
 }
 

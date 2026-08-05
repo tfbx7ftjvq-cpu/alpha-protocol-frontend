@@ -11,6 +11,7 @@ const EMPTY_OVERVIEW: OperationsOverview = {
   riskReports: [],
   reliefUpdates: [],
   discussions: [],
+  governanceProposals: [],
   governanceDecisions: [],
 };
 
