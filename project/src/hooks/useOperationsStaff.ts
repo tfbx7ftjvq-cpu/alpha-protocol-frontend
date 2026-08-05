@@ -4,6 +4,7 @@ import type {
   OperationsStaffRole,
   OperationsStaffWorkspace,
   RiskReportReviewInput,
+  ReliefApplicationReviewInput,
   TaskSubmissionReviewInput,
 } from '../features/operations/domain';
 import {
@@ -11,6 +12,7 @@ import {
   publishCommunityTask,
   reviewTaskSubmission,
   reviewRiskReport,
+  reviewReliefApplication,
 } from '../features/operations/repository';
 
 const EMPTY_WORKSPACE: OperationsStaffWorkspace = {
@@ -18,6 +20,8 @@ const EMPTY_WORKSPACE: OperationsStaffWorkspace = {
   events: [],
   riskReports: [],
   riskEvents: [],
+  reliefApplications: [],
+  reliefEvents: [],
 };
 
 export interface OperationsStaffState {
@@ -29,6 +33,7 @@ export interface OperationsStaffState {
   publishTask: (input: CommunityTaskPublicationInput) => Promise<string>;
   reviewSubmission: (input: TaskSubmissionReviewInput) => Promise<void>;
   reviewRisk: (input: RiskReportReviewInput) => Promise<void>;
+  reviewRelief: (input: ReliefApplicationReviewInput) => Promise<void>;
 }
 
 export function useOperationsStaff(
@@ -117,6 +122,24 @@ export function useOperationsStaff(
     }
   }, [refresh, role]);
 
+  const reviewRelief = useCallback(async (input: ReliefApplicationReviewInput) => {
+    if (!role) {
+      throw new Error('当前钱包会话没有运营权限');
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await reviewReliefApplication(input);
+      await refresh();
+    } catch (reviewError) {
+      const message = reviewError instanceof Error ? reviewError.message : '救助审核失败';
+      setError(message);
+      throw reviewError;
+    } finally {
+      setSubmitting(false);
+    }
+  }, [refresh, role]);
+
   return {
     workspace,
     loading,
@@ -126,5 +149,6 @@ export function useOperationsStaff(
     publishTask,
     reviewSubmission,
     reviewRisk,
+    reviewRelief,
   };
 }

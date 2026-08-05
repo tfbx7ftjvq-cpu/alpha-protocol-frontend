@@ -25,6 +25,7 @@ import TurnstileChallenge from './TurnstileChallenge';
 import type {
   CommunityTaskPublicationInput,
   RiskReportReviewInput,
+  ReliefApplicationReviewInput,
   TaskSubmissionReviewInput,
 } from '../features/operations/domain';
 import {
@@ -95,8 +96,8 @@ export default function OperationsDashboard() {
     discussion: operations.overview.discussions.length,
     mine: mySubmissions.submissions.length,
     decisions: operations.overview.governanceDecisions.length,
-    staff: staff.workspace.submissions.length + staff.workspace.riskReports.length,
-  }), [mySubmissions.submissions.length, operations.overview, staff.workspace.riskReports.length, staff.workspace.submissions.length]);
+    staff: staff.workspace.submissions.length + staff.workspace.riskReports.length + staff.workspace.reliefApplications.length,
+  }), [mySubmissions.submissions.length, operations.overview, staff.workspace.reliefApplications.length, staff.workspace.riskReports.length, staff.workspace.submissions.length]);
   const visibleTabs = walletAuth.operationsRole ? [...TABS, STAFF_TAB] : TABS;
 
   return (
@@ -672,6 +673,7 @@ function ReliefPanel({
     requestedAmountUsdc: '',
     evidenceUrl: '',
     walletAddress: authenticatedWallet ?? '',
+    publicUpdateConsent: false,
   });
   const submission = useSubmission();
 
@@ -689,6 +691,7 @@ function ReliefPanel({
         incidentSummary: '',
         requestedAmountUsdc: '',
         evidenceUrl: '',
+        publicUpdateConsent: false,
       })),
     );
     if (succeeded) {
@@ -762,6 +765,15 @@ function ReliefPanel({
           value={form.walletAddress}
           label="已认证申请钱包（赔付前仍需冻结与复核）"
         />
+        <label className="flex items-start gap-3 rounded border border-emerald-400/15 bg-emerald-400/[0.025] p-3 text-[10px] leading-relaxed text-zinc-500">
+          <input
+            type="checkbox"
+            checked={form.publicUpdateConsent}
+            onChange={(event) => setForm({ ...form, publicUpdateConsent: event.target.checked })}
+            className="mt-0.5"
+          />
+          <span>我同意在独立审核后，由审核者另写不含私密证据和身份信息的公开进度。该同意不代表批准，也不授权付款。</span>
+        </label>
       </SubmissionForm>
     </TwoColumnPanel>
   );
@@ -1131,11 +1143,22 @@ function StaffOperationsPanel({
     publicationBasis: '',
     auditReference: '',
   });
+  const [reliefReviewForm, setReliefReviewForm] = useState<ReliefApplicationReviewInput>({
+    reliefApplicationId: '',
+    decision: 'rejected',
+    reviewerNotes: '',
+    publicTitle: '',
+    publicSummary: '',
+    publicationBasis: '',
+    auditReference: '',
+  });
   const taskSubmission = useSubmission();
   const reviewSubmission = useSubmission();
   const riskReviewSubmission = useSubmission();
+  const reliefReviewSubmission = useSubmission();
   const selected = state.workspace.submissions.find((item) => item.id === reviewForm.submissionId);
   const selectedRisk = state.workspace.riskReports.find((item) => item.id === riskReviewForm.riskReportId);
+  const selectedRelief = state.workspace.reliefApplications.find((item) => item.id === reliefReviewForm.reliefApplicationId);
 
   async function handlePublish(event: FormEvent) {
     event.preventDefault();
@@ -1200,6 +1223,26 @@ function StaffOperationsPanel({
     }
   }
 
+  async function handleReliefReview(event: FormEvent) {
+    event.preventDefault();
+    const succeeded = await reliefReviewSubmission.run(
+      () => state.reviewRelief(reliefReviewForm),
+      reliefReviewForm.decision === 'approved'
+        ? '救助申请已批准并记录审计；批准不是付款，没有创建资金执行。'
+        : '救助申请已拒绝并记录审计；没有创建公开进度或资金执行。',
+      () => setReliefReviewForm({
+        reliefApplicationId: '',
+        decision: 'rejected',
+        reviewerNotes: '',
+        publicTitle: '',
+        publicSummary: '',
+        publicationBasis: '',
+        auditReference: '',
+      }),
+    );
+    if (succeeded) await onPublicDataChanged();
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 rounded border border-violet-400/20 bg-violet-400/5 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1227,7 +1270,7 @@ function StaffOperationsPanel({
       )}
 
       <div className="grid gap-6 xl:grid-cols-2">
-        {role !== 'reviewer' && (
+        {role !== 'reviewer' && role !== 'relief_reviewer' && (
           <form onSubmit={handlePublish} className="space-y-3 rounded border border-zinc-800 bg-zinc-950 p-4">
             <h4 className="text-sm font-black text-zinc-200">发布社区任务</h4>
             <FormField label="任务标题（4–160 字）">
@@ -1383,6 +1426,72 @@ function StaffOperationsPanel({
         </div>
       </form>
 
+      <form onSubmit={handleReliefReview} className="space-y-3 rounded border border-emerald-400/20 bg-emerald-400/[0.025] p-4">
+        <div>
+          <h4 className="text-sm font-black text-emerald-100">独立审核救助申请</h4>
+          <p className="mt-1 text-[10px] leading-relaxed text-zinc-600">
+            私密申请与证据不会公开。批准仅是审核结果，不创建付款指令、receipt 或链上交易。
+          </p>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="space-y-3">
+            <FormField label="待审核救助申请">
+              <select className={fieldClassName} value={reliefReviewForm.reliefApplicationId} onChange={(event) => setReliefReviewForm({ ...reliefReviewForm, reliefApplicationId: event.target.value })} required>
+                <option value="">选择私有申请</option>
+                {state.workspace.reliefApplications.map((application) => (
+                  <option key={application.id} value={application.id}>{application.requestedAmountUsdc} USDC · {application.status}</option>
+                ))}
+              </select>
+            </FormField>
+            {selectedRelief && (
+              <div className="rounded border border-emerald-400/10 bg-zinc-950 p-3 text-[10px] leading-relaxed text-zinc-500">
+                <p className="whitespace-pre-wrap">{selectedRelief.incidentSummary}</p>
+                <div className="mt-2 flex flex-wrap gap-3">
+                  <SafeLink href={selectedRelief.evidenceUrl} label="私有证据" />
+                  <span>申请：{selectedRelief.requestedAmountUsdc} USDC</span>
+                  <span>公开进度同意：{selectedRelief.publicUpdateConsent ? '是' : '否'}</span>
+                </div>
+              </div>
+            )}
+            <FormField label="审核决定">
+              <select className={fieldClassName} value={reliefReviewForm.decision} onChange={(event) => setReliefReviewForm({
+                ...reliefReviewForm,
+                decision: event.target.value as ReliefApplicationReviewInput['decision'],
+                publicTitle: '', publicSummary: '', publicationBasis: '',
+              })}>
+                <option value="rejected">rejected</option>
+                <option value="approved">approved（不等于付款）</option>
+              </select>
+            </FormField>
+            <FormField label="私有审核说明（必填）">
+              <textarea className={`${fieldClassName} min-h-28`} value={reliefReviewForm.reviewerNotes} onChange={(event) => setReliefReviewForm({ ...reliefReviewForm, reviewerNotes: event.target.value })} required />
+            </FormField>
+          </div>
+          <div className="space-y-3">
+            {reliefReviewForm.decision === 'approved' && selectedRelief?.publicUpdateConsent && (
+              <>
+                <FormField label="脱敏公开进度标题（可整组留空）">
+                  <input className={fieldClassName} value={reliefReviewForm.publicTitle} onChange={(event) => setReliefReviewForm({ ...reliefReviewForm, publicTitle: event.target.value })} />
+                </FormField>
+                <FormField label="脱敏公开进度摘要">
+                  <textarea className={`${fieldClassName} min-h-24`} value={reliefReviewForm.publicSummary} onChange={(event) => setReliefReviewForm({ ...reliefReviewForm, publicSummary: event.target.value })} />
+                </FormField>
+                <FormField label="公开依据说明">
+                  <textarea className={`${fieldClassName} min-h-20`} value={reliefReviewForm.publicationBasis} onChange={(event) => setReliefReviewForm({ ...reliefReviewForm, publicationBasis: event.target.value })} />
+                </FormField>
+              </>
+            )}
+            <FormField label="唯一审计引用（10–160 字）">
+              <input className={fieldClassName} value={reliefReviewForm.auditReference} onChange={(event) => setReliefReviewForm({ ...reliefReviewForm, auditReference: event.target.value })} required />
+            </FormField>
+            <button type="submit" disabled={state.submitting || !selectedRelief} className="w-full rounded border border-emerald-400/30 bg-emerald-400/10 px-4 py-2.5 text-xs font-black text-emerald-100 disabled:opacity-40">
+              提交救助审核决定（不执行付款）
+            </button>
+            {reliefReviewSubmission.notice && <InlineNotice notice={reliefReviewSubmission.notice} />}
+          </div>
+        </div>
+      </form>
+
       <div className="rounded border border-zinc-800 bg-zinc-950 p-4">
         <h4 className="text-sm font-black text-zinc-200">不可变任务工作流事件</h4>
         {state.workspace.events.length === 0 ? (
@@ -1407,6 +1516,23 @@ function StaffOperationsPanel({
         ) : (
           <div className="mt-3 grid gap-2 lg:grid-cols-2">
             {state.workspace.riskEvents.map((event) => (
+              <div key={event.eventId} className="rounded border border-zinc-900 p-3 text-[10px] text-zinc-500">
+                <div className="flex justify-between gap-2"><strong className="text-zinc-300">{event.action}</strong><span>{event.actorRole}</span></div>
+                <p className="mt-2 break-all">{event.eventReference}</p>
+                <p className="mt-1 text-zinc-700">{formatDate(event.createdAt)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded border border-zinc-800 bg-zinc-950 p-4">
+        <h4 className="text-sm font-black text-zinc-200">不可变救助审核事件</h4>
+        {state.workspace.reliefEvents.length === 0 ? (
+          <p className="mt-3 text-[10px] text-zinc-600">暂无救助审核事件。</p>
+        ) : (
+          <div className="mt-3 grid gap-2 lg:grid-cols-2">
+            {state.workspace.reliefEvents.map((event) => (
               <div key={event.eventId} className="rounded border border-zinc-900 p-3 text-[10px] text-zinc-500">
                 <div className="flex justify-between gap-2"><strong className="text-zinc-300">{event.action}</strong><span>{event.actorRole}</span></div>
                 <p className="mt-2 break-all">{event.eventReference}</p>

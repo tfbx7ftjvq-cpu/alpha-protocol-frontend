@@ -47,6 +47,14 @@ const riskStagingE2ECleanupMigrationUrl = new URL(
   '../../supabase/migrations/202608050002_operations_risk_staging_e2e_cleanup.sql',
   import.meta.url,
 );
+const reliefModerationClosureMigrationUrl = new URL(
+  '../../supabase/migrations/202608060001_operations_relief_moderation_closure.sql',
+  import.meta.url,
+);
+const reliefStagingE2ECleanupMigrationUrl = new URL(
+  '../../supabase/migrations/202608060002_operations_relief_staging_e2e_cleanup.sql',
+  import.meta.url,
+);
 const foundationSql = readFileSync(foundationMigrationUrl, 'utf8');
 const hardeningSql = readFileSync(hardeningMigrationUrl, 'utf8');
 const cleanupPrivilegesSql = readFileSync(cleanupPrivilegesMigrationUrl, 'utf8');
@@ -64,6 +72,14 @@ const taskStagingE2ECleanupSql = readFileSync(
 );
 const riskModerationClosureSql = readFileSync(riskModerationClosureMigrationUrl, 'utf8');
 const riskStagingE2ECleanupSql = readFileSync(riskStagingE2ECleanupMigrationUrl, 'utf8');
+const reliefModerationClosureSql = readFileSync(
+  reliefModerationClosureMigrationUrl,
+  'utf8',
+);
+const reliefStagingE2ECleanupSql = readFileSync(
+  reliefStagingE2ECleanupMigrationUrl,
+  'utf8',
+);
 const sql = [
   foundationSql,
   hardeningSql,
@@ -76,6 +92,8 @@ const sql = [
   taskStagingE2ECleanupSql,
   riskModerationClosureSql,
   riskStagingE2ECleanupSql,
+  reliefModerationClosureSql,
+  reliefStagingE2ECleanupSql,
 ].join('\n');
 
 const expectedTables = [
@@ -97,6 +115,7 @@ const expectedTables = [
   'task_submission_publications',
   'operations_task_workflow_events',
   'operations_risk_workflow_events',
+  'operations_relief_workflow_events',
 ];
 
 test('every operations table enables row-level security', () => {
@@ -618,6 +637,109 @@ test('Phase 4N Staging cleanup is exact, owner-bound, and RPC-only', () => {
   assert.doesNotMatch(
     riskStagingE2ECleanupSql,
     /grant (?:insert|update|delete)[^;]* on table/i,
+  );
+});
+
+test('relief review keeps private applications separate from sanitized public progress', () => {
+  const auditTable = extractCreateTable('operations_relief_workflow_events');
+  assert.match(
+    reliefModerationClosureSql,
+    /add column public_update_consent boolean not null default false/,
+  );
+  assert.match(
+    auditTable,
+    /relief_application_id uuid not null references public\.relief_applications\(id\)/,
+  );
+  assert.match(
+    auditTable,
+    /action in \('application_approved', 'application_rejected'\)/,
+  );
+  assert.match(
+    reliefModerationClosureSql,
+    /create trigger operations_relief_workflow_events_immutable/,
+  );
+  assert.doesNotMatch(
+    reliefModerationClosureSql,
+    /grant select on table public\.operations_relief_workflow_events to anon/,
+  );
+});
+
+test('relief review RPC is role-gated, consent-bound, and denies self-review', () => {
+  assert.match(
+    reliefModerationClosureSql,
+    /v_actor_id is null[\s\S]*v_actor_role is null[\s\S]*v_actor_role not in/,
+  );
+  assert.match(
+    reliefModerationClosureSql,
+    /reviewers cannot review their own relief application/,
+  );
+  assert.match(
+    reliefModerationClosureSql,
+    /sanitized relief update requires claimant consent/,
+  );
+  assert.match(
+    reliefModerationClosureSql,
+    /rejected relief applications cannot create a public update/,
+  );
+  assert.match(
+    reliefModerationClosureSql,
+    /grant execute on function public\.review_relief_application_v1\(uuid, text, text, text, text, text, text\)[\s\S]*to authenticated/,
+  );
+  assert.doesNotMatch(
+    reliefModerationClosureSql,
+    /grant execute on function public\.review_relief_application_v1[^;]*to anon/,
+  );
+});
+
+test('relief approval explicitly creates neither payment authority nor treasury state', () => {
+  assert.match(
+    reliefModerationClosureSql,
+    /'payment_intent_created', false/,
+  );
+  assert.match(
+    reliefModerationClosureSql,
+    /'payment_receipt_created', false/,
+  );
+  assert.match(reliefModerationClosureSql, /'approval_is_payment', false/);
+  assert.match(
+    reliefModerationClosureSql,
+    /revoke update, delete on table public\.relief_applications from authenticated/,
+  );
+  assert.match(
+    reliefModerationClosureSql,
+    /revoke insert, update, delete on table public\.relief_public_updates from authenticated/,
+  );
+  assert.doesNotMatch(
+    reliefModerationClosureSql,
+    /\bhttp_post\b|\bnet\.http\b|\bvault\.secrets\b|\bpg_net\b|\bsend_transaction\b|\bsendtransaction\b/i,
+  );
+  assert.doesNotMatch(
+    reliefModerationClosureSql,
+    /\b(?:insert into|update|delete from)\s+public\.treasury_/i,
+  );
+});
+
+test('Phase 4O Staging cleanup is exact, owner-bound, and service-role-only', () => {
+  assert.match(
+    reliefStagingE2ECleanupSql,
+    /create or replace function public\.cleanup_operations_relief_staging_e2e_v1\(/,
+  );
+  assert.match(
+    reliefStagingE2ECleanupSql,
+    /\^phase-2e-6b-4o-staging-e2e:\[0-9\]\{13\}-\[0-9a-f\]\{8\}\$/,
+  );
+  assert.match(reliefStagingE2ECleanupSql, /current_user = cleanup_owner/);
+  assert.match(
+    reliefStagingE2ECleanupSql,
+    /grant execute on function public\.cleanup_operations_relief_staging_e2e_v1\(text, uuid\[\]\)[\s\S]*to service_role/,
+  );
+  assert.doesNotMatch(
+    reliefStagingE2ECleanupSql,
+    /grant execute on function public\.cleanup_operations_relief_staging_e2e_v1[^;]*to (?:anon|authenticated)/,
+  );
+  assert.match(
+    reliefStagingE2ECleanupSql,
+    /cleanup refused because a treasury execution intent exists/,
   );
 });
 
@@ -1581,9 +1703,9 @@ test('all migrations create the expected schema, policy, and trigger totals', as
         and relation.relname = any(array[${expectedTables.map(quoteSql).join(', ')}]);
     `);
 
-    assert.equal(tableCount.rows[0]?.count, 18);
-    assert.equal(policyCount.rows[0]?.count, 40);
-    assert.equal(triggerCount.rows[0]?.count, 39);
+    assert.equal(tableCount.rows[0]?.count, 19);
+    assert.equal(policyCount.rows[0]?.count, 41);
+    assert.equal(triggerCount.rows[0]?.count, 40);
   } finally {
     await database.close();
   }
@@ -2250,6 +2372,8 @@ async function createOperationsDatabase(): Promise<PGlite> {
   await database.exec(taskStagingE2ECleanupSql);
   await database.exec(riskModerationClosureSql);
   await database.exec(riskStagingE2ECleanupSql);
+  await database.exec(reliefModerationClosureSql);
+  await database.exec(reliefStagingE2ECleanupSql);
   return database;
 }
 

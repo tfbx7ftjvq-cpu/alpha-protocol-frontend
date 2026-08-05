@@ -30,6 +30,7 @@ select has_table('public'::name, 'treasury_execution_receipts'::name);
 select has_table('public'::name, 'task_submission_publications'::name);
 select has_table('public'::name, 'operations_task_workflow_events'::name);
 select has_table('public'::name, 'operations_risk_workflow_events'::name);
+select has_table('public'::name, 'operations_relief_workflow_events'::name);
 
 select is(
   (
@@ -54,11 +55,12 @@ select is(
         'treasury_execution_receipts',
         'task_submission_publications',
         'operations_task_workflow_events',
-        'operations_risk_workflow_events'
+        'operations_risk_workflow_events',
+        'operations_relief_workflow_events'
       ])
   ),
-  18,
-  'all 18 operations tables exist, including task and risk workflow audit separation'
+  19,
+  'all 19 operations tables exist, including task, risk, and relief workflow audit separation'
 );
 
 select is(
@@ -85,11 +87,12 @@ select is(
         'treasury_execution_receipts',
         'task_submission_publications',
         'operations_task_workflow_events',
-        'operations_risk_workflow_events'
+        'operations_risk_workflow_events',
+        'operations_relief_workflow_events'
       ])
       and relation.relrowsecurity
   ),
-  18,
+  19,
   'RLS is enabled on every operations table'
 );
 
@@ -116,11 +119,12 @@ select is(
         'treasury_execution_receipts',
         'task_submission_publications',
         'operations_task_workflow_events',
-        'operations_risk_workflow_events'
+        'operations_risk_workflow_events',
+        'operations_relief_workflow_events'
       ])
   ),
-  40,
-  'the reviewed operations policy total includes separated task and risk audit reads'
+  41,
+  'the reviewed operations policy total includes separated task, risk, and relief audit reads'
 );
 
 select is(
@@ -149,11 +153,12 @@ select is(
         'treasury_execution_receipts',
         'task_submission_publications',
         'operations_task_workflow_events',
-        'operations_risk_workflow_events'
+        'operations_risk_workflow_events',
+        'operations_relief_workflow_events'
       ])
   ),
-  39,
-  'the reviewed trigger total includes risk evidence throttling and immutable workflow events'
+  40,
+  'the reviewed trigger total includes immutable task, risk, and relief workflow events'
 );
 
 select ok(
@@ -679,6 +684,98 @@ select ok(
       'DELETE'
     ),
   'exact Phase 4N Staging risk cleanup is RPC-only and excluded from browser roles'
+);
+
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.review_relief_application_v1(uuid,text,text,text,text,text,text)',
+    'EXECUTE'
+  )
+    and not has_function_privilege(
+      'anon',
+      'public.review_relief_application_v1(uuid,text,text,text,text,text,text)',
+      'EXECUTE'
+    )
+    and not has_table_privilege(
+      'authenticated',
+      'public.relief_applications',
+      'UPDATE,DELETE'
+    )
+    and not has_table_privilege(
+      'authenticated',
+      'public.relief_public_updates',
+      'INSERT,UPDATE,DELETE'
+    ),
+  'authenticated relief reviewers must use the audited review RPC instead of direct writes'
+);
+
+select ok(
+  not has_table_privilege(
+    'anon',
+    'public.operations_relief_workflow_events',
+    'SELECT'
+  )
+    and has_table_privilege(
+      'authenticated',
+      'public.operations_relief_workflow_events',
+      'SELECT'
+    )
+    and exists (
+      select 1
+      from pg_catalog.pg_trigger trigger
+      join pg_catalog.pg_class relation on relation.oid = trigger.tgrelid
+      join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+      where not trigger.tgisinternal
+        and namespace.nspname = 'public'
+        and relation.relname = 'operations_relief_workflow_events'
+        and trigger.tgname = 'operations_relief_workflow_events_immutable'
+    ),
+  'relief workflow audit is private to staff policy scope and immutable'
+);
+
+select ok(
+  has_function_privilege(
+    'service_role',
+    'public.cleanup_operations_relief_staging_e2e_v1(text,uuid[])',
+    'EXECUTE'
+  )
+    and not has_function_privilege(
+      'authenticated',
+      'public.cleanup_operations_relief_staging_e2e_v1(text,uuid[])',
+      'EXECUTE'
+    )
+    and not has_function_privilege(
+      'anon',
+      'public.cleanup_operations_relief_staging_e2e_v1(text,uuid[])',
+      'EXECUTE'
+    ),
+  'exact Phase 4O Staging relief cleanup is service-role-only'
+);
+
+select ok(
+  (
+    select pg_get_functiondef(procedure.oid)
+    from pg_catalog.pg_proc procedure
+    join pg_catalog.pg_namespace namespace on namespace.oid = procedure.pronamespace
+    where namespace.nspname = 'public'
+      and procedure.proname = 'review_relief_application_v1'
+  ) ilike '%approval_is_payment%false%'
+    and (
+      select pg_get_functiondef(procedure.oid)
+      from pg_catalog.pg_proc procedure
+      join pg_catalog.pg_namespace namespace on namespace.oid = procedure.pronamespace
+      where namespace.nspname = 'public'
+        and procedure.proname = 'review_relief_application_v1'
+    ) ilike '%payment_intent_created%false%'
+    and (
+      select pg_get_functiondef(procedure.oid)
+      from pg_catalog.pg_proc procedure
+      join pg_catalog.pg_namespace namespace on namespace.oid = procedure.pronamespace
+      where namespace.nspname = 'public'
+        and procedure.proname = 'review_relief_application_v1'
+    ) !~* '(insert into|update|delete from)[[:space:]]+public[.]treasury_',
+  'relief review records that approval is not payment and creates no treasury execution state'
 );
 
 select ok(

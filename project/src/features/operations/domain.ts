@@ -6,9 +6,10 @@ export type PublicRiskStatus = 'published' | 'resolved' | 'dismissed';
 export type PublicReliefOutcome = 'reviewing' | 'approved' | 'rejected' | 'paid' | 'cancelled';
 export type GovernanceDecisionValue = 'approved' | 'rejected' | 'cancelled';
 export type MyOperationsSubmissionKind = 'task' | 'risk' | 'relief' | 'discussion';
-export type OperationsStaffRole = 'reviewer' | 'operator' | 'governance_admin';
+export type OperationsStaffRole = 'reviewer' | 'relief_reviewer' | 'operator' | 'governance_admin';
 export type TaskReviewDecision = 'accepted' | 'rejected';
 export type RiskReviewDecision = 'published' | 'dismissed';
+export type ReliefReviewDecision = 'approved' | 'rejected';
 export type CommunityTaskRewardSource = 'builders_pool' | 'grant' | 'sponsor' | 'none';
 
 export interface CommunityTask {
@@ -122,6 +123,7 @@ export interface ReliefApplicationInput {
   requestedAmountUsdc: string;
   evidenceUrl: string;
   walletAddress: string;
+  publicUpdateConsent: boolean;
 }
 
 export interface DiscussionInput {
@@ -207,6 +209,8 @@ export interface OperationsStaffWorkspace {
   events: TaskWorkflowEvent[];
   riskReports: StaffRiskReport[];
   riskEvents: RiskWorkflowEvent[];
+  reliefApplications: StaffReliefApplication[];
+  reliefEvents: ReliefWorkflowEvent[];
 }
 
 export interface ValidatedRiskReport {
@@ -260,6 +264,48 @@ export interface RiskReportReviewInput {
   auditReference: string;
 }
 
+export interface StaffReliefApplication {
+  id: string;
+  incidentSummary: string;
+  requestedAmountUsdc: string;
+  evidenceUrl: string;
+  walletAddress: string;
+  publicUpdateConsent: boolean;
+  status: string;
+  submittedBy: string;
+  reviewerNotes: string | null;
+  createdAt: string;
+}
+
+export interface ReliefWorkflowEvent {
+  eventId: string;
+  reliefApplicationId: string;
+  action: 'application_approved' | 'application_rejected';
+  actorRole: OperationsStaffRole;
+  eventReference: string;
+  createdAt: string;
+}
+
+export interface ReliefApplicationReviewInput {
+  reliefApplicationId: string;
+  decision: ReliefReviewDecision;
+  reviewerNotes: string;
+  publicTitle: string;
+  publicSummary: string;
+  publicationBasis: string;
+  auditReference: string;
+}
+
+export interface ValidatedReliefApplicationReview {
+  reliefApplicationId: string;
+  decision: ReliefReviewDecision;
+  reviewerNotes: string;
+  publicTitle: string | null;
+  publicSummary: string | null;
+  publicationBasis: string | null;
+  auditReference: string;
+}
+
 export interface ValidatedRiskReportReview {
   riskReportId: string;
   decision: RiskReviewDecision;
@@ -275,6 +321,7 @@ export interface ValidatedReliefApplication {
   requestedAmountUsdc: string;
   evidenceUrl: string;
   walletAddress: string;
+  publicUpdateConsent: boolean;
 }
 
 export interface ValidatedDiscussion {
@@ -431,6 +478,40 @@ export function validateReliefApplication(input: ReliefApplicationInput): Valida
     requestedAmountUsdc: validateUsdcAmount(input.requestedAmountUsdc),
     evidenceUrl: validateHttpsUrl(input.evidenceUrl, '证据链接', true),
     walletAddress: validateSolanaAddress(input.walletAddress, '拟收款钱包', true),
+    publicUpdateConsent: input.publicUpdateConsent,
+  };
+}
+
+export function validateReliefApplicationReview(
+  input: ReliefApplicationReviewInput,
+): ValidatedReliefApplicationReview {
+  if (input.decision !== 'approved' && input.decision !== 'rejected') {
+    throw new OperationsValidationError('救助审核决定必须是 approved 或 rejected');
+  }
+
+  const publicTitle = input.publicTitle.trim();
+  const publicSummary = input.publicSummary.trim();
+  const publicationBasis = input.publicationBasis.trim();
+  const hasPublicUpdate = Boolean(publicTitle || publicSummary || publicationBasis);
+
+  if (input.decision === 'rejected' && hasPublicUpdate) {
+    throw new OperationsValidationError('拒绝救助申请时不能创建公开进度');
+  }
+
+  if (input.decision === 'approved' && hasPublicUpdate) {
+    if (!publicTitle || !publicSummary || !publicationBasis) {
+      throw new OperationsValidationError('公开救助进度的标题、摘要和依据必须同时填写');
+    }
+  }
+
+  return {
+    reliefApplicationId: validateUuid(input.reliefApplicationId, '救助申请'),
+    decision: input.decision,
+    reviewerNotes: validateText(input.reviewerNotes, '救助审核说明', 1, 5_000),
+    publicTitle: hasPublicUpdate ? validateText(publicTitle, '公开进度标题', 4, 160) : null,
+    publicSummary: hasPublicUpdate ? validateText(publicSummary, '脱敏公开进度', 20, 3_000) : null,
+    publicationBasis: hasPublicUpdate ? validateText(publicationBasis, '公开依据', 10, 1_000) : null,
+    auditReference: validateAuditReference(input.auditReference, '救助审核审计引用', 160),
   };
 }
 

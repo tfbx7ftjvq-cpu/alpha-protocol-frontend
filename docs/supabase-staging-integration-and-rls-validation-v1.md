@@ -511,3 +511,11 @@ Subsequent verified Staging state:
 This phase verifies the selected off-chain authorization paths on the dedicated
 Supabase staging project. It does not activate production intake, deploy or
 upgrade the Solana program, or constitute a professional Mainnet audit.
+# Phase 2E-6B-4O pending deployment note
+
+Phase 2E-6B-4O adds an audited relief-review closure and an exact service-role-only
+Staging cleanup path. At source-build time, migrations `202608060001` and
+`202608060002` are not yet applied remotely. Relief approval is an eligibility
+review outcome only: it does not create a treasury intent, payment receipt,
+Solana transaction, or funds movement. See
+`docs/audited-relief-review-and-public-progress-closure-v1.md`.

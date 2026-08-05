@@ -9,6 +9,7 @@ import {
   validateCommunityTaskPublication,
   validateHttpsUrl,
   validateReliefApplication,
+  validateReliefApplicationReview,
   validateRiskReport,
   validateRiskEvidence,
   validateRiskReportReview,
@@ -88,6 +89,26 @@ test('task submission normalizes text and requires a valid task and wallet', () 
     }),
     OperationsValidationError,
   );
+});
+
+test('relief review keeps approval separate from optional public progress', () => {
+  const approved = validateReliefApplicationReview({
+    reliefApplicationId: VALID_TASK_ID,
+    decision: 'approved',
+    reviewerNotes: 'Evidence was reviewed independently; this decision does not authorize payment.',
+    publicTitle: 'Relief review completed',
+    publicSummary: 'A sanitized progress update without claimant identity or private evidence.',
+    publicationBasis: 'Independent review under the published relief policy.',
+    auditReference: 'phase-4o-relief-approved-001',
+  });
+  assert.equal(approved.decision, 'approved');
+  assert.throws(() => validateReliefApplicationReview({
+    ...approved,
+    decision: 'rejected',
+    publicTitle: 'Forbidden public update',
+    publicSummary: '',
+    publicationBasis: '',
+  }), /拒绝救助申请时不能创建公开进度/);
 });
 
 test('task submission requires separate public-result and wallet consent', () => {
@@ -262,6 +283,7 @@ test('relief application requires evidence, a valid wallet, and a positive amoun
     requestedAmountUsdc: '125.25',
     evidenceUrl: 'https://example.org/relief-evidence',
     walletAddress: VALID_WALLET,
+    publicUpdateConsent: true,
   });
 
   assert.equal(result.requestedAmountUsdc, '125.25');
@@ -272,6 +294,7 @@ test('relief application requires evidence, a valid wallet, and a positive amoun
       requestedAmountUsdc: '0',
       evidenceUrl: result.evidenceUrl,
       walletAddress: result.walletAddress,
+      publicUpdateConsent: false,
     }),
     OperationsValidationError,
   );

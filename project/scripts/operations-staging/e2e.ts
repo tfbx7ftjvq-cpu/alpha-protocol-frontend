@@ -36,6 +36,8 @@ interface CreatedRows {
   runReference: string;
   riskReportIds: string[];
   riskRunReference: string;
+  reliefApplicationIds: string[];
+  reliefRunReference: string;
 }
 
 interface TaskWorkflowCleanupCounts {
@@ -50,6 +52,12 @@ interface RiskWorkflowCleanupCounts {
   eventsDeleted: number;
   evidenceDeleted: number;
   reportsDeleted: number;
+}
+
+interface ReliefWorkflowCleanupCounts {
+  publicUpdatesDeleted: number;
+  eventsDeleted: number;
+  applicationsDeleted: number;
 }
 
 export interface OperationsStagingE2EResult {
@@ -92,6 +100,7 @@ export async function runOperationsStagingE2E(
   const runId = `${Date.now()}-${randomBytes(4).toString('hex')}`;
   const runReference = `phase-2e-6b-4m-staging-e2e:${runId}`;
   const riskRunReference = `phase-2e-6b-4n-staging-e2e:${runId}`;
+  const reliefRunReference = `phase-2e-6b-4o-staging-e2e:${runId}`;
   const createdUsers: string[] = [];
   const rows: CreatedRows = {
     taskId: null,
@@ -101,6 +110,8 @@ export async function runOperationsStagingE2E(
     runReference,
     riskReportIds: [],
     riskRunReference,
+    reliefApplicationIds: [],
+    reliefRunReference,
   };
   let assertions = 0;
   let primaryError: unknown = null;
@@ -766,6 +777,258 @@ export async function runOperationsStagingE2E(
     );
     assertions += 1;
 
+    const approvedReliefUrl =
+      `https://example.com/alpha-staging-relief-${runId}-approve`;
+    const rejectedReliefUrl =
+      `https://example.com/alpha-staging-relief-${runId}-reject`;
+
+    const approvedReliefInsert = await ownerA.client
+      .from('relief_applications')
+      .insert({
+        submitted_by: ownerA.user.id,
+        incident_summary: `Private Phase 4O Staging relief application ${runId}. This fixture verifies consented public progress without authorizing or sending any payment.`,
+        requested_amount_usdc: '17.250000',
+        evidence_url: approvedReliefUrl,
+        wallet_address: requiredWallet(ownerA),
+        wallet_verified: false,
+        public_update_consent: true,
+      })
+      .select('id')
+      .single();
+    assertNoError(approvedReliefInsert.error, 'approved relief application insert');
+    const approvedReliefId = requiredId(
+      approvedReliefInsert.data?.id,
+      'approved relief application',
+    );
+    rows.reliefApplicationIds.push(approvedReliefId);
+
+    const rejectedReliefInsert = await ownerA.client
+      .from('relief_applications')
+      .insert({
+        submitted_by: ownerA.user.id,
+        incident_summary: `Private Phase 4O Staging rejected relief application ${runId}. This fixture must remain private and must never create a public progress record.`,
+        requested_amount_usdc: '9.500000',
+        evidence_url: rejectedReliefUrl,
+        wallet_address: requiredWallet(ownerA),
+        wallet_verified: false,
+        public_update_consent: false,
+      })
+      .select('id')
+      .single();
+    assertNoError(rejectedReliefInsert.error, 'rejected relief application insert');
+    const rejectedReliefId = requiredId(
+      rejectedReliefInsert.data?.id,
+      'rejected relief application',
+    );
+    rows.reliefApplicationIds.push(rejectedReliefId);
+    assertions += 2;
+
+    const anonReliefRead = await publicClient
+      .from('relief_applications')
+      .select('id')
+      .in('id', rows.reliefApplicationIds);
+    expect(
+      Boolean(anonReliefRead.error),
+      'anon unexpectedly read private relief applications',
+    );
+    assertions += 1;
+
+    const unauthorizedReliefReview = await emailOnlyOwner.client.rpc(
+      'review_relief_application_v1',
+      {
+        p_relief_application_id: rejectedReliefId,
+        p_decision: 'rejected',
+        p_reviewer_notes: 'This no-role relief review must be denied.',
+        p_public_title: null,
+        p_public_summary: null,
+        p_publication_basis: null,
+        p_audit_reference: `${reliefRunReference}:unauthorized`,
+      },
+    );
+    expect(
+      Boolean(unauthorizedReliefReview.error),
+      'user without a role reviewed a relief application',
+    );
+    assertions += 1;
+
+    const selfReliefReview = await ownerA.client.rpc(
+      'review_relief_application_v1',
+      {
+        p_relief_application_id: rejectedReliefId,
+        p_decision: 'rejected',
+        p_reviewer_notes: 'This self-review must be denied.',
+        p_public_title: null,
+        p_public_summary: null,
+        p_publication_basis: null,
+        p_audit_reference: `${reliefRunReference}:self-review`,
+      },
+    );
+    expect(Boolean(selfReliefReview.error), 'relief claimant completed a self-review');
+    assertions += 1;
+
+    const directReliefRewrite = await operator.client
+      .from('relief_applications')
+      .update({ reviewer_notes: 'Direct mutation must be denied.' })
+      .eq('id', approvedReliefId)
+      .select('id');
+    expect(
+      Boolean(directReliefRewrite.error)
+        || (directReliefRewrite.data ?? []).length === 0,
+      'operator bypassed the audited relief review RPC',
+    );
+    assertions += 1;
+
+    const publicReliefTitle = `Phase 4O relief progress ${runId}`;
+    const publicReliefSummary =
+      `A reviewed Staging relief application was approved as an eligibility outcome. This public progress record contains no claimant identity, wallet, private evidence, or payment promise.`;
+    const approvedReliefReview = await operator.client.rpc(
+      'review_relief_application_v1',
+      {
+        p_relief_application_id: approvedReliefId,
+        p_decision: 'approved',
+        p_reviewer_notes: 'Independent Staging operator reviewed the private application and recorded eligibility only.',
+        p_public_title: publicReliefTitle,
+        p_public_summary: publicReliefSummary,
+        p_publication_basis: 'Claimant consented to a sanitized public progress update during controlled Phase 4O Staging review.',
+        p_audit_reference: `${reliefRunReference}:approved`,
+      },
+    );
+    assertNoError(approvedReliefReview.error, 'approved relief review RPC');
+    const approvedReliefReceipt = readSingleRpcRow(
+      approvedReliefReview.data,
+      'approved relief review',
+    );
+    expect(
+      approvedReliefReceipt.relief_application_id === approvedReliefId
+        && approvedReliefReceipt.review_status === 'approved'
+        && typeof approvedReliefReceipt.public_update_id === 'string',
+      'approved relief review returned an invalid receipt',
+    );
+    assertions += 1;
+
+    const rejectedReliefReview = await operator.client.rpc(
+      'review_relief_application_v1',
+      {
+        p_relief_application_id: rejectedReliefId,
+        p_decision: 'rejected',
+        p_reviewer_notes: 'Independent Staging operator rejected this fixture without publication or payment.',
+        p_public_title: null,
+        p_public_summary: null,
+        p_publication_basis: null,
+        p_audit_reference: `${reliefRunReference}:rejected`,
+      },
+    );
+    assertNoError(rejectedReliefReview.error, 'rejected relief review RPC');
+    const rejectedReliefReceipt = readSingleRpcRow(
+      rejectedReliefReview.data,
+      'rejected relief review',
+    );
+    expect(
+      rejectedReliefReceipt.relief_application_id === rejectedReliefId
+        && rejectedReliefReceipt.review_status === 'rejected'
+        && rejectedReliefReceipt.public_update_id === null,
+      'rejected relief review returned an invalid receipt',
+    );
+    assertions += 1;
+
+    const publicReliefRead = await publicClient
+      .from('relief_public_updates')
+      .select('*')
+      .eq('case_reference', `${reliefRunReference}:approved`)
+      .single();
+    assertNoError(publicReliefRead.error, 'anon sanitized relief update read');
+    const publicRelief = readRecord(publicReliefRead.data, 'sanitized relief update');
+    expect(
+      publicRelief.title === publicReliefTitle
+        && publicRelief.summary === publicReliefSummary
+        && publicRelief.outcome === 'approved'
+        && !('submitted_by' in publicRelief)
+        && !('wallet_address' in publicRelief)
+        && !('requested_amount_usdc' in publicRelief)
+        && !('reviewer_notes' in publicRelief),
+      'sanitized relief update leaked private or payment-sensitive fields',
+    );
+    assertions += 1;
+
+    const rejectedReliefPublicRead = await publicClient
+      .from('relief_public_updates')
+      .select('id')
+      .eq('case_reference', `${reliefRunReference}:rejected`);
+    assertNoError(rejectedReliefPublicRead.error, 'rejected relief update absence read');
+    expect(
+      (rejectedReliefPublicRead.data ?? []).length === 0,
+      'rejected relief application created a public update',
+    );
+    assertions += 1;
+
+    const replayReliefReview = await operator.client.rpc(
+      'review_relief_application_v1',
+      {
+        p_relief_application_id: approvedReliefId,
+        p_decision: 'rejected',
+        p_reviewer_notes: 'Terminal relief review replay must be denied.',
+        p_public_title: null,
+        p_public_summary: null,
+        p_publication_basis: null,
+        p_audit_reference: `${reliefRunReference}:replay`,
+      },
+    );
+    expect(Boolean(replayReliefReview.error), 'terminal relief review was replayed');
+    assertions += 1;
+
+    const anonReliefEventsRead = await publicClient
+      .from('operations_relief_workflow_events')
+      .select('event_id')
+      .in('relief_application_id', rows.reliefApplicationIds);
+    expect(
+      Boolean(anonReliefEventsRead.error),
+      'anon unexpectedly read private relief audit events',
+    );
+    assertions += 1;
+
+    const staffReliefEventsRead = await operator.client
+      .from('operations_relief_workflow_events')
+      .select('action,event_reference,event_data')
+      .in('relief_application_id', rows.reliefApplicationIds);
+    assertNoError(staffReliefEventsRead.error, 'staff relief audit event read');
+    expect(
+      hasExactReliefWorkflowActions(staffReliefEventsRead.data, reliefRunReference),
+      'relief audit did not prove approval is separate from payment',
+    );
+    assertions += 1;
+
+    const immutableReliefUpdate = await operator.client
+      .from('relief_public_updates')
+      .update({ summary: `Rewritten relief update ${runId}` })
+      .eq('case_reference', `${reliefRunReference}:approved`)
+      .select('id');
+    expect(
+      Boolean(immutableReliefUpdate.error)
+        || (immutableReliefUpdate.data ?? []).length === 0,
+      'operator rewrote an immutable relief public update',
+    );
+    assertions += 1;
+
+    const reliefTreasuryIntentRead = await admin
+      .from('treasury_execution_intents')
+      .select('id')
+      .in('relief_application_id', rows.reliefApplicationIds);
+    assertNoError(reliefTreasuryIntentRead.error, 'relief treasury intent absence read');
+    const reviewedReliefRead = await ownerA.client
+      .from('relief_applications')
+      .select('id,status,payment_receipt_id')
+      .in('id', rows.reliefApplicationIds);
+    assertNoError(reviewedReliefRead.error, 'claimant reviewed relief application read');
+    expect(
+      (reliefTreasuryIntentRead.data ?? []).length === 0
+        && (reviewedReliefRead.data ?? []).length === 2
+        && (reviewedReliefRead.data ?? []).every(
+          (application) => application.payment_receipt_id === null,
+        ),
+      'relief review created a treasury intent or payment receipt',
+    );
+    assertions += 1;
+
     const discussionInsert = await ownerA.client
       .from('governance_discussions')
       .insert({
@@ -1110,6 +1373,39 @@ async function cleanupStagingFixtures(
     errors.push('risk workflow cleanup identifiers are inconsistent');
   }
 
+  if (rows.reliefApplicationIds.length === 2) {
+    const reliefCleanup = await admin.rpc(
+      'cleanup_operations_relief_staging_e2e_v1',
+      {
+        p_run_reference: rows.reliefRunReference,
+        p_relief_application_ids: rows.reliefApplicationIds,
+      },
+    );
+    if (reliefCleanup.error) {
+      errors.push('relief workflow cleanup RPC failed');
+    } else {
+      const counts = readReliefWorkflowCleanupCounts(reliefCleanup.data);
+      if (!counts) {
+        errors.push('relief workflow cleanup RPC returned invalid counts');
+      } else if (
+        requireCompleteWorkflow
+        && (
+          counts.publicUpdatesDeleted !== 1
+          || counts.eventsDeleted !== 2
+          || counts.applicationsDeleted !== 2
+        )
+      ) {
+        errors.push('relief workflow cleanup RPC count mismatch');
+      } else {
+        rowsDeleted += counts.publicUpdatesDeleted
+          + counts.eventsDeleted
+          + counts.applicationsDeleted;
+      }
+    }
+  } else if (rows.reliefApplicationIds.length > 0) {
+    errors.push('relief workflow cleanup identifiers are inconsistent');
+  }
+
   for (const userId of [...userIds].reverse()) {
     const result = await admin.auth.admin.deleteUser(userId);
     if (result.error) {
@@ -1183,6 +1479,29 @@ export function readRiskWorkflowCleanupCounts(
     evidenceDeleted,
     reportsDeleted,
   };
+}
+
+export function readReliefWorkflowCleanupCounts(
+  data: unknown,
+): ReliefWorkflowCleanupCounts | null {
+  if (!Array.isArray(data) || data.length !== 1) {
+    return null;
+  }
+  const row = readUnknownRecord(data[0]);
+  if (!row) {
+    return null;
+  }
+  const publicUpdatesDeleted = readNonNegativeInteger(row.public_updates_deleted);
+  const eventsDeleted = readNonNegativeInteger(row.events_deleted);
+  const applicationsDeleted = readNonNegativeInteger(row.applications_deleted);
+  if (
+    publicUpdatesDeleted === null
+    || eventsDeleted === null
+    || applicationsDeleted === null
+  ) {
+    return null;
+  }
+  return { publicUpdatesDeleted, eventsDeleted, applicationsDeleted };
 }
 
 export function isExactCleanupDeletion(data: unknown, id: string): boolean {
@@ -1273,6 +1592,32 @@ function hasExactRiskWorkflowActions(
   const expected = [
     `report_dismissed:${runReference}:dismissed`,
     `report_published:${runReference}:published`,
+  ].sort();
+  return actual.length === expected.length
+    && actual.every((value, index) => value === expected[index]);
+}
+
+function hasExactReliefWorkflowActions(
+  data: unknown,
+  runReference: string,
+): boolean {
+  if (!Array.isArray(data) || data.length !== 2) {
+    return false;
+  }
+  const actual = data.flatMap((value) => {
+    const record = readUnknownRecord(value);
+    const eventData = readUnknownRecord(record?.event_data);
+    return typeof record?.action === 'string'
+      && typeof record.event_reference === 'string'
+      && eventData?.payment_intent_created === false
+      && eventData.payment_receipt_created === false
+      && eventData.approval_is_payment === false
+      ? [`${record.action}:${record.event_reference}`]
+      : [];
+  }).sort();
+  const expected = [
+    `application_approved:${runReference}:approved`,
+    `application_rejected:${runReference}:rejected`,
   ].sort();
   return actual.length === expected.length
     && actual.every((value, index) => value === expected[index]);

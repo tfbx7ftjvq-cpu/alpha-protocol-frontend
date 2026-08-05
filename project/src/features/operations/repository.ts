@@ -16,6 +16,7 @@ import {
   type PublicRiskReport,
   type PublicTaskResult,
   type ReliefApplicationInput,
+  type ReliefApplicationReviewInput,
   type RiskEvidenceInput,
   type RiskReportInput,
   type RiskReportReviewInput,
@@ -24,6 +25,7 @@ import {
   validateCommunityTaskPublication,
   validateDiscussion,
   validateReliefApplication,
+  validateReliefApplicationReview,
   validateRiskEvidence,
   validateRiskReport,
   validateRiskReportReview,
@@ -140,14 +142,14 @@ export async function submitTaskResult(input: TaskSubmissionInput): Promise<void
 
 export function resolveOperationsStaffRole(user: User | null): OperationsStaffRole | null {
   const role = user?.app_metadata?.operations_role;
-  return role === 'reviewer' || role === 'operator' || role === 'governance_admin'
+  return role === 'reviewer' || role === 'relief_reviewer' || role === 'operator' || role === 'governance_admin'
     ? role
     : null;
 }
 
 export async function loadOperationsStaffWorkspace(): Promise<OperationsStaffWorkspace> {
   const { client } = await requireStaffSession();
-  const [submissionResult, taskResult, eventResult, riskResult, evidenceResult, riskEventResult] = await Promise.all([
+  const [submissionResult, taskResult, eventResult, riskResult, evidenceResult, riskEventResult, reliefResult, reliefEventResult] = await Promise.all([
     client
       .from('task_submissions')
       .select('id,task_id,submitted_by,summary,deliverable_url,wallet_address,public_result_consent,public_wallet_consent,status,reviewer_notes,created_at')
@@ -179,6 +181,17 @@ export async function loadOperationsStaffWorkspace(): Promise<OperationsStaffWor
       .select('event_id,risk_report_id,action,actor_role,event_reference,created_at')
       .order('created_at', { ascending: false })
       .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
+    client
+      .from('relief_applications')
+      .select('id,submitted_by,incident_summary,requested_amount_usdc,evidence_url,wallet_address,public_update_consent,status,reviewer_notes,created_at')
+      .in('status', ['submitted', 'triaged', 'evidence_requested', 'under_review'])
+      .order('created_at', { ascending: true })
+      .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
+    client
+      .from('operations_relief_workflow_events')
+      .select('event_id,relief_application_id,action,actor_role,event_reference,created_at')
+      .order('created_at', { ascending: false })
+      .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
   ]);
 
   assertNoQueryError(submissionResult.error, '待审核任务成果');
@@ -187,6 +200,8 @@ export async function loadOperationsStaffWorkspace(): Promise<OperationsStaffWor
   assertNoQueryError(riskResult.error, '待审核风险报告');
   assertNoQueryError(evidenceResult.error, '风险证据索引');
   assertNoQueryError(riskEventResult.error, '风险工作流审计记录');
+  assertNoQueryError(reliefResult.error, '待审核救助申请');
+  assertNoQueryError(reliefEventResult.error, '救助工作流审计记录');
   const taskTitles = new Map((taskResult.data ?? []).map((row) => [row.id, row.title]));
   const evidenceCounts = new Map<string, number>();
   for (const row of evidenceResult.data ?? []) {
@@ -239,6 +254,26 @@ export async function loadOperationsStaffWorkspace(): Promise<OperationsStaffWor
       eventReference: row.event_reference,
       createdAt: row.created_at,
     })),
+    reliefApplications: (reliefResult.data ?? []).map((row) => ({
+      id: row.id,
+      incidentSummary: row.incident_summary,
+      requestedAmountUsdc: String(row.requested_amount_usdc),
+      evidenceUrl: row.evidence_url,
+      walletAddress: row.wallet_address,
+      publicUpdateConsent: row.public_update_consent,
+      status: row.status,
+      submittedBy: row.submitted_by,
+      reviewerNotes: row.reviewer_notes,
+      createdAt: row.created_at,
+    })),
+    reliefEvents: (reliefEventResult.data ?? []).map((row) => ({
+      eventId: String(row.event_id),
+      reliefApplicationId: row.relief_application_id,
+      action: row.action,
+      actorRole: row.actor_role,
+      eventReference: row.event_reference,
+      createdAt: row.created_at,
+    })),
   };
 }
 
@@ -247,7 +282,7 @@ export async function publishCommunityTask(
 ): Promise<string> {
   const payload = validateCommunityTaskPublication(input);
   const { client, role } = await requireStaffSession();
-  if (role === 'reviewer') {
+  if (role === 'reviewer' || role === 'relief_reviewer') {
     throw new OperationsBackendError('reviewer 不能发布社区任务');
   }
 
@@ -340,9 +375,27 @@ export async function submitReliefApplication(input: ReliefApplicationInput): Pr
     wallet_address: payload.walletAddress,
     wallet_verified: false,
     status: 'submitted',
+    public_update_consent: payload.publicUpdateConsent,
   });
 
   assertNoMutationError(error, '救助申请');
+}
+
+export async function reviewReliefApplication(
+  input: ReliefApplicationReviewInput,
+): Promise<void> {
+  const payload = validateReliefApplicationReview(input);
+  const { client } = await requireStaffSession();
+  const result = await client.rpc('review_relief_application_v1', {
+    p_relief_application_id: payload.reliefApplicationId,
+    p_decision: payload.decision,
+    p_reviewer_notes: payload.reviewerNotes,
+    p_public_title: payload.publicTitle,
+    p_public_summary: payload.publicSummary,
+    p_publication_basis: payload.publicationBasis,
+    p_audit_reference: payload.auditReference,
+  });
+  assertNoMutationError(result.error, '救助申请审核');
 }
 
 export async function submitDiscussion(input: DiscussionInput): Promise<void> {

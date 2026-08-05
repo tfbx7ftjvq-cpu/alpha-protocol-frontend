@@ -80,7 +80,7 @@ test('Phase 4N E2E exercises independent risk review and sanitized publication',
   assert.match(e2eSource, /terminal risk review was replayed/);
 });
 
-test('Phase 4N E2E uses exact risk fixture cleanup and expected totals', () => {
+test('Phase 4N E2E uses exact risk fixture cleanup', () => {
   assert.match(
     e2eSource,
     /rpc\(\s*'cleanup_operations_risk_staging_e2e_v1'/,
@@ -91,7 +91,28 @@ test('Phase 4N E2E uses exact risk fixture cleanup and expected totals', () => {
   assert.match(e2eSource, /counts\.reportsDeleted !== 2/);
   assert.match(e2eSource, /primaryError === null/);
 
+});
+
+test('Phase 4O E2E proves relief approval is not payment and cleans exact fixtures', () => {
+  assert.equal(
+    (e2eSource.match(/rpc\(\s*'review_relief_application_v1'/g) ?? []).length,
+    5,
+  );
+  assert.match(e2eSource, /const selfReliefReview = await ownerA\.client/);
+  assert.match(e2eSource, /const unauthorizedReliefReview = await emailOnlyOwner\.client/);
+  assert.match(e2eSource, /const directReliefRewrite = await operator\.client/);
+  assert.match(e2eSource, /!\('wallet_address' in publicRelief\)/);
+  assert.match(e2eSource, /!\('requested_amount_usdc' in publicRelief\)/);
+  assert.match(e2eSource, /relief review created a treasury intent or payment receipt/);
+  assert.match(
+    e2eSource,
+    /rpc\(\s*'cleanup_operations_relief_staging_e2e_v1'/,
+  );
+  assert.match(e2eSource, /counts\.publicUpdatesDeleted !== 1/);
+  assert.match(e2eSource, /counts\.eventsDeleted !== 2/);
+  assert.match(e2eSource, /counts\.applicationsDeleted !== 2/);
+
   const increments = [...e2eSource.matchAll(/assertions \+= (\d+);/g)]
     .reduce((total, match) => total + Number(match[1]), 0);
-  assert.equal(increments, 46);
+  assert.equal(increments, 61);
 });
