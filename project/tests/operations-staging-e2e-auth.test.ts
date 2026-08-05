@@ -106,6 +106,14 @@ test('Phase 4O E2E proves relief approval is not payment and cleans exact fixtur
   assert.match(e2eSource, /relief review created a treasury intent or payment receipt/);
   assert.match(
     e2eSource,
+    /rpc\(\s*'inspect_operations_relief_staging_e2e_payment_state_v1'/,
+  );
+  assert.doesNotMatch(
+    e2eSource,
+    /admin\s*\.from\(\s*'treasury_execution_intents'/,
+  );
+  assert.match(
+    e2eSource,
     /rpc\(\s*'cleanup_operations_relief_staging_e2e_v1'/,
   );
   assert.match(e2eSource, /counts\.publicUpdatesDeleted !== 1/);

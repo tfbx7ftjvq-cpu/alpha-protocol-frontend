@@ -511,11 +511,14 @@ Subsequent verified Staging state:
 This phase verifies the selected off-chain authorization paths on the dedicated
 Supabase staging project. It does not activate production intake, deploy or
 upgrade the Solana program, or constitute a professional Mainnet audit.
-# Phase 2E-6B-4O pending deployment note
+# Phase 2E-6B-4O Staging verification note
 
 Phase 2E-6B-4O adds an audited relief-review closure and an exact service-role-only
-Staging cleanup path. At source-build time, migrations `202608060001` and
-`202608060002` are not yet applied remotely. Relief approval is an eligibility
-review outcome only: it does not create a treasury intent, payment receipt,
-Solana transaction, or funds movement. See
+Staging cleanup path. Migrations `202608060001` and `202608060002` are applied
+remotely. The first full E2E exposed that bypassing RLS does not grant
+`service_role` table-level `SELECT` on the private treasury intent table. The
+corrective `202608060003` migration adds a read-only, exact-fixture-bound
+inspection RPC without granting access to that table. Relief approval remains
+an eligibility review outcome only: it does not create a treasury intent,
+payment receipt, Solana transaction, or funds movement. See
 `docs/audited-relief-review-and-public-progress-closure-v1.md`.

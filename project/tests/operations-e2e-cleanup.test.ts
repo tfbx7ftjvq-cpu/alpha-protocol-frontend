@@ -2,10 +2,43 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   isExactCleanupDeletion,
+  readReliefPaymentStateCounts,
   readReliefWorkflowCleanupCounts,
   readRiskWorkflowCleanupCounts,
   readTaskWorkflowCleanupCounts,
 } from '../scripts/operations-staging/e2e.ts';
+
+test('relief payment inspection accepts one complete non-negative count receipt', () => {
+  assert.deepEqual(
+    readReliefPaymentStateCounts([{
+      applications_matched: 2,
+      treasury_intents_found: 0,
+      payment_receipts_found: 0,
+    }]),
+    {
+      applicationsMatched: 2,
+      treasuryIntentsFound: 0,
+      paymentReceiptsFound: 0,
+    },
+  );
+  for (const invalid of [
+    null,
+    [],
+    [{ applications_matched: 2 }],
+    [{
+      applications_matched: 2,
+      treasury_intents_found: -1,
+      payment_receipts_found: 0,
+    }],
+    [{
+      applications_matched: 2,
+      treasury_intents_found: 0,
+      payment_receipts_found: 0.5,
+    }],
+  ]) {
+    assert.equal(readReliefPaymentStateCounts(invalid), null);
+  }
+});
 
 test('relief workflow cleanup accepts one complete non-negative count receipt', () => {
   assert.deepEqual(

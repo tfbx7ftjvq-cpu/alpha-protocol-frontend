@@ -104,7 +104,7 @@ RPC 在一个数据库事务中完成状态迁移、可选公开进度和审计�
 - 审核角色能读取两条精确事件；
 - 事件明确证明没有付款意图、付款回执或自动付款；
 - 公开进度不可改写；
-- 国库执行意图为零，两个申请的付款回执均为空；
+- service-role-only 的只读付款状态 RPC 返回两个精确申请、零国库执行意图和零付款回执；
 - 精确清理 1 条公开进度、2 条事件和 2 条私有申请。
 
 加入 4O 后，整套 Staging E2E 预期为 61 条断言；完整成功路径清理 20 行测试数据和 4 个临时 Auth 用户。
@@ -113,6 +113,7 @@ RPC 在一个数据库事务中完成状态迁移、可选公开进度和审计�
 
 - `supabase/migrations/202608060001_operations_relief_moderation_closure.sql`
 - `supabase/migrations/202608060002_operations_relief_staging_e2e_cleanup.sql`
+- `supabase/migrations/202608060003_operations_relief_staging_e2e_payment_guard.sql`
 - `project/scripts/operations-staging/e2e.ts`
 - `project/src/features/operations/domain.ts`
 - `project/src/features/operations/repository.ts`
@@ -127,12 +128,12 @@ RPC 在一个数据库事务中完成状态迁移、可选公开进度和审计�
 
 ## 部署状态
 
-生成本变更集时：
+初始 4O 变更集部署后：
 
-- GitHub、Cloudflare Pages 和 Supabase Staging 尚未应用 4O；
-- 当前远程基线仍为 `e64b906dc831ac3b13c79af0fac66e108eedf1a1`；
-- 4O 必须先通过本地验证、提交和 Cloudflare Production 复核；
-- 然后独立 dry-run 并应用 `202608060001`、`202608060002`；
-- 最后使用新鲜的一次性 Turnstile token 执行 Staging E2E。
+- GitHub 与 Cloudflare Production 已部署 `f278c1f26c7bb80976efeb1f144bd0aa1ddb3f0f`；
+- Supabase Staging 已应用 `202608060001` 和 `202608060002`；
+- 首次远程 4O E2E 在付款缺失断言处发现 `service_role` 没有私有国库表的直接 `SELECT` 权限；精确清理随后成功，没有遗留测试数据；
+- `202608060003` 以 service-role-only、精确 fixture 绑定的只读 RPC 修复该断言，不授予整表读取权限；
+- 应用 `202608060003` 后必须使用新的单次 Turnstile token 重跑完整 Staging E2E。
 
 任何审核结果都不能被描述为已赔付、保证赔付、自动赔付或链上支付。

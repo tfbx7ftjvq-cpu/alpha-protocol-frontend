@@ -754,6 +754,30 @@ select ok(
 );
 
 select ok(
+  has_function_privilege(
+    'service_role',
+    'public.inspect_operations_relief_staging_e2e_payment_state_v1(text,uuid[])',
+    'EXECUTE'
+  )
+    and not has_function_privilege(
+      'authenticated',
+      'public.inspect_operations_relief_staging_e2e_payment_state_v1(text,uuid[])',
+      'EXECUTE'
+    )
+    and not has_function_privilege(
+      'anon',
+      'public.inspect_operations_relief_staging_e2e_payment_state_v1(text,uuid[])',
+      'EXECUTE'
+    )
+    and not has_table_privilege(
+      'service_role',
+      'public.treasury_execution_intents',
+      'SELECT'
+    ),
+  'Phase 4O payment-state proof is narrow and does not expose the treasury intent table'
+);
+
+select ok(
   (
     select pg_get_functiondef(procedure.oid)
     from pg_catalog.pg_proc procedure

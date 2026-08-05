@@ -55,6 +55,10 @@ const reliefStagingE2ECleanupMigrationUrl = new URL(
   '../../supabase/migrations/202608060002_operations_relief_staging_e2e_cleanup.sql',
   import.meta.url,
 );
+const reliefStagingE2EPaymentGuardMigrationUrl = new URL(
+  '../../supabase/migrations/202608060003_operations_relief_staging_e2e_payment_guard.sql',
+  import.meta.url,
+);
 const foundationSql = readFileSync(foundationMigrationUrl, 'utf8');
 const hardeningSql = readFileSync(hardeningMigrationUrl, 'utf8');
 const cleanupPrivilegesSql = readFileSync(cleanupPrivilegesMigrationUrl, 'utf8');
@@ -80,6 +84,10 @@ const reliefStagingE2ECleanupSql = readFileSync(
   reliefStagingE2ECleanupMigrationUrl,
   'utf8',
 );
+const reliefStagingE2EPaymentGuardSql = readFileSync(
+  reliefStagingE2EPaymentGuardMigrationUrl,
+  'utf8',
+);
 const sql = [
   foundationSql,
   hardeningSql,
@@ -94,6 +102,7 @@ const sql = [
   riskStagingE2ECleanupSql,
   reliefModerationClosureSql,
   reliefStagingE2ECleanupSql,
+  reliefStagingE2EPaymentGuardSql,
 ].join('\n');
 
 const expectedTables = [
@@ -741,6 +750,126 @@ test('Phase 4O Staging cleanup is exact, owner-bound, and service-role-only', ()
     reliefStagingE2ECleanupSql,
     /cleanup refused because a treasury execution intent exists/,
   );
+});
+
+test('Phase 4O payment proof is read-only, fixture-bound, and service-role-only', () => {
+  assert.match(
+    reliefStagingE2EPaymentGuardSql,
+    /create or replace function public\.inspect_operations_relief_staging_e2e_payment_state_v1\(/,
+  );
+  assert.match(
+    reliefStagingE2EPaymentGuardSql,
+    /\^phase-2e-6b-4o-staging-e2e:\[0-9\]\{13\}-\[0-9a-f\]\{8\}\$/,
+  );
+  assert.match(
+    reliefStagingE2EPaymentGuardSql,
+    /grant execute on function public\.inspect_operations_relief_staging_e2e_payment_state_v1\(\s*text, uuid\[\]\s*\)[\s\S]*to service_role/,
+  );
+  assert.doesNotMatch(
+    reliefStagingE2EPaymentGuardSql,
+    /grant execute on function public\.inspect_operations_relief_staging_e2e_payment_state_v1[^;]*to (?:anon|authenticated)/,
+  );
+  assert.doesNotMatch(
+    reliefStagingE2EPaymentGuardSql,
+    /\b(?:insert into|update|delete from)\b/i,
+  );
+  assert.doesNotMatch(
+    reliefStagingE2EPaymentGuardSql,
+    /grant select on table public\.treasury_execution_intents to service_role/i,
+  );
+});
+
+test('runtime Phase 4O payment proof returns zero without granting treasury table reads', async () => {
+  const database = await createOperationsDatabase();
+  const ownerId = '41111111-1111-4111-8111-111111111111';
+  const reviewerId = '42222222-2222-4222-8222-222222222222';
+  const approvedId = '43333333-3333-4333-8333-333333333333';
+  const rejectedId = '44444444-4444-4444-8444-444444444444';
+  const runId = '1730000000000-deadbeef';
+  const runReference = `phase-2e-6b-4o-staging-e2e:${runId}`;
+
+  try {
+    await database.exec(`
+      insert into auth.users (id) values ('${ownerId}'), ('${reviewerId}');
+      update public.operations_intake_control
+      set
+        mode = 'wallet_staging',
+        activation_reference = 'Phase 4O payment guard runtime fixture';
+      select set_config('request.jwt.claim.sub', '${ownerId}', false);
+      insert into public.relief_applications (
+        id,
+        submitted_by,
+        incident_summary,
+        requested_amount_usdc,
+        evidence_url,
+        wallet_address,
+        status,
+        reviewer_notes,
+        reviewed_by,
+        reviewed_at
+      ) values
+        (
+          '${approvedId}',
+          '${ownerId}',
+          'Exact approved Phase 4O payment guard runtime fixture with sufficient private detail.',
+          10,
+          'https://example.com/alpha-staging-relief-${runId}-approve',
+          '11111111111111111111111111111111',
+          'approved',
+          'Approved without creating any payment state.',
+          '${reviewerId}',
+          timezone('utc', now())
+        ),
+        (
+          '${rejectedId}',
+          '${ownerId}',
+          'Exact rejected Phase 4O payment guard runtime fixture with sufficient private detail.',
+          20,
+          'https://example.com/alpha-staging-relief-${runId}-reject',
+          '11111111111111111111111111111111',
+          'rejected',
+          'Rejected without creating any payment state.',
+          '${reviewerId}',
+          timezone('utc', now())
+        );
+      set role service_role;
+    `);
+
+    const proof = await database.query<{
+      applications_matched: number;
+      treasury_intents_found: number;
+      payment_receipts_found: number;
+    }>(`
+      select *
+      from public.inspect_operations_relief_staging_e2e_payment_state_v1(
+        '${runReference}',
+        array['${approvedId}'::uuid, '${rejectedId}'::uuid]
+      );
+    `);
+    assert.deepEqual(proof.rows, [{
+      applications_matched: 2,
+      treasury_intents_found: 0,
+      payment_receipts_found: 0,
+    }]);
+
+    await assert.rejects(
+      database.query('select id from public.treasury_execution_intents;'),
+      /permission denied/,
+    );
+    await database.exec('reset role; set role authenticated;');
+    await assert.rejects(
+      database.query(`
+        select *
+        from public.inspect_operations_relief_staging_e2e_payment_state_v1(
+          '${runReference}',
+          array['${approvedId}'::uuid, '${rejectedId}'::uuid]
+        );
+      `),
+      /permission denied/,
+    );
+  } finally {
+    await database.close();
+  }
 });
 
 test('staging E2E cleanup privilege is narrow and excludes browser roles', async () => {
@@ -2374,6 +2503,7 @@ async function createOperationsDatabase(): Promise<PGlite> {
   await database.exec(riskStagingE2ECleanupSql);
   await database.exec(reliefModerationClosureSql);
   await database.exec(reliefStagingE2ECleanupSql);
+  await database.exec(reliefStagingE2EPaymentGuardSql);
   return database;
 }
 

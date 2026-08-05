@@ -60,6 +60,12 @@ interface ReliefWorkflowCleanupCounts {
   applicationsDeleted: number;
 }
 
+interface ReliefPaymentStateCounts {
+  applicationsMatched: number;
+  treasuryIntentsFound: number;
+  paymentReceiptsFound: number;
+}
+
 export interface OperationsStagingE2EResult {
   projectRef: string;
   assertions: number;
@@ -1009,18 +1015,24 @@ export async function runOperationsStagingE2E(
     );
     assertions += 1;
 
-    const reliefTreasuryIntentRead = await admin
-      .from('treasury_execution_intents')
-      .select('id')
-      .in('relief_application_id', rows.reliefApplicationIds);
-    assertNoError(reliefTreasuryIntentRead.error, 'relief treasury intent absence read');
+    const reliefPaymentState = await admin.rpc(
+      'inspect_operations_relief_staging_e2e_payment_state_v1',
+      {
+        p_run_reference: reliefRunReference,
+        p_relief_application_ids: rows.reliefApplicationIds,
+      },
+    );
+    assertNoError(reliefPaymentState.error, 'relief payment-state inspection RPC');
+    const reliefPaymentCounts = readReliefPaymentStateCounts(reliefPaymentState.data);
     const reviewedReliefRead = await ownerA.client
       .from('relief_applications')
       .select('id,status,payment_receipt_id')
       .in('id', rows.reliefApplicationIds);
     assertNoError(reviewedReliefRead.error, 'claimant reviewed relief application read');
     expect(
-      (reliefTreasuryIntentRead.data ?? []).length === 0
+      reliefPaymentCounts?.applicationsMatched === 2
+        && reliefPaymentCounts.treasuryIntentsFound === 0
+        && reliefPaymentCounts.paymentReceiptsFound === 0
         && (reviewedReliefRead.data ?? []).length === 2
         && (reviewedReliefRead.data ?? []).every(
           (application) => application.payment_receipt_id === null,
@@ -1502,6 +1514,29 @@ export function readReliefWorkflowCleanupCounts(
     return null;
   }
   return { publicUpdatesDeleted, eventsDeleted, applicationsDeleted };
+}
+
+export function readReliefPaymentStateCounts(
+  data: unknown,
+): ReliefPaymentStateCounts | null {
+  if (!Array.isArray(data) || data.length !== 1) {
+    return null;
+  }
+  const row = readUnknownRecord(data[0]);
+  if (!row) {
+    return null;
+  }
+  const applicationsMatched = readNonNegativeInteger(row.applications_matched);
+  const treasuryIntentsFound = readNonNegativeInteger(row.treasury_intents_found);
+  const paymentReceiptsFound = readNonNegativeInteger(row.payment_receipts_found);
+  if (
+    applicationsMatched === null
+    || treasuryIntentsFound === null
+    || paymentReceiptsFound === null
+  ) {
+    return null;
+  }
+  return { applicationsMatched, treasuryIntentsFound, paymentReceiptsFound };
 }
 
 export function isExactCleanupDeletion(data: unknown, id: string): boolean {
