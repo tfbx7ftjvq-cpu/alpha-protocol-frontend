@@ -63,6 +63,10 @@ const governanceOperationsMigrationUrl = new URL(
   '../../supabase/migrations/202608070001_governance_operations_audited_execution_preparation.sql',
   import.meta.url,
 );
+const treasuryExecutionRegistryMigrationUrl = new URL(
+  '../../supabase/migrations/202608080001_audited_treasury_execution_registry_and_reconciliation.sql',
+  import.meta.url,
+);
 const foundationSql = readFileSync(foundationMigrationUrl, 'utf8');
 const hardeningSql = readFileSync(hardeningMigrationUrl, 'utf8');
 const cleanupPrivilegesSql = readFileSync(cleanupPrivilegesMigrationUrl, 'utf8');
@@ -93,6 +97,7 @@ const reliefStagingE2EPaymentGuardSql = readFileSync(
   'utf8',
 );
 const governanceOperationsSql = readFileSync(governanceOperationsMigrationUrl, 'utf8');
+const treasuryExecutionRegistrySql = readFileSync(treasuryExecutionRegistryMigrationUrl, 'utf8');
 const sql = [
   foundationSql,
   hardeningSql,
@@ -109,6 +114,7 @@ const sql = [
   reliefStagingE2ECleanupSql,
   reliefStagingE2EPaymentGuardSql,
   governanceOperationsSql,
+  treasuryExecutionRegistrySql,
 ].join('\n');
 
 const expectedTables = [
@@ -133,6 +139,9 @@ const expectedTables = [
   'operations_relief_workflow_events',
   'governance_proposal_submissions',
   'operations_governance_workflow_events',
+  'treasury_execution_private_notes',
+  'operations_treasury_execution_workflow_events',
+  'treasury_execution_public_registry',
 ];
 
 test('every operations table enables row-level security', () => {
@@ -1839,9 +1848,9 @@ test('all migrations create the expected schema, policy, and trigger totals', as
         and relation.relname = any(array[${expectedTables.map(quoteSql).join(', ')}]);
     `);
 
-    assert.equal(tableCount.rows[0]?.count, 21);
+    assert.equal(tableCount.rows[0]?.count, 24);
     assert.equal(policyCount.rows[0]?.count, 44);
-    assert.equal(triggerCount.rows[0]?.count, 44);
+    assert.equal(triggerCount.rows[0]?.count, 49);
   } finally {
     await database.close();
   }
@@ -2443,6 +2452,10 @@ test('runtime governance workflow enforces independent roles, deterministic bind
   const operatorId = '61000000-0000-4000-8000-000000000002';
   const moderatorId = '61000000-0000-4000-8000-000000000003';
   const adminId = '61000000-0000-4000-8000-000000000004';
+  const preparerId = '61000000-0000-4000-8000-000000000005';
+  const authorizerId = '61000000-0000-4000-8000-000000000006';
+  const executorId = '61000000-0000-4000-8000-000000000007';
+  const reconcilerId = '61000000-0000-4000-8000-000000000008';
   const wallet = '11111111111111111111111111111111';
   const manifestHash = 'a'.repeat(64);
 
@@ -2461,7 +2474,8 @@ test('runtime governance workflow enforces independent roles, deterministic bind
   try {
     await database.exec(`
       insert into auth.users (id) values
-        ('${ownerId}'), ('${operatorId}'), ('${moderatorId}'), ('${adminId}');
+        ('${ownerId}'), ('${operatorId}'), ('${moderatorId}'), ('${adminId}'),
+        ('${preparerId}'), ('${authorizerId}'), ('${executorId}'), ('${reconcilerId}');
       insert into auth.identities (id, user_id, provider, provider_id, identity_data)
       values ('governance-owner-wallet', '${ownerId}', 'web3',
         'web3:solana:${wallet}', '{"sub":"web3:solana:${wallet}"}');
@@ -2473,7 +2487,7 @@ test('runtime governance workflow enforces independent roles, deterministic bind
       select proposal_submission_id from public.submit_governance_proposal_v1(
         'Runtime private proposal',
         'Private proposal source material that must never appear in the public sanitized record.',
-        'builders_spend', true, '{"amount":"10","asset":"USDC"}'::jsonb,
+        'builders_spend', true, '{"pool":"builders","network":"devnet","asset_symbol":"USDC","asset_decimals":"6","asset_mint":"${wallet}","destination_wallet":"${wallet}","amount_base_units":"1000000","recipient_verification_reference":"runtime recipient verified","purpose_reference":"Runtime treasury execution","relief_application_id":""}'::jsonb,
         '${manifestHash}', true, 'runtime-6c:proposal-submitted'
       );
     `);
@@ -2529,10 +2543,11 @@ test('runtime governance workflow enforces independent roles, deterministic bind
       'This finalization must fail because its manifest binding is incorrect.',
       '${'b'.repeat(64)}', 'runtime-6c:decision-bad-manifest');`), /does not match/);
     const finalized = await database.query<{
+      governance_decision_id: string;
       decision_hash: string;
       execution_intent_created: boolean;
       execution_receipt_created: boolean;
-    }>(`select decision_hash, execution_intent_created, execution_receipt_created
+    }>(`select governance_decision_id, decision_hash, execution_intent_created, execution_receipt_created
       from public.finalize_governance_decision_v1(
         '${publicProposalId}', 'approved',
         'Independent final decision with deterministic manifest binding and no execution side effect.',
@@ -2545,6 +2560,70 @@ test('runtime governance workflow enforces independent roles, deterministic bind
         (select count(*)::int from public.treasury_execution_receipts) receipts;
     `);
     assert.deepEqual(sideEffects.rows[0], { intents: 0, receipts: 0 });
+
+    const decisionId = finalized.rows[0]!.governance_decision_id;
+    await assume(adminId, 'treasury_preparer');
+    await assert.rejects(database.exec(`select * from public.prepare_treasury_execution_intent_v1(
+      '${decisionId}', 'builders', null, 'devnet', 'USDC', 6::smallint, '${wallet}', '${wallet}',
+      1000000::numeric, 'runtime recipient verified', 'Runtime treasury execution',
+      'Private preparation record.', 'runtime-6d:finalizer-cannot-prepare');`), /independent from the governance decision finalizer/);
+
+    await assume(preparerId, 'treasury_preparer');
+    await assert.rejects(database.exec(`select * from public.prepare_treasury_execution_intent_v1(
+      '${decisionId}', 'builders', null, 'devnet', 'USDC', 6::smallint, '${wallet}', '${wallet}',
+      999999::numeric, 'runtime recipient verified', 'Runtime treasury execution',
+      'Private preparation record.', 'runtime-6d:manifest-mismatch');`), /exactly match/);
+    const prepared = await database.query<{ execution_intent_id: string; intent_hash: string; transaction_sent: boolean; receipt_created: boolean }>(`
+      select * from public.prepare_treasury_execution_intent_v1(
+        '${decisionId}', 'builders', null, 'devnet', 'USDC', 6::smallint, '${wallet}', '${wallet}',
+        1000000::numeric, 'runtime recipient verified', 'Runtime treasury execution',
+        'Private preparation record.', 'runtime-6d:intent-prepared');
+    `);
+    const intentId = prepared.rows[0]!.execution_intent_id;
+    assert.match(prepared.rows[0]!.intent_hash, /^[0-9a-f]{64}$/);
+    assert.equal(prepared.rows[0]!.transaction_sent, false);
+    assert.equal(prepared.rows[0]!.receipt_created, false);
+    await assert.rejects(database.exec(`select * from public.prepare_treasury_execution_intent_v1(
+      '${decisionId}', 'builders', null, 'devnet', 'USDC', 6::smallint, '${wallet}', '${wallet}',
+      1000000::numeric, 'runtime recipient verified', 'Runtime treasury execution',
+      'Duplicate preparation record.', 'runtime-6d:intent-duplicate');`), /already has an execution intent/);
+
+    await assume(preparerId, 'treasury_authorizer');
+    await assert.rejects(database.exec(`select * from public.authorize_treasury_execution_intent_v1(
+      '${intentId}', 'runtime authorization', 'Private authorization record.', 'runtime-6d:self-authorize');`), /cannot authorize their own intent/);
+    await assume(authorizerId, 'treasury_authorizer');
+    const authorized = await database.query<{ payment_executed: boolean; receipt_created: boolean }>(`
+      select payment_executed, receipt_created from public.authorize_treasury_execution_intent_v1(
+        '${intentId}', 'runtime authorization', 'Private authorization record.', 'runtime-6d:authorized');
+    `);
+    assert.deepEqual(authorized.rows[0], { payment_executed: false, receipt_created: false });
+    const afterAuthorization = await database.query<{ receipts: number }>(`
+      select count(*)::int receipts from public.treasury_execution_receipts;
+    `);
+    assert.equal(afterAuthorization.rows[0]!.receipts, 0);
+
+    await assume(executorId, 'executor');
+    await assert.rejects(database.exec(`select * from public.report_treasury_execution_receipt_v1(
+      '${intentId}', 'bad-signature', now(), 'Private external report.', 'runtime-6d:bad-signature');`), /invalid Solana transaction signature/);
+    const reported = await database.query<{ execution_receipt_id: string; chain_verified_by_database: boolean }>(`
+      select execution_receipt_id, chain_verified_by_database
+      from public.report_treasury_execution_receipt_v1(
+        '${intentId}', '${'1'.repeat(64)}', now(), 'Private external report.', 'runtime-6d:reported');
+    `);
+    assert.equal(reported.rows[0]!.chain_verified_by_database, false);
+    await assert.rejects(database.exec(`select * from public.report_treasury_execution_receipt_v1(
+      '${intentId}', '${'1'.repeat(64)}', now(), 'Duplicate external report.', 'runtime-6d:duplicate-receipt');`), /only an authorized intent|duplicate key/);
+
+    await assume(reconcilerId, 'treasury_reconciler');
+    const reconciled = await database.query<{ status: string; chain_verified_by_database: boolean }>(`
+      select status, chain_verified_by_database from public.reconcile_treasury_execution_v1(
+        '${intentId}', 'reconciled', 'runtime reconciliation', 'Private reconciliation record.', 'runtime-6d:reconciled');
+    `);
+    assert.deepEqual(reconciled.rows[0], { status: 'reconciled', chain_verified_by_database: false });
+    await assert.rejects(database.exec(`update public.treasury_execution_receipts
+      set transaction_signature = '${'2'.repeat(64)}' where id = '${reported.rows[0]!.execution_receipt_id}';`), /permission denied|immutable/);
+    await assert.rejects(database.exec(`delete from public.operations_treasury_execution_workflow_events
+      where execution_intent_id = '${intentId}';`), /permission denied|append-only/);
     await assert.rejects(database.exec(`delete from public.governance_decisions
       where proposal_id = '${publicProposalId}';`), /permission denied|immutable governance record/);
     await database.exec('reset role;');
@@ -2611,6 +2690,72 @@ test('runtime Phase 2E-6C cleanup is exact, owner-bound, and service-role-only',
   }
 });
 
+test('Phase 2E-6D refuses unsafe legacy execution history instead of fabricating bindings', async () => {
+  const database = await createOperationsDatabase(false);
+  try {
+    await database.exec(`
+      insert into auth.users (id) values ('63000000-0000-4000-8000-000000000001');
+      insert into public.governance_proposals (
+        id, title, summary, proposal_kind, execution_required, execution_manifest_url,
+        status, publication_status, published_at
+      ) values (
+        '63000000-0000-4000-8000-000000000010', 'Legacy execution proposal',
+        'Read-only inventory fixture representing execution history without auditable bindings.',
+        'builders_spend', true, 'https://example.com/legacy.json', 'decided', 'published', now()
+      );
+      insert into public.governance_decisions (
+        id, proposal_id, decision, rationale, decision_hash, execution_required,
+        execution_reference, execution_manifest_sha256, finalization_reference
+      ) values (
+        '63000000-0000-4000-8000-000000000011', '63000000-0000-4000-8000-000000000010',
+        'approved', 'Legacy decision deliberately lacks the Phase 2E-6D audited actor chain.',
+        '${'c'.repeat(64)}', true, 'legacy-execution', '${'d'.repeat(64)}', 'legacy-finalization'
+      );
+      insert into public.treasury_execution_intents (
+        governance_decision_id, pool, network, asset_mint, destination_wallet,
+        amount_base_units, recipient_verification_reference, manifest_sha256, prepared_by
+      ) values (
+        '63000000-0000-4000-8000-000000000011', 'builders', 'devnet',
+        '11111111111111111111111111111111', '11111111111111111111111111111111',
+        1000000, 'legacy recipient evidence', '${'d'.repeat(64)}',
+        '63000000-0000-4000-8000-000000000001'
+      );
+    `);
+    await assert.rejects(database.exec(treasuryExecutionRegistrySql), /refusing unsafe in-place migration/);
+  } finally {
+    await database.close();
+  }
+});
+
+test('Phase 2E-6D cleanup is service-role-only and requires exactly two intent IDs', async () => {
+  const database = await createOperationsDatabase();
+  const ownerId = '64000000-0000-4000-8000-000000000001';
+  try {
+    await database.exec(`
+      insert into auth.users (id) values ('${ownerId}');
+      set role service_role;
+    `);
+    await assert.rejects(database.exec(`select * from public.cleanup_treasury_execution_staging_e2e_v1(
+      'phase-2e-6d-staging-e2e:1700000000000-abcdef12', '${ownerId}',
+      array['64000000-0000-4000-8000-000000000011'::uuid]);
+    `), /exactly two distinct intent identifiers/);
+    await database.exec(`
+      reset role;
+      select set_config('request.jwt.claim.sub', '${ownerId}', false);
+      select set_config('request.jwt.claims', '{"sub":"${ownerId}","role":"authenticated"}', false);
+      set role authenticated;
+    `);
+    await assert.rejects(database.exec(`select * from public.cleanup_treasury_execution_staging_e2e_v1(
+      'phase-2e-6d-staging-e2e:1700000000000-abcdef12', '${ownerId}',
+      array['64000000-0000-4000-8000-000000000011'::uuid,
+        '64000000-0000-4000-8000-000000000012'::uuid]);
+    `), /permission denied/);
+    await database.exec('reset role;');
+  } finally {
+    await database.close();
+  }
+});
+
 function extractCreateTable(table: string): string {
   const match = sql.match(
     new RegExp(`create table public\\.${table} \\([\\s\\S]*?\\n\\);`),
@@ -2627,7 +2772,7 @@ function extractPolicy(policy: string, source = sql): string {
   return match[0];
 }
 
-async function createOperationsDatabase(): Promise<PGlite> {
+async function createOperationsDatabase(includeTreasuryExecutionRegistry = true): Promise<PGlite> {
   const database = new PGlite();
   await database.exec(`
     create role anon nologin;
@@ -2686,6 +2831,9 @@ async function createOperationsDatabase(): Promise<PGlite> {
   await database.exec(reliefStagingE2ECleanupSql);
   await database.exec(reliefStagingE2EPaymentGuardSql);
   await database.exec(governanceOperationsSql);
+  if (includeTreasuryExecutionRegistry) {
+    await database.exec(treasuryExecutionRegistrySql);
+  }
   return database;
 }
 

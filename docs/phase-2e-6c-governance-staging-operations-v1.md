@@ -37,3 +37,5 @@ The existing single-discussion E2E fixture uses `cleanup_governance_discussion_s
 From `project/`: `npm run operations:verify`, then separately authorized `npm run operations:staging:preflight` and `npm run operations:staging:e2e`. From repository root: `git diff --check`.
 
 Record migration version, Staging project ref, run reference, temporary actor UUIDs, cleanup counts, tests, and zero-intent/zero-receipt proof. Never record keys, CAPTCHA tokens, signing material, or private bodies.
+
+Phase 2E-6D execution-registry preparation is a separate, later manual Staging operation. Follow `audited-treasury-execution-registry-and-reconciliation-v1.md`; do not treat a 6C approval as an execution fixture or bypass the 6D legacy-history inventory gate.

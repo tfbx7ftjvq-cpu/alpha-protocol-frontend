@@ -522,3 +522,6 @@ inspection RPC without granting access to that table. Relief approval remains
 an eligibility review outcome only: it does not create a treasury intent,
 payment receipt, Solana transaction, or funds movement. See
 `docs/audited-relief-review-and-public-progress-closure-v1.md`.
+# Phase 2E-6D execution registry note
+
+The audited treasury execution registry migration remains local-only until separately authorized. Before any Staging application, follow `audited-treasury-execution-registry-and-reconciliation-v1.md`, run its read-only legacy inventory, use distinct preparer/authorizer/executor/reconciler actors, and preserve the separation between governance approval, authorization, external receipt reporting, and reconciliation. Service role is limited to the exact owner-bound two-intent cleanup RPC in isolated Node tooling and must never enter browser configuration.

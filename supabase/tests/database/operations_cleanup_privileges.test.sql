@@ -10,7 +10,7 @@ create schema if not exists extensions;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(6);
+select plan(7);
 
 select ok(
   has_table_privilege('service_role', 'public.task_submissions', 'SELECT')
@@ -100,6 +100,15 @@ select ok(
       'SELECT'
     ),
   'Phase 4O payment proof is service-role-only without a treasury table read grant'
+);
+
+select ok(
+  has_function_privilege('service_role', 'public.cleanup_treasury_execution_staging_e2e_v1(text,uuid,uuid[])', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.cleanup_treasury_execution_staging_e2e_v1(text,uuid,uuid[])', 'EXECUTE')
+    and not has_function_privilege('anon', 'public.cleanup_treasury_execution_staging_e2e_v1(text,uuid,uuid[])', 'EXECUTE')
+    and not has_table_privilege('service_role', 'public.treasury_execution_intents', 'DELETE')
+    and not has_table_privilege('service_role', 'public.treasury_execution_receipts', 'DELETE'),
+  'Phase 2E-6D cleanup is service-role-only RPC access without treasury table delete grants'
 );
 
 select * from finish();

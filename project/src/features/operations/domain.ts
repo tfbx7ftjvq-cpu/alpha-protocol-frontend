@@ -7,7 +7,8 @@ export type PublicReliefOutcome = 'reviewing' | 'approved' | 'rejected' | 'paid'
 export type GovernanceDecisionValue = 'approved' | 'rejected' | 'cancelled';
 export type GovernanceProposalKind = 'task_acceptance' | 'risk_finding' | 'relief_recommendation' | 'builders_spend' | 'buyback_policy' | 'staking_policy' | 'protocol_parameter' | 'other';
 export type MyOperationsSubmissionKind = 'task' | 'risk' | 'relief' | 'proposal' | 'discussion';
-export type OperationsStaffRole = 'reviewer' | 'relief_reviewer' | 'operator' | 'moderator' | 'governance_admin';
+export type OperationsStaffRole = 'reviewer' | 'relief_reviewer' | 'operator' | 'moderator' | 'governance_admin' | 'treasury_preparer' | 'treasury_authorizer' | 'executor' | 'treasury_reconciler';
+export type TreasuryExecutionStatus = 'prepared' | 'authorized' | 'reported' | 'reconciled' | 'cancelled' | 'failed';
 export type TaskReviewDecision = 'accepted' | 'rejected';
 export type RiskReviewDecision = 'published' | 'dismissed';
 export type ReliefReviewDecision = 'approved' | 'rejected';
@@ -89,6 +90,28 @@ export interface PublicGovernanceDecision {
   decidedAt: string;
 }
 
+export interface PublicTreasuryExecutionRecord {
+  intentPublicId: string;
+  governanceDecisionId: string;
+  decisionHash: string;
+  manifestSha256: string;
+  intentHash: string;
+  purposeReference: string;
+  assetSymbol: 'USDC';
+  assetDecimals: 6;
+  assetMint: string;
+  destinationWalletDisplay: string;
+  amountBaseUnits: string;
+  network: string;
+  publicStatus: TreasuryExecutionStatus;
+  externalExecutionReference: string | null;
+  preparedAt: string;
+  authorizedAt: string | null;
+  reportedAt: string | null;
+  reconciledAt: string | null;
+  reconciliationReference: string | null;
+}
+
 export interface OperationsOverview {
   tasks: CommunityTask[];
   taskResults: PublicTaskResult[];
@@ -97,6 +120,7 @@ export interface OperationsOverview {
   discussions: PublicDiscussion[];
   governanceProposals: PublicGovernanceProposal[];
   governanceDecisions: PublicGovernanceDecision[];
+  treasuryExecutions: PublicTreasuryExecutionRecord[];
 }
 
 export interface MyOperationsSubmission {
@@ -195,6 +219,52 @@ export interface GovernanceDecisionFinalizeInput {
   finalizationReference: string;
 }
 
+export interface TreasuryExecutionPrepareInput {
+  governanceDecisionId: string;
+  pool: 'relief' | 'buyback' | 'builders' | 'staking';
+  reliefApplicationId: string;
+  network: 'devnet';
+  assetSymbol: 'USDC';
+  assetDecimals: 6;
+  assetMint: string;
+  destinationWallet: string;
+  amountBaseUnits: string;
+  recipientVerificationReference: string;
+  purposeReference: string;
+  privateNote: string;
+  auditReference: string;
+}
+
+export interface TreasuryExecutionAuthorizeInput {
+  executionIntentId: string;
+  authorizationReference: string;
+  privateNote: string;
+  auditReference: string;
+}
+
+export interface TreasuryExecutionCancelInput {
+  executionIntentId: string;
+  cancellationReference: string;
+  privateNote: string;
+  auditReference: string;
+}
+
+export interface TreasuryExecutionReportInput {
+  executionIntentId: string;
+  transactionSignature: string;
+  confirmedAt: string;
+  privateNote: string;
+  auditReference: string;
+}
+
+export interface TreasuryExecutionReconcileInput {
+  executionIntentId: string;
+  outcome: 'reconciled' | 'failed';
+  reconciliationReference: string;
+  privateNote: string;
+  auditReference: string;
+}
+
 export interface ValidatedTaskSubmission {
   taskId: string;
   summary: string;
@@ -277,6 +347,41 @@ export interface OperationsStaffWorkspace {
   proposalSubmissions: StaffGovernanceProposalSubmission[];
   discussions: StaffGovernanceDiscussion[];
   governanceEvents: GovernanceWorkflowEvent[];
+  treasuryExecutionIntents: StaffTreasuryExecutionIntent[];
+  treasuryExecutionEvents: TreasuryExecutionWorkflowEvent[];
+}
+
+export interface StaffTreasuryExecutionIntent {
+  id: string;
+  governanceDecisionId: string;
+  decisionHash: string;
+  manifestSha256: string;
+  intentHash: string;
+  pool: string;
+  network: string;
+  assetSymbol: string;
+  assetMint: string;
+  destinationWallet: string;
+  amountBaseUnits: string;
+  recipientVerificationReference: string;
+  purposeReference: string;
+  status: TreasuryExecutionStatus;
+  preparedBy: string;
+  authorizedBy: string | null;
+  reportedBy: string | null;
+  submittedSignature: string | null;
+  createdAt: string;
+}
+
+export interface TreasuryExecutionWorkflowEvent {
+  eventId: string;
+  executionIntentId: string;
+  action: string;
+  previousStatus: string | null;
+  newStatus: TreasuryExecutionStatus;
+  actorRole: OperationsStaffRole;
+  auditReference: string;
+  createdAt: string;
 }
 
 export interface StaffGovernanceProposalSubmission {
@@ -685,6 +790,97 @@ export function validateGovernanceProposal(
   };
 }
 
+export function validateTreasuryExecutionPrepare(
+  input: TreasuryExecutionPrepareInput,
+): TreasuryExecutionPrepareInput {
+  if (input.network !== 'devnet') {
+    throw new OperationsValidationError('本地/Staging 执行登记只允许 devnet，不允许 Mainnet');
+  }
+  if (input.assetSymbol !== 'USDC' || input.assetDecimals !== 6) {
+    throw new OperationsValidationError('执行登记资产必须是 6 decimals USDC');
+  }
+  if (!/^[1-9]\d{0,29}$/.test(input.amountBaseUnits.trim())) {
+    throw new OperationsValidationError('执行金额必须是正整数 base units，最多 30 位');
+  }
+  const reliefApplicationId = input.reliefApplicationId.trim();
+  if ((input.pool === 'relief') !== Boolean(reliefApplicationId)) {
+    throw new OperationsValidationError('relief pool 必须且只能绑定一个救助申请');
+  }
+  return {
+    governanceDecisionId: validateUuid(input.governanceDecisionId, '治理决定'),
+    pool: input.pool,
+    reliefApplicationId: reliefApplicationId
+      ? validateUuid(reliefApplicationId, '救助申请')
+      : '',
+    network: input.network,
+    assetSymbol: input.assetSymbol,
+    assetDecimals: input.assetDecimals,
+    assetMint: validateSolanaAddress(input.assetMint, '资产 mint', true),
+    destinationWallet: validateSolanaAddress(input.destinationWallet, '收款钱包', true),
+    amountBaseUnits: input.amountBaseUnits.trim(),
+    recipientVerificationReference: validateText(input.recipientVerificationReference, '收款人验证引用', 12, 2_000),
+    purposeReference: validateAuditReference(input.purposeReference, '执行用途引用', 200),
+    privateNote: validateText(input.privateNote, '私有准备说明', 10, 5_000),
+    auditReference: validateAuditReference(input.auditReference, '准备审计引用', 200),
+  };
+}
+
+export function validateTreasuryExecutionAuthorize(
+  input: TreasuryExecutionAuthorizeInput,
+): TreasuryExecutionAuthorizeInput {
+  return {
+    executionIntentId: validateUuid(input.executionIntentId, '执行 intent'),
+    authorizationReference: validateAuditReference(input.authorizationReference, '授权引用', 200),
+    privateNote: validateText(input.privateNote, '私有授权说明', 10, 5_000),
+    auditReference: validateAuditReference(input.auditReference, '授权审计引用', 200),
+  };
+}
+
+export function validateTreasuryExecutionCancel(
+  input: TreasuryExecutionCancelInput,
+): TreasuryExecutionCancelInput {
+  return {
+    executionIntentId: validateUuid(input.executionIntentId, '执行 intent'),
+    cancellationReference: validateAuditReference(input.cancellationReference, '取消引用', 200),
+    privateNote: validateText(input.privateNote, '私有取消说明', 10, 5_000),
+    auditReference: validateAuditReference(input.auditReference, '取消审计引用', 200),
+  };
+}
+
+export function validateTreasuryExecutionReport(
+  input: TreasuryExecutionReportInput,
+): TreasuryExecutionReportInput {
+  const confirmedAt = new Date(input.confirmedAt);
+  if (!Number.isFinite(confirmedAt.getTime()) || confirmedAt.getTime() > Date.now() + 5 * 60_000) {
+    throw new OperationsValidationError('外部确认时间无效或超出允许的未来偏差');
+  }
+  if (!isBase58ByteLength(input.transactionSignature.trim(), 64)) {
+    throw new OperationsValidationError('外部 Solana 交易签名必须是 64-byte Base58');
+  }
+  return {
+    executionIntentId: validateUuid(input.executionIntentId, '执行 intent'),
+    transactionSignature: input.transactionSignature.trim(),
+    confirmedAt: confirmedAt.toISOString(),
+    privateNote: validateText(input.privateNote, '私有执行登记说明', 10, 5_000),
+    auditReference: validateAuditReference(input.auditReference, '执行登记审计引用', 200),
+  };
+}
+
+export function validateTreasuryExecutionReconcile(
+  input: TreasuryExecutionReconcileInput,
+): TreasuryExecutionReconcileInput {
+  if (input.outcome !== 'reconciled' && input.outcome !== 'failed') {
+    throw new OperationsValidationError('对账结果必须是 reconciled 或 failed');
+  }
+  return {
+    executionIntentId: validateUuid(input.executionIntentId, '执行 intent'),
+    outcome: input.outcome,
+    reconciliationReference: validateAuditReference(input.reconciliationReference, '对账引用', 200),
+    privateNote: validateText(input.privateNote, '私有对账说明', 10, 5_000),
+    auditReference: validateAuditReference(input.auditReference, '对账审计引用', 200),
+  };
+}
+
 export function validateText(
   rawValue: string,
   label: string,
@@ -825,10 +1021,14 @@ export function validateSolanaAddress(
 }
 
 export function isSolanaPublicKey(value: string): boolean {
+  return isBase58ByteLength(value, 32) && value.length >= 32 && value.length <= 44;
+}
+
+export function isBase58ByteLength(value: string, expectedBytes: number): boolean {
   const alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
   let decoded = 0n;
 
-  if (value.length < 32 || value.length > 44) {
+  if (!value || expectedBytes <= 0) {
     return false;
   }
 
@@ -852,7 +1052,7 @@ export function isSolanaPublicKey(value: string): boolean {
     leadingZeroBytes += 1;
   }
 
-  return leadingZeroBytes + nonZeroBytes === 32;
+  return leadingZeroBytes + nonZeroBytes === expectedBytes;
 }
 
 function validateUuid(rawValue: string, label: string): string {

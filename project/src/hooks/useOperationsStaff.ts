@@ -8,6 +8,11 @@ import type {
   GovernanceProposalReviewInput,
   GovernanceDiscussionReviewInput,
   GovernanceDecisionFinalizeInput,
+  TreasuryExecutionPrepareInput,
+  TreasuryExecutionAuthorizeInput,
+  TreasuryExecutionCancelInput,
+  TreasuryExecutionReportInput,
+  TreasuryExecutionReconcileInput,
   TaskSubmissionReviewInput,
 } from '../features/operations/domain';
 import {
@@ -19,6 +24,11 @@ import {
   reviewGovernanceProposal,
   reviewGovernanceDiscussion,
   finalizeGovernanceDecision,
+  prepareTreasuryExecutionIntent,
+  authorizeTreasuryExecutionIntent,
+  cancelTreasuryExecutionIntent,
+  reportTreasuryExecutionReceipt,
+  reconcileTreasuryExecution,
 } from '../features/operations/repository';
 
 const EMPTY_WORKSPACE: OperationsStaffWorkspace = {
@@ -31,6 +41,8 @@ const EMPTY_WORKSPACE: OperationsStaffWorkspace = {
   proposalSubmissions: [],
   discussions: [],
   governanceEvents: [],
+  treasuryExecutionIntents: [],
+  treasuryExecutionEvents: [],
 };
 
 export interface OperationsStaffState {
@@ -46,6 +58,11 @@ export interface OperationsStaffState {
   reviewProposal: (input: GovernanceProposalReviewInput) => Promise<void>;
   reviewDiscussion: (input: GovernanceDiscussionReviewInput) => Promise<void>;
   finalizeDecision: (input: GovernanceDecisionFinalizeInput) => Promise<void>;
+  prepareExecution: (input: TreasuryExecutionPrepareInput) => Promise<void>;
+  authorizeExecution: (input: TreasuryExecutionAuthorizeInput) => Promise<void>;
+  cancelExecution: (input: TreasuryExecutionCancelInput) => Promise<void>;
+  reportExecution: (input: TreasuryExecutionReportInput) => Promise<void>;
+  reconcileExecution: (input: TreasuryExecutionReconcileInput) => Promise<void>;
 }
 
 export function useOperationsStaff(
@@ -176,6 +193,46 @@ export function useOperationsStaff(
     finally { setSubmitting(false); }
   }, [refresh, role]);
 
+  const prepareExecution = useCallback(async (input: TreasuryExecutionPrepareInput) => {
+    if (!role) throw new Error('当前钱包会话没有执行准备权限');
+    setSubmitting(true); setError(null);
+    try { await prepareTreasuryExecutionIntent(input); await refresh(); }
+    catch (executionError) { setError(executionError instanceof Error ? executionError.message : '执行 intent 准备失败'); throw executionError; }
+    finally { setSubmitting(false); }
+  }, [refresh, role]);
+
+  const authorizeExecution = useCallback(async (input: TreasuryExecutionAuthorizeInput) => {
+    if (!role) throw new Error('当前钱包会话没有执行授权权限');
+    setSubmitting(true); setError(null);
+    try { await authorizeTreasuryExecutionIntent(input); await refresh(); }
+    catch (executionError) { setError(executionError instanceof Error ? executionError.message : '执行 intent 授权失败'); throw executionError; }
+    finally { setSubmitting(false); }
+  }, [refresh, role]);
+
+  const cancelExecution = useCallback(async (input: TreasuryExecutionCancelInput) => {
+    if (!role) throw new Error('当前钱包会话没有执行取消权限');
+    setSubmitting(true); setError(null);
+    try { await cancelTreasuryExecutionIntent(input); await refresh(); }
+    catch (executionError) { setError(executionError instanceof Error ? executionError.message : '执行 intent 取消失败'); throw executionError; }
+    finally { setSubmitting(false); }
+  }, [refresh, role]);
+
+  const reportExecution = useCallback(async (input: TreasuryExecutionReportInput) => {
+    if (!role) throw new Error('当前钱包会话没有外部执行登记权限');
+    setSubmitting(true); setError(null);
+    try { await reportTreasuryExecutionReceipt(input); await refresh(); }
+    catch (executionError) { setError(executionError instanceof Error ? executionError.message : '外部执行回执登记失败'); throw executionError; }
+    finally { setSubmitting(false); }
+  }, [refresh, role]);
+
+  const reconcileExecution = useCallback(async (input: TreasuryExecutionReconcileInput) => {
+    if (!role) throw new Error('当前钱包会话没有执行对账权限');
+    setSubmitting(true); setError(null);
+    try { await reconcileTreasuryExecution(input); await refresh(); }
+    catch (executionError) { setError(executionError instanceof Error ? executionError.message : '执行对账失败'); throw executionError; }
+    finally { setSubmitting(false); }
+  }, [refresh, role]);
+
   return {
     workspace,
     loading,
@@ -189,5 +246,10 @@ export function useOperationsStaff(
     reviewProposal,
     reviewDiscussion,
     finalizeDecision,
+    prepareExecution,
+    authorizeExecution,
+    cancelExecution,
+    reportExecution,
+    reconcileExecution,
   };
 }

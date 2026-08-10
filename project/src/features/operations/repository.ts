@@ -16,6 +16,12 @@ import {
   type PublicDiscussion,
   type PublicGovernanceProposal,
   type PublicGovernanceDecision,
+  type PublicTreasuryExecutionRecord,
+  type TreasuryExecutionPrepareInput,
+  type TreasuryExecutionAuthorizeInput,
+  type TreasuryExecutionCancelInput,
+  type TreasuryExecutionReportInput,
+  type TreasuryExecutionReconcileInput,
   type PublicReliefOutcome,
   type PublicReliefUpdate,
   type PublicRiskReport,
@@ -37,6 +43,11 @@ import {
   validateRiskReportReview,
   validateTaskSubmission,
   validateTaskSubmissionReview,
+  validateTreasuryExecutionPrepare,
+  validateTreasuryExecutionAuthorize,
+  validateTreasuryExecutionCancel,
+  validateTreasuryExecutionReport,
+  validateTreasuryExecutionReconcile,
 } from './domain';
 import { assertWalletSessionMatch } from './auth';
 import {
@@ -62,6 +73,7 @@ export async function loadOperationsOverview(): Promise<OperationsOverview> {
     discussionResult,
     proposalResult,
     decisionResult,
+    treasuryExecutionResult,
   ] = await Promise.all([
     client
       .from('community_tasks')
@@ -102,6 +114,11 @@ export async function loadOperationsOverview(): Promise<OperationsOverview> {
       .eq('publication_status', 'published')
       .order('decided_at', { ascending: false })
       .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
+    client
+      .from('treasury_execution_public_registry')
+      .select('intent_public_id,governance_decision_id,decision_hash,manifest_sha256,intent_hash,purpose_reference,asset_symbol,asset_decimals,asset_mint,destination_wallet_display,amount_base_units,network,public_status,external_execution_reference,prepared_at,authorized_at,reported_at,reconciled_at,reconciliation_reference')
+      .order('updated_at', { ascending: false })
+      .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
   ]);
 
   assertNoQueryError(taskResult.error, '社区任务');
@@ -111,6 +128,7 @@ export async function loadOperationsOverview(): Promise<OperationsOverview> {
   assertNoQueryError(discussionResult.error, '治理讨论');
   assertNoQueryError(proposalResult.error, '治理提案');
   assertNoQueryError(decisionResult.error, '治理决定');
+  assertNoQueryError(treasuryExecutionResult.error, '公开执行登记');
 
   const proposals = new Map(
     (proposalResult.data ?? []).map((row) => [row.id, row.title]),
@@ -127,6 +145,7 @@ export async function loadOperationsOverview(): Promise<OperationsOverview> {
       row,
       proposals.get(row.proposal_id) ?? '未公开提案标题',
     )),
+    treasuryExecutions: (treasuryExecutionResult.data ?? []).map(mapTreasuryExecution),
   };
 }
 
@@ -151,13 +170,14 @@ export async function submitTaskResult(input: TaskSubmissionInput): Promise<void
 export function resolveOperationsStaffRole(user: User | null): OperationsStaffRole | null {
   const role = user?.app_metadata?.operations_role;
   return role === 'reviewer' || role === 'relief_reviewer' || role === 'operator' || role === 'moderator' || role === 'governance_admin'
+    || role === 'treasury_preparer' || role === 'treasury_authorizer' || role === 'executor' || role === 'treasury_reconciler'
     ? role
     : null;
 }
 
 export async function loadOperationsStaffWorkspace(): Promise<OperationsStaffWorkspace> {
   const { client } = await requireStaffSession();
-  const [submissionResult, taskResult, eventResult, riskResult, evidenceResult, riskEventResult, reliefResult, reliefEventResult, proposalSubmissionResult, discussionResult, governanceEventResult] = await Promise.all([
+  const [submissionResult, taskResult, eventResult, riskResult, evidenceResult, riskEventResult, reliefResult, reliefEventResult, proposalSubmissionResult, discussionResult, governanceEventResult, treasuryIntentResult, treasuryEventResult] = await Promise.all([
     client
       .from('task_submissions')
       .select('id,task_id,submitted_by,summary,deliverable_url,wallet_address,public_result_consent,public_wallet_consent,status,reviewer_notes,created_at')
@@ -217,6 +237,16 @@ export async function loadOperationsStaffWorkspace(): Promise<OperationsStaffWor
       .select('event_id,action,actor_role,event_reference,created_at')
       .order('created_at', { ascending: false })
       .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
+    client
+      .from('treasury_execution_intents')
+      .select('id,governance_decision_id,decision_hash,manifest_sha256,intent_hash,pool,network,asset_symbol,asset_mint,destination_wallet,amount_base_units,recipient_verification_reference,purpose_reference,status,prepared_by,authorized_by,reported_by,submitted_signature,created_at')
+      .order('created_at', { ascending: false })
+      .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
+    client
+      .from('operations_treasury_execution_workflow_events')
+      .select('event_id,execution_intent_id,action,previous_status,new_status,actor_role,audit_reference,created_at')
+      .order('created_at', { ascending: false })
+      .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
   ]);
 
   assertNoQueryError(submissionResult.error, '待审核任务成果');
@@ -230,6 +260,8 @@ export async function loadOperationsStaffWorkspace(): Promise<OperationsStaffWor
   assertNoQueryError(proposalSubmissionResult.error, '待审核治理提案');
   assertNoQueryError(discussionResult.error, '待审核治理讨论');
   assertNoQueryError(governanceEventResult.error, '治理工作流审计记录');
+  assertNoQueryError(treasuryIntentResult.error, '国库执行 intent');
+  assertNoQueryError(treasuryEventResult.error, '国库执行工作流审计记录');
   const taskTitles = new Map((taskResult.data ?? []).map((row) => [row.id, row.title]));
   const evidenceCounts = new Map<string, number>();
   for (const row of evidenceResult.data ?? []) {
@@ -331,6 +363,37 @@ export async function loadOperationsStaffWorkspace(): Promise<OperationsStaffWor
       action: row.action,
       actorRole: row.actor_role,
       eventReference: row.event_reference,
+      createdAt: row.created_at,
+    })),
+    treasuryExecutionIntents: (treasuryIntentResult.data ?? []).map((row) => ({
+      id: row.id,
+      governanceDecisionId: row.governance_decision_id,
+      decisionHash: row.decision_hash,
+      manifestSha256: row.manifest_sha256,
+      intentHash: row.intent_hash,
+      pool: row.pool,
+      network: row.network,
+      assetSymbol: row.asset_symbol,
+      assetMint: row.asset_mint,
+      destinationWallet: row.destination_wallet,
+      amountBaseUnits: String(row.amount_base_units),
+      recipientVerificationReference: row.recipient_verification_reference,
+      purposeReference: row.purpose_reference,
+      status: row.status,
+      preparedBy: row.prepared_by,
+      authorizedBy: row.authorized_by,
+      reportedBy: row.reported_by,
+      submittedSignature: row.submitted_signature,
+      createdAt: row.created_at,
+    })),
+    treasuryExecutionEvents: (treasuryEventResult.data ?? []).map((row) => ({
+      eventId: String(row.event_id),
+      executionIntentId: row.execution_intent_id,
+      action: row.action,
+      previousStatus: row.previous_status,
+      newStatus: row.new_status,
+      actorRole: row.actor_role,
+      auditReference: row.audit_reference,
       createdAt: row.created_at,
     })),
   };
@@ -528,6 +591,77 @@ export async function finalizeGovernanceDecision(input: GovernanceDecisionFinali
     p_finalization_reference: input.finalizationReference.trim(),
   });
   assertNoMutationError(error, '治理决定终局确认');
+}
+
+export async function prepareTreasuryExecutionIntent(input: TreasuryExecutionPrepareInput): Promise<void> {
+  const payload = validateTreasuryExecutionPrepare(input);
+  const { client } = await requireStaffSession();
+  const { error } = await client.rpc('prepare_treasury_execution_intent_v1', {
+    p_governance_decision_id: payload.governanceDecisionId,
+    p_pool: payload.pool,
+    p_relief_application_id: payload.reliefApplicationId || null,
+    p_network: payload.network,
+    p_asset_symbol: payload.assetSymbol,
+    p_asset_decimals: payload.assetDecimals,
+    p_asset_mint: payload.assetMint,
+    p_destination_wallet: payload.destinationWallet,
+    p_amount_base_units: payload.amountBaseUnits,
+    p_recipient_verification_reference: payload.recipientVerificationReference,
+    p_purpose_reference: payload.purposeReference,
+    p_private_note: payload.privateNote,
+    p_audit_reference: payload.auditReference,
+  });
+  assertNoMutationError(error, '执行 intent 准备');
+}
+
+export async function authorizeTreasuryExecutionIntent(input: TreasuryExecutionAuthorizeInput): Promise<void> {
+  const payload = validateTreasuryExecutionAuthorize(input);
+  const { client } = await requireStaffSession();
+  const { error } = await client.rpc('authorize_treasury_execution_intent_v1', {
+    p_execution_intent_id: payload.executionIntentId,
+    p_authorization_reference: payload.authorizationReference,
+    p_private_note: payload.privateNote,
+    p_audit_reference: payload.auditReference,
+  });
+  assertNoMutationError(error, '执行 intent 授权');
+}
+
+export async function cancelTreasuryExecutionIntent(input: TreasuryExecutionCancelInput): Promise<void> {
+  const payload = validateTreasuryExecutionCancel(input);
+  const { client } = await requireStaffSession();
+  const { error } = await client.rpc('cancel_treasury_execution_intent_v1', {
+    p_execution_intent_id: payload.executionIntentId,
+    p_cancellation_reference: payload.cancellationReference,
+    p_private_note: payload.privateNote,
+    p_audit_reference: payload.auditReference,
+  });
+  assertNoMutationError(error, '执行 intent 取消');
+}
+
+export async function reportTreasuryExecutionReceipt(input: TreasuryExecutionReportInput): Promise<void> {
+  const payload = validateTreasuryExecutionReport(input);
+  const { client } = await requireStaffSession();
+  const { error } = await client.rpc('report_treasury_execution_receipt_v1', {
+    p_execution_intent_id: payload.executionIntentId,
+    p_transaction_signature: payload.transactionSignature,
+    p_confirmed_at: payload.confirmedAt,
+    p_private_note: payload.privateNote,
+    p_audit_reference: payload.auditReference,
+  });
+  assertNoMutationError(error, '外部执行回执登记');
+}
+
+export async function reconcileTreasuryExecution(input: TreasuryExecutionReconcileInput): Promise<void> {
+  const payload = validateTreasuryExecutionReconcile(input);
+  const { client } = await requireStaffSession();
+  const { error } = await client.rpc('reconcile_treasury_execution_v1', {
+    p_execution_intent_id: payload.executionIntentId,
+    p_outcome: payload.outcome,
+    p_reconciliation_reference: payload.reconciliationReference,
+    p_private_note: payload.privateNote,
+    p_audit_reference: payload.auditReference,
+  });
+  assertNoMutationError(error, '执行对账');
 }
 
 export async function loadMyOperationsSubmissions(
@@ -868,5 +1002,49 @@ function mapDecision(
     decisionHash: row.decision_hash,
     finalizationReference: row.finalization_reference,
     decidedAt: row.decided_at,
+  };
+}
+
+function mapTreasuryExecution(row: {
+  intent_public_id: string;
+  governance_decision_id: string;
+  decision_hash: string;
+  manifest_sha256: string;
+  intent_hash: string;
+  purpose_reference: string;
+  asset_symbol: 'USDC';
+  asset_decimals: 6;
+  asset_mint: string;
+  destination_wallet_display: string;
+  amount_base_units: string | number;
+  network: string;
+  public_status: PublicTreasuryExecutionRecord['publicStatus'];
+  external_execution_reference: string | null;
+  prepared_at: string;
+  authorized_at: string | null;
+  reported_at: string | null;
+  reconciled_at: string | null;
+  reconciliation_reference: string | null;
+}): PublicTreasuryExecutionRecord {
+  return {
+    intentPublicId: row.intent_public_id,
+    governanceDecisionId: row.governance_decision_id,
+    decisionHash: row.decision_hash,
+    manifestSha256: row.manifest_sha256,
+    intentHash: row.intent_hash,
+    purposeReference: row.purpose_reference,
+    assetSymbol: row.asset_symbol,
+    assetDecimals: row.asset_decimals,
+    assetMint: row.asset_mint,
+    destinationWalletDisplay: row.destination_wallet_display,
+    amountBaseUnits: String(row.amount_base_units),
+    network: row.network,
+    publicStatus: row.public_status,
+    externalExecutionReference: row.external_execution_reference,
+    preparedAt: row.prepared_at,
+    authorizedAt: row.authorized_at,
+    reportedAt: row.reported_at,
+    reconciledAt: row.reconciled_at,
+    reconciliationReference: row.reconciliation_reference,
   };
 }

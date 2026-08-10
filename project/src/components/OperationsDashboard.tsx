@@ -31,6 +31,11 @@ import type {
   GovernanceProposalReviewInput,
   GovernanceDiscussionReviewInput,
   GovernanceDecisionFinalizeInput,
+  TreasuryExecutionPrepareInput,
+  TreasuryExecutionAuthorizeInput,
+  TreasuryExecutionCancelInput,
+  TreasuryExecutionReportInput,
+  TreasuryExecutionReconcileInput,
 } from '../features/operations/domain';
 import {
   submitDiscussion,
@@ -48,7 +53,7 @@ import { useOperationsStaff } from '../hooks/useOperationsStaff';
 import { useOperationsWalletAuth } from '../hooks/useOperationsWalletAuth';
 import { operationsBackendConfig } from '../lib/operationsSupabase';
 
-type OperationsTab = 'tasks' | 'risk' | 'relief' | 'discussion' | 'mine' | 'decisions' | 'staff';
+type OperationsTab = 'tasks' | 'risk' | 'relief' | 'discussion' | 'mine' | 'decisions' | 'execution' | 'staff';
 type NoticeTone = 'success' | 'error';
 
 interface SubmissionNotice {
@@ -67,6 +72,7 @@ const TABS: {
   { key: 'discussion', label: '治理讨论', icon: MessageSquareText },
   { key: 'mine', label: '我的提交', icon: UserRoundCheck },
   { key: 'decisions', label: '公开决定', icon: BookOpenCheck },
+  { key: 'execution', label: '执行准备与对账', icon: Landmark },
 ];
 
 const STAFF_TAB = { key: 'staff' as const, label: '运营审核', icon: ShieldCheck };
@@ -101,8 +107,9 @@ export default function OperationsDashboard() {
     discussion: operations.overview.discussions.length + operations.overview.governanceProposals.length,
     mine: mySubmissions.submissions.length,
     decisions: operations.overview.governanceDecisions.length,
-    staff: staff.workspace.submissions.length + staff.workspace.riskReports.length + staff.workspace.reliefApplications.length + staff.workspace.proposalSubmissions.length + staff.workspace.discussions.length,
-  }), [mySubmissions.submissions.length, operations.overview, staff.workspace.discussions.length, staff.workspace.proposalSubmissions.length, staff.workspace.reliefApplications.length, staff.workspace.riskReports.length, staff.workspace.submissions.length]);
+    execution: operations.overview.treasuryExecutions.length,
+    staff: staff.workspace.submissions.length + staff.workspace.riskReports.length + staff.workspace.reliefApplications.length + staff.workspace.proposalSubmissions.length + staff.workspace.discussions.length + staff.workspace.treasuryExecutionIntents.length,
+  }), [mySubmissions.submissions.length, operations.overview, staff.workspace.discussions.length, staff.workspace.proposalSubmissions.length, staff.workspace.reliefApplications.length, staff.workspace.riskReports.length, staff.workspace.submissions.length, staff.workspace.treasuryExecutionIntents.length]);
   const visibleTabs = walletAuth.operationsRole ? [...TABS, STAFF_TAB] : TABS;
 
   return (
@@ -258,11 +265,18 @@ export default function OperationsDashboard() {
               loaded={operations.status === 'ready'}
             />
           )}
+          {activeTab === 'execution' && (
+            <ExecutionRegistryPanel
+              records={operations.overview.treasuryExecutions}
+              loaded={operations.status === 'ready'}
+            />
+          )}
           {activeTab === 'staff' && walletAuth.operationsRole && (
             <StaffOperationsPanel
               role={walletAuth.operationsRole}
               state={staff}
               proposals={operations.overview.governanceProposals}
+              decisions={operations.overview.governanceDecisions}
               onPublicDataChanged={operations.refresh}
             />
           )}
@@ -1183,15 +1197,55 @@ function DecisionsPanel({
   );
 }
 
+function ExecutionRegistryPanel({
+  records,
+  loaded,
+}: {
+  records: ReturnType<typeof useOperations>['overview']['treasuryExecutions'];
+  loaded: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 lg:grid-cols-3">
+        <div className="rounded border border-yellow-400/20 bg-yellow-400/5 p-4 text-[10px] leading-relaxed text-yellow-100/70"><strong className="block text-yellow-200">授权不等于付款</strong>prepared/authorized 只是人工登记状态，不会移动资金。</div>
+        <div className="rounded border border-red-400/20 bg-red-400/5 p-4 text-[10px] leading-relaxed text-red-100/70"><strong className="block text-red-200">本页面不会签名或发送 Solana 交易</strong>没有私钥、发送器、自动广播或自动付款路径。</div>
+        <div className="rounded border border-cyan-400/20 bg-cyan-400/5 p-4 text-[10px] leading-relaxed text-cyan-100/70"><strong className="block text-cyan-200">回执是外部执行登记</strong>数据库不查询 Solana RPC，也不自行证明链上终局。</div>
+      </div>
+      {!loaded && <LoadingRows />}
+      {loaded && records.length === 0 && <EmptyState text="当前没有公开执行登记。治理批准不会自动创建 intent。" />}
+      <div className="grid gap-3 lg:grid-cols-2">
+        {records.map((record) => (
+          <article key={record.intentPublicId} className="rounded border border-zinc-800 bg-zinc-950 p-4">
+            <div className="flex items-start justify-between gap-3"><div><span className="text-[9px] font-black uppercase tracking-widest text-zinc-600">Intent {shorten(record.intentPublicId)}</span><h4 className="mt-1 text-sm font-black text-zinc-200">{record.purposeReference}</h4></div><StatusBadge label={record.publicStatus} tone={record.publicStatus === 'reconciled' ? 'emerald' : record.publicStatus === 'failed' || record.publicStatus === 'cancelled' ? 'red' : 'yellow'} /></div>
+            <div className="mt-4 grid gap-2 rounded border border-zinc-900 p-3 text-[10px] text-zinc-500">
+              <span>资产：{record.assetSymbol} · {record.amountBaseUnits} base units · {record.network}</span>
+              <span>收款地址：{record.destinationWalletDisplay}</span>
+              <span className="break-all">Mint：{record.assetMint}</span>
+              <span className="break-all">Decision hash：{record.decisionHash}</span>
+              <span className="break-all">Manifest hash：{record.manifestSha256}</span>
+              <span className="break-all">Intent hash：{record.intentHash}</span>
+              <span className="break-all">外部执行引用：{record.externalExecutionReference ?? '尚未登记'}</span>
+              <span>准备：{formatDate(record.preparedAt)} · 对账：{record.reconciledAt ? formatDate(record.reconciledAt) : '未完成'}</span>
+              <span>对账引用：{record.reconciliationReference ?? '无'}</span>
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function StaffOperationsPanel({
   role,
   state,
   proposals,
+  decisions,
   onPublicDataChanged,
 }: {
   role: NonNullable<OperationsWalletAuthState['operationsRole']>;
   state: ReturnType<typeof useOperationsStaff>;
   proposals: ReturnType<typeof useOperations>['overview']['governanceProposals'];
+  decisions: ReturnType<typeof useOperations>['overview']['governanceDecisions'];
   onPublicDataChanged: () => Promise<void>;
 }) {
   const [taskForm, setTaskForm] = useState<CommunityTaskPublicationInput>({
@@ -1372,6 +1426,13 @@ function StaffOperationsPanel({
           {state.error}
         </div>
       )}
+
+      <TreasuryExecutionStaffPanel
+        role={role}
+        state={state}
+        decisions={decisions}
+        onPublicDataChanged={onPublicDataChanged}
+      />
 
       <div className="grid gap-4 xl:grid-cols-3">
         {(role === 'operator' || role === 'governance_admin') && (
@@ -1691,6 +1752,56 @@ function StaffOperationsPanel({
         {state.workspace.governanceEvents.length === 0 ? <p className="mt-3 text-[10px] text-zinc-600">当前角色范围内暂无治理事件。</p> : <div className="mt-3 grid gap-2 lg:grid-cols-2">{state.workspace.governanceEvents.map((event) => <div key={event.eventId} className="rounded border border-zinc-900 p-3 text-[10px] text-zinc-500"><div className="flex justify-between gap-2"><strong className="text-zinc-300">{event.action}</strong><span>{event.actorRole}</span></div><p className="mt-2 break-all">{event.eventReference}</p><p className="mt-1 text-zinc-700">{formatDate(event.createdAt)}</p></div>)}</div>}
       </div>
     </div>
+  );
+}
+
+function TreasuryExecutionStaffPanel({
+  role,
+  state,
+  decisions,
+  onPublicDataChanged,
+}: {
+  role: NonNullable<OperationsWalletAuthState['operationsRole']>;
+  state: ReturnType<typeof useOperationsStaff>;
+  decisions: ReturnType<typeof useOperations>['overview']['governanceDecisions'];
+  onPublicDataChanged: () => Promise<void>;
+}) {
+  const [prepareForm, setPrepareForm] = useState<TreasuryExecutionPrepareInput>({ governanceDecisionId: '', pool: 'builders', reliefApplicationId: '', network: 'devnet', assetSymbol: 'USDC', assetDecimals: 6, assetMint: '', destinationWallet: '', amountBaseUnits: '', recipientVerificationReference: '', purposeReference: '', privateNote: '', auditReference: '' });
+  const [authorizeForm, setAuthorizeForm] = useState<TreasuryExecutionAuthorizeInput>({ executionIntentId: '', authorizationReference: '', privateNote: '', auditReference: '' });
+  const [cancelForm, setCancelForm] = useState<TreasuryExecutionCancelInput>({ executionIntentId: '', cancellationReference: '', privateNote: '', auditReference: '' });
+  const [reportForm, setReportForm] = useState<TreasuryExecutionReportInput>({ executionIntentId: '', transactionSignature: '', confirmedAt: '', privateNote: '', auditReference: '' });
+  const [reconcileForm, setReconcileForm] = useState<TreasuryExecutionReconcileInput>({ executionIntentId: '', outcome: 'reconciled', reconciliationReference: '', privateNote: '', auditReference: '' });
+  const prepareSubmission = useSubmission();
+  const authorizeSubmission = useSubmission();
+  const cancelSubmission = useSubmission();
+  const reportSubmission = useSubmission();
+  const reconcileSubmission = useSubmission();
+  const existingDecisionIds = new Set(state.workspace.treasuryExecutionIntents.map((intent) => intent.governanceDecisionId));
+  const eligibleDecisions = decisions.filter((decision) => decision.decision === 'approved' && decision.executionRequired && decision.executionManifestSha256 && !existingDecisionIds.has(decision.id));
+  const cancellableIntents = state.workspace.treasuryExecutionIntents.filter((intent) => intent.status === 'prepared' || intent.status === 'authorized');
+
+  async function finish(succeeded: boolean) { if (succeeded) await onPublicDataChanged(); }
+  async function handlePrepare(event: FormEvent) { event.preventDefault(); await finish(await prepareSubmission.run(() => state.prepareExecution(prepareForm), 'Execution intent 已显式准备；尚未授权、付款或发送交易。', () => setPrepareForm({ governanceDecisionId: '', pool: 'builders', reliefApplicationId: '', network: 'devnet', assetSymbol: 'USDC', assetDecimals: 6, assetMint: '', destinationWallet: '', amountBaseUnits: '', recipientVerificationReference: '', purposeReference: '', privateNote: '', auditReference: '' }))); }
+  async function handleAuthorize(event: FormEvent) { event.preventDefault(); await finish(await authorizeSubmission.run(() => state.authorizeExecution(authorizeForm), 'Intent 已登记授权；授权不等于付款，未创建 receipt。', () => setAuthorizeForm({ executionIntentId: '', authorizationReference: '', privateNote: '', auditReference: '' }))); }
+  async function handleCancel(event: FormEvent) { event.preventDefault(); await finish(await cancelSubmission.run(() => state.cancelExecution(cancelForm), 'Intent 已不可逆取消；没有发送交易或创建 receipt。', () => setCancelForm({ executionIntentId: '', cancellationReference: '', privateNote: '', auditReference: '' }))); }
+  async function handleReport(event: FormEvent) { event.preventDefault(); await finish(await reportSubmission.run(() => state.reportExecution(reportForm), '外部执行引用已登记；数据库未自行验证 Solana 终局。', () => setReportForm({ executionIntentId: '', transactionSignature: '', confirmedAt: '', privateNote: '', auditReference: '' }))); }
+  async function handleReconcile(event: FormEvent) { event.preventDefault(); await finish(await reconcileSubmission.run(() => state.reconcileExecution(reconcileForm), reconcileForm.outcome === 'reconciled' ? '人工对账闭环已登记；这不是数据库链上终局验证。' : '执行已登记为 failed，receipt 保持不可变。', () => setReconcileForm({ executionIntentId: '', outcome: 'reconciled', reconciliationReference: '', privateNote: '', auditReference: '' }))); }
+
+  const hasExecutionRole = ['treasury_preparer', 'treasury_authorizer', 'executor', 'treasury_reconciler'].includes(role);
+  if (!hasExecutionRole) return null;
+
+  return (
+    <section className="space-y-4 rounded border border-orange-400/20 bg-orange-400/[0.025] p-4">
+      <div><h4 className="text-sm font-black text-orange-100">执行准备与对账工作区</h4><p className="mt-1 text-[10px] leading-relaxed text-zinc-500">授权不等于付款。本页面不会签名或发送 Solana 交易；回执仅登记外部提供的执行引用，数据库不验证链上终局。</p></div>
+      <div className="grid gap-4 xl:grid-cols-2">
+        {role === 'treasury_preparer' && <form onSubmit={handlePrepare} className="space-y-3 rounded border border-zinc-800 bg-zinc-950 p-4"><h5 className="text-xs font-black text-zinc-200">显式准备 intent</h5><FormField label="已批准且需要执行的决定"><select className={fieldClassName} value={prepareForm.governanceDecisionId} onChange={(event) => setPrepareForm({ ...prepareForm, governanceDecisionId: event.target.value })} required><option value="">选择决定</option>{eligibleDecisions.map((decision) => <option key={decision.id} value={decision.id}>{decision.proposalTitle}</option>)}</select></FormField><FormField label="Pool"><select className={fieldClassName} value={prepareForm.pool} onChange={(event) => setPrepareForm({ ...prepareForm, pool: event.target.value as TreasuryExecutionPrepareInput['pool'], reliefApplicationId: '' })}><option value="builders">builders</option><option value="relief">relief</option><option value="buyback">buyback</option><option value="staking">staking</option></select></FormField>{prepareForm.pool === 'relief' && <FormField label="救助申请 UUID"><input className={fieldClassName} value={prepareForm.reliefApplicationId} onChange={(event) => setPrepareForm({ ...prepareForm, reliefApplicationId: event.target.value })} required /></FormField>}<FormField label="USDC mint"><input className={fieldClassName} value={prepareForm.assetMint} onChange={(event) => setPrepareForm({ ...prepareForm, assetMint: event.target.value })} required /></FormField><FormField label="收款钱包"><input className={fieldClassName} value={prepareForm.destinationWallet} onChange={(event) => setPrepareForm({ ...prepareForm, destinationWallet: event.target.value })} required /></FormField><FormField label="金额（base units 正整数）"><input inputMode="numeric" className={fieldClassName} value={prepareForm.amountBaseUnits} onChange={(event) => setPrepareForm({ ...prepareForm, amountBaseUnits: event.target.value })} required /></FormField><FormField label="收款人验证引用"><input className={fieldClassName} value={prepareForm.recipientVerificationReference} onChange={(event) => setPrepareForm({ ...prepareForm, recipientVerificationReference: event.target.value })} required /></FormField><FormField label="用途引用（必须匹配 manifest）"><input className={fieldClassName} value={prepareForm.purposeReference} onChange={(event) => setPrepareForm({ ...prepareForm, purposeReference: event.target.value })} required /></FormField><FormField label="私有准备说明"><textarea className={`${fieldClassName} min-h-20`} value={prepareForm.privateNote} onChange={(event) => setPrepareForm({ ...prepareForm, privateNote: event.target.value })} required /></FormField><FormField label="唯一审计引用"><input className={fieldClassName} value={prepareForm.auditReference} onChange={(event) => setPrepareForm({ ...prepareForm, auditReference: event.target.value })} required /></FormField><button disabled={state.submitting || !prepareForm.governanceDecisionId} className="w-full rounded border border-orange-400/30 px-3 py-2 text-xs font-black text-orange-200 disabled:opacity-40">准备登记（不授权、不付款）</button>{prepareSubmission.notice && <InlineNotice notice={prepareSubmission.notice} />}</form>}
+        {role === 'treasury_authorizer' && <form onSubmit={handleAuthorize} className="space-y-3 rounded border border-zinc-800 bg-zinc-950 p-4"><h5 className="text-xs font-black text-zinc-200">独立授权 intent</h5><FormField label="Prepared intent"><select className={fieldClassName} value={authorizeForm.executionIntentId} onChange={(event) => setAuthorizeForm({ ...authorizeForm, executionIntentId: event.target.value })} required><option value="">选择 intent</option>{state.workspace.treasuryExecutionIntents.filter((intent) => intent.status === 'prepared').map((intent) => <option key={intent.id} value={intent.id}>{intent.purposeReference}</option>)}</select></FormField><FormField label="授权引用"><input className={fieldClassName} value={authorizeForm.authorizationReference} onChange={(event) => setAuthorizeForm({ ...authorizeForm, authorizationReference: event.target.value })} required /></FormField><FormField label="私有授权说明"><textarea className={`${fieldClassName} min-h-20`} value={authorizeForm.privateNote} onChange={(event) => setAuthorizeForm({ ...authorizeForm, privateNote: event.target.value })} required /></FormField><FormField label="唯一审计引用"><input className={fieldClassName} value={authorizeForm.auditReference} onChange={(event) => setAuthorizeForm({ ...authorizeForm, auditReference: event.target.value })} required /></FormField><button disabled={state.submitting || !authorizeForm.executionIntentId} className="w-full rounded border border-yellow-400/30 px-3 py-2 text-xs font-black text-yellow-200 disabled:opacity-40">登记授权（不执行付款）</button>{authorizeSubmission.notice && <InlineNotice notice={authorizeSubmission.notice} />}</form>}
+        {(role === 'treasury_preparer' || role === 'treasury_authorizer') && <form onSubmit={handleCancel} className="space-y-3 rounded border border-zinc-800 bg-zinc-950 p-4"><h5 className="text-xs font-black text-zinc-200">不可逆取消 intent</h5><FormField label="Prepared/authorized intent"><select className={fieldClassName} value={cancelForm.executionIntentId} onChange={(event) => setCancelForm({ ...cancelForm, executionIntentId: event.target.value })} required><option value="">选择 intent</option>{cancellableIntents.map((intent) => <option key={intent.id} value={intent.id}>{intent.purposeReference} · {intent.status}</option>)}</select></FormField><FormField label="取消引用"><input className={fieldClassName} value={cancelForm.cancellationReference} onChange={(event) => setCancelForm({ ...cancelForm, cancellationReference: event.target.value })} required /></FormField><FormField label="私有取消说明"><textarea className={`${fieldClassName} min-h-20`} value={cancelForm.privateNote} onChange={(event) => setCancelForm({ ...cancelForm, privateNote: event.target.value })} required /></FormField><FormField label="唯一审计引用"><input className={fieldClassName} value={cancelForm.auditReference} onChange={(event) => setCancelForm({ ...cancelForm, auditReference: event.target.value })} required /></FormField><button disabled={state.submitting || !cancelForm.executionIntentId} className="w-full rounded border border-red-400/30 px-3 py-2 text-xs font-black text-red-200 disabled:opacity-40">取消登记（不可恢复）</button>{cancelSubmission.notice && <InlineNotice notice={cancelSubmission.notice} />}</form>}
+        {role === 'executor' && <form onSubmit={handleReport} className="space-y-3 rounded border border-zinc-800 bg-zinc-950 p-4"><h5 className="text-xs font-black text-zinc-200">登记外部执行回执</h5><FormField label="Authorized intent"><select className={fieldClassName} value={reportForm.executionIntentId} onChange={(event) => setReportForm({ ...reportForm, executionIntentId: event.target.value })} required><option value="">选择 intent</option>{state.workspace.treasuryExecutionIntents.filter((intent) => intent.status === 'authorized').map((intent) => <option key={intent.id} value={intent.id}>{intent.purposeReference}</option>)}</select></FormField><FormField label="外部 Solana 签名"><input className={`${fieldClassName} font-mono`} value={reportForm.transactionSignature} onChange={(event) => setReportForm({ ...reportForm, transactionSignature: event.target.value })} required /></FormField><FormField label="外部确认时间"><input type="datetime-local" className={fieldClassName} value={reportForm.confirmedAt} onChange={(event) => setReportForm({ ...reportForm, confirmedAt: event.target.value })} required /></FormField><FormField label="私有登记说明"><textarea className={`${fieldClassName} min-h-20`} value={reportForm.privateNote} onChange={(event) => setReportForm({ ...reportForm, privateNote: event.target.value })} required /></FormField><FormField label="唯一审计引用"><input className={fieldClassName} value={reportForm.auditReference} onChange={(event) => setReportForm({ ...reportForm, auditReference: event.target.value })} required /></FormField><button disabled={state.submitting || !reportForm.executionIntentId} className="w-full rounded border border-cyan-400/30 px-3 py-2 text-xs font-black text-cyan-200 disabled:opacity-40">登记外部回执（不发送交易）</button>{reportSubmission.notice && <InlineNotice notice={reportSubmission.notice} />}</form>}
+        {role === 'treasury_reconciler' && <form onSubmit={handleReconcile} className="space-y-3 rounded border border-zinc-800 bg-zinc-950 p-4"><h5 className="text-xs font-black text-zinc-200">独立人工对账</h5><FormField label="Reported intent"><select className={fieldClassName} value={reconcileForm.executionIntentId} onChange={(event) => setReconcileForm({ ...reconcileForm, executionIntentId: event.target.value })} required><option value="">选择 intent</option>{state.workspace.treasuryExecutionIntents.filter((intent) => intent.status === 'reported').map((intent) => <option key={intent.id} value={intent.id}>{intent.purposeReference}</option>)}</select></FormField><FormField label="结果"><select className={fieldClassName} value={reconcileForm.outcome} onChange={(event) => setReconcileForm({ ...reconcileForm, outcome: event.target.value as TreasuryExecutionReconcileInput['outcome'] })}><option value="reconciled">reconciled</option><option value="failed">failed</option></select></FormField><FormField label="对账引用"><input className={fieldClassName} value={reconcileForm.reconciliationReference} onChange={(event) => setReconcileForm({ ...reconcileForm, reconciliationReference: event.target.value })} required /></FormField><FormField label="私有对账说明"><textarea className={`${fieldClassName} min-h-20`} value={reconcileForm.privateNote} onChange={(event) => setReconcileForm({ ...reconcileForm, privateNote: event.target.value })} required /></FormField><FormField label="唯一审计引用"><input className={fieldClassName} value={reconcileForm.auditReference} onChange={(event) => setReconcileForm({ ...reconcileForm, auditReference: event.target.value })} required /></FormField><button disabled={state.submitting || !reconcileForm.executionIntentId} className="w-full rounded border border-emerald-400/30 px-3 py-2 text-xs font-black text-emerald-200 disabled:opacity-40">登记人工对账（非链上验证）</button>{reconcileSubmission.notice && <InlineNotice notice={reconcileSubmission.notice} />}</form>}
+      </div>
+      <div className="rounded border border-zinc-800 bg-zinc-950 p-3"><h5 className="text-xs font-black text-zinc-300">Append-only execution events</h5><div className="mt-2 grid gap-2 lg:grid-cols-2">{state.workspace.treasuryExecutionEvents.map((event) => <div key={event.eventId} className="rounded border border-zinc-900 p-2 text-[10px] text-zinc-500"><strong className="text-zinc-300">{event.action}</strong> · {event.previousStatus ?? '∅'} → {event.newStatus}<p className="mt-1 break-all">{event.auditReference}</p></div>)}</div></div>
+    </section>
   );
 }
 

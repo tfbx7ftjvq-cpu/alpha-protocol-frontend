@@ -13,6 +13,7 @@ const EMPTY_OVERVIEW: OperationsOverview = {
   discussions: [],
   governanceProposals: [],
   governanceDecisions: [],
+  treasuryExecutions: [],
 };
 
 export interface OperationsState {

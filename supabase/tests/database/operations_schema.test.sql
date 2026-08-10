@@ -851,6 +851,24 @@ select ok(
   'Phase 2E-6C cleanup is exact service-role-only RPC access without table delete grants'
 );
 
+select ok(
+  has_function_privilege('authenticated', 'public.prepare_treasury_execution_intent_v1(uuid,text,uuid,text,text,smallint,text,text,numeric,text,text,text,text)', 'EXECUTE')
+    and has_function_privilege('authenticated', 'public.authorize_treasury_execution_intent_v1(uuid,text,text,text)', 'EXECUTE')
+    and has_function_privilege('authenticated', 'public.report_treasury_execution_receipt_v1(uuid,text,timestamptz,text,text)', 'EXECUTE')
+    and has_function_privilege('authenticated', 'public.reconcile_treasury_execution_v1(uuid,text,text,text,text)', 'EXECUTE')
+    and not has_table_privilege('authenticated', 'public.treasury_execution_intents', 'INSERT,UPDATE,DELETE')
+    and not has_table_privilege('authenticated', 'public.treasury_execution_receipts', 'INSERT,UPDATE,DELETE'),
+  'Phase 2E-6D execution workflow is explicit authenticated RPC-only mutation'
+);
+
+select ok(
+  has_table_privilege('anon', 'public.treasury_execution_public_registry', 'SELECT')
+    and not has_table_privilege('anon', 'public.treasury_execution_intents', 'SELECT')
+    and not has_table_privilege('anon', 'public.treasury_execution_private_notes', 'SELECT')
+    and not has_table_privilege('anon', 'public.operations_treasury_execution_workflow_events', 'SELECT'),
+  'Phase 2E-6D exposes only the sanitized public execution registry to anon'
+);
+
 select * from finish();
 
 rollback;
