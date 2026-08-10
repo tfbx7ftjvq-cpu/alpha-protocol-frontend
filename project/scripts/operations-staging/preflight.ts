@@ -14,7 +14,7 @@ const PUBLIC_READ_PROBES = [
   ['governance_proposals', 'id'],
   ['governance_discussion_publications', 'id'],
   ['governance_decisions', 'id'],
-  ['treasury_execution_receipts', 'id'],
+  ['treasury_execution_public_registry', 'intent_public_id'],
 ] as const;
 
 const PRIVATE_DENIAL_PROBES = [
@@ -24,6 +24,7 @@ const PRIVATE_DENIAL_PROBES = [
   ['relief_applications', 'id'],
   ['governance_discussions', 'id'],
   ['treasury_execution_intents', 'id'],
+  ['treasury_execution_receipts', 'id'],
 ] as const;
 
 export interface OperationsStagingPreflightResult {

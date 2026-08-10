@@ -12,6 +12,7 @@ import {
   resolveOperationsStagingConfig,
   sanitizeStagingError,
 } from '../scripts/operations-staging/common.ts';
+import { runOperationsStagingPreflight } from '../scripts/operations-staging/preflight.ts';
 
 const PROJECT_REF = 'abcdefghijklmnopqrst';
 const PUBLIC_KEY = 'sb_publishable_staging_public_key_123456';
@@ -274,5 +275,58 @@ test('gate changes reject missing, short, oversized, and control-character audit
       }, 'gate-activate'),
       /GATE_CHANGE_REFERENCE/,
     );
+  }
+});
+
+test('staging preflight reads the public treasury registry and denies anon receipt reads', async () => {
+  const config = resolveOperationsStagingConfig(validEnvironment(), 'preflight');
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  const privateTables = new Set([
+    'task_submissions',
+    'risk_reports',
+    'risk_evidence',
+    'relief_applications',
+    'governance_discussions',
+    'treasury_execution_intents',
+    'treasury_execution_receipts',
+  ]);
+
+  globalThis.fetch = async (input) => {
+    const url = typeof input === 'string'
+      ? input
+      : input instanceof URL
+      ? input.href
+      : input.url;
+    calls.push(url);
+
+    if (url.endsWith('/auth/v1/health')) {
+      return new Response(null, { status: 200 });
+    }
+
+    const parsed = new URL(url);
+    const table = parsed.pathname.split('/').at(-1);
+    if (table && privateTables.has(table)) {
+      return new Response('{"message":"permission denied"}', { status: 403 });
+    }
+
+    return new Response('[]', { status: 200 });
+  };
+
+  try {
+    const result = await runOperationsStagingPreflight(config);
+    assert.equal(result.publicReadTables, 7);
+    assert.equal(result.privateAnonTablesDenied, 7);
+    assert.ok(
+      calls.some((url) =>
+        url.includes('/rest/v1/treasury_execution_public_registry')
+        && url.includes('select=intent_public_id'),
+      ),
+    );
+    assert.ok(
+      calls.some((url) => url.includes('/rest/v1/treasury_execution_receipts')),
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });

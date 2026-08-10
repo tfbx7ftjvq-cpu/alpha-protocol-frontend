@@ -67,6 +67,10 @@ const treasuryExecutionRegistryMigrationUrl = new URL(
   '../../supabase/migrations/202608080001_audited_treasury_execution_registry_and_reconciliation.sql',
   import.meta.url,
 );
+const treasuryExecutionBase58LintCleanupMigrationUrl = new URL(
+  '../../supabase/migrations/202608080002_treasury_execution_base58_lint_cleanup.sql',
+  import.meta.url,
+);
 const foundationSql = readFileSync(foundationMigrationUrl, 'utf8');
 const hardeningSql = readFileSync(hardeningMigrationUrl, 'utf8');
 const cleanupPrivilegesSql = readFileSync(cleanupPrivilegesMigrationUrl, 'utf8');
@@ -98,6 +102,10 @@ const reliefStagingE2EPaymentGuardSql = readFileSync(
 );
 const governanceOperationsSql = readFileSync(governanceOperationsMigrationUrl, 'utf8');
 const treasuryExecutionRegistrySql = readFileSync(treasuryExecutionRegistryMigrationUrl, 'utf8');
+const treasuryExecutionBase58LintCleanupSql = readFileSync(
+  treasuryExecutionBase58LintCleanupMigrationUrl,
+  'utf8',
+);
 const sql = [
   foundationSql,
   hardeningSql,
@@ -115,6 +123,7 @@ const sql = [
   reliefStagingE2EPaymentGuardSql,
   governanceOperationsSql,
   treasuryExecutionRegistrySql,
+  treasuryExecutionBase58LintCleanupSql,
 ].join('\n');
 
 const expectedTables = [
@@ -2632,6 +2641,29 @@ test('runtime governance workflow enforces independent roles, deterministic bind
   }
 });
 
+test('treasury execution receipts remain private while the public registry stays anonymously readable', () => {
+  assert.match(
+    treasuryExecutionRegistrySql,
+    /drop policy treasury_execution_receipts_public_read on public\.treasury_execution_receipts;/,
+  );
+  assert.match(
+    treasuryExecutionRegistrySql,
+    /revoke all on table public\.treasury_execution_receipts from public, anon, authenticated, service_role;/,
+  );
+  assert.match(
+    treasuryExecutionRegistrySql,
+    /grant select on table public\.treasury_execution_receipts to authenticated;/,
+  );
+  assert.doesNotMatch(
+    treasuryExecutionRegistrySql,
+    /grant select on table public\.treasury_execution_receipts to anon(?:, authenticated)?;/i,
+  );
+  assert.match(
+    treasuryExecutionRegistrySql,
+    /grant select on table public\.treasury_execution_public_registry to anon, authenticated;/,
+  );
+});
+
 test('runtime Phase 2E-6C cleanup is exact, owner-bound, and service-role-only', async () => {
   const database = await createOperationsDatabase();
   const ownerId = '62000000-0000-4000-8000-000000000001';
@@ -2725,6 +2757,25 @@ test('Phase 2E-6D refuses unsafe legacy execution history instead of fabricating
   } finally {
     await database.close();
   }
+});
+
+test('treasury execution base58 lint cleanup preserves behavior without a shadowed loop declaration', () => {
+  for (const requiredFragment of [
+    /create or replace function public\.is_base58_bytes_v1\(value text, expected_bytes integer\)/,
+    /immutable/,
+    /strict/,
+    /set search_path = public, pg_temp/,
+    /for index_value in 1\.\.char_length\(value\) loop/,
+    /return leading_zero_bytes \+ encoded_bytes = expected_bytes;/,
+    /revoke all on function public\.is_base58_bytes_v1\(text, integer\) from public;/,
+  ]) {
+    assert.match(treasuryExecutionBase58LintCleanupSql, requiredFragment);
+  }
+
+  assert.doesNotMatch(
+    treasuryExecutionBase58LintCleanupSql,
+    /\bindex_value integer;/,
+  );
 });
 
 test('Phase 2E-6D cleanup is service-role-only and requires exactly two intent IDs', async () => {
@@ -2833,6 +2884,7 @@ async function createOperationsDatabase(includeTreasuryExecutionRegistry = true)
   await database.exec(governanceOperationsSql);
   if (includeTreasuryExecutionRegistry) {
     await database.exec(treasuryExecutionRegistrySql);
+    await database.exec(treasuryExecutionBase58LintCleanupSql);
   }
   return database;
 }
