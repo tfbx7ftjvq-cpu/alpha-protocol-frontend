@@ -25,6 +25,8 @@ const SERVICE_KEY = [
 ].join('_');
 const WEB3_URL = 'https://staging.alpha.example/operations';
 const CAPTCHA_TOKEN = 'turnstile-response-token-for-staging-e2e';
+const LEGACY_ANON_JWT = legacyJwt({ role: 'anon' });
+const LEGACY_SERVICE_ROLE_JWT = legacyJwt({ role: 'service_role' });
 
 function validEnvironment(): NodeJS.ProcessEnv {
   return {
@@ -94,6 +96,78 @@ test('public and service-role keys stay in separate configuration slots', () => 
     }, 'e2e'),
     /service-role key/,
   );
+});
+
+test('staging key classification accepts only correctly slotted publishable, secret, and legacy JWT roles', () => {
+  assert.equal(
+    resolveOperationsStagingConfig({
+      ...validEnvironment(),
+      OPERATIONS_STAGING_PUBLIC_KEY: LEGACY_ANON_JWT,
+    }, 'preflight').publicKey,
+    LEGACY_ANON_JWT,
+  );
+
+  assert.equal(
+    resolveOperationsStagingConfig({
+      ...validEnvironment(),
+      OPERATIONS_STAGING_SERVICE_ROLE_KEY: LEGACY_SERVICE_ROLE_JWT,
+    }, 'gate-inspect').serviceRoleKey,
+    LEGACY_SERVICE_ROLE_JWT,
+  );
+
+  assert.equal(
+    resolveOperationsStagingConfig({
+      ...validEnvironment(),
+      OPERATIONS_STAGING_PUBLIC_KEY: PUBLIC_KEY,
+      OPERATIONS_STAGING_SERVICE_ROLE_KEY: SERVICE_KEY,
+    }, 'gate-inspect').serviceRoleKey,
+    SERVICE_KEY,
+  );
+
+  assert.throws(
+    () => resolveOperationsStagingConfig({
+      ...validEnvironment(),
+      OPERATIONS_STAGING_PUBLIC_KEY: LEGACY_SERVICE_ROLE_JWT,
+    }, 'preflight'),
+    /publishable\/anon key/,
+  );
+  assert.throws(
+    () => resolveOperationsStagingConfig({
+      ...validEnvironment(),
+      OPERATIONS_STAGING_SERVICE_ROLE_KEY: LEGACY_ANON_JWT,
+    }, 'gate-inspect'),
+    /service-role key/,
+  );
+
+  for (const invalidPublicKey of [
+    legacyJwt({ role: 'authenticated' }),
+    legacyJwt({ sub: 'missing-role' }),
+    'not-a-jwt',
+    'abc.def.ghi',
+  ]) {
+    assert.throws(
+      () => resolveOperationsStagingConfig({
+        ...validEnvironment(),
+        OPERATIONS_STAGING_PUBLIC_KEY: invalidPublicKey,
+      }, 'preflight'),
+      /publishable\/anon key/,
+    );
+  }
+
+  for (const invalidServiceKey of [
+    legacyJwt({ role: 'authenticated' }),
+    legacyJwt({ sub: 'missing-role' }),
+    'not-a-jwt',
+    'abc.def.ghi',
+  ]) {
+    assert.throws(
+      () => resolveOperationsStagingConfig({
+        ...validEnvironment(),
+        OPERATIONS_STAGING_SERVICE_ROLE_KEY: invalidServiceKey,
+      }, 'gate-inspect'),
+      /service-role key/,
+    );
+  }
 });
 
 test('mutating E2E requires an exact confirmation and rejects VITE secret exposure', () => {
@@ -396,3 +470,11 @@ test('staging preflight reads the public treasury registry and denies anon recei
     globalThis.fetch = originalFetch;
   }
 });
+
+function legacyJwt(payload: object): string {
+  return [
+    Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url'),
+    Buffer.from(JSON.stringify(payload)).toString('base64url'),
+    'signature_value',
+  ].join('.');
+}

@@ -21,6 +21,7 @@ const governanceOperationsSql = readMigration('202608070001_governance_operation
 const treasuryRegistrySql = readMigration('202608080001_audited_treasury_execution_registry_and_reconciliation.sql');
 const treasuryBase58LintCleanupSql = readMigration('202608080002_treasury_execution_base58_lint_cleanup.sql');
 const auditedAccessControlSql = readMigration('202608110001_audited_operations_access_control_and_role_lifecycle.sql');
+const operationsAccessCompatibilitySql = readMigration('202608110002_operations_access_control_compatibility_fix.sql');
 
 test('migration fails closed when legacy operations_role claims exist', async () => {
   const database = await createOperationsDatabase(false);
@@ -299,6 +300,160 @@ test('audited access migration contains no HTTP, signer, or Solana transaction s
   assert.match(auditedAccessControlSql, /create or replace function public\.grant_operations_role_v1\(/i);
 });
 
+test('compatibility migration removes stale governance and treasury execution references', () => {
+  assert.match(
+    operationsAccessCompatibilitySql,
+    /create or replace function public\.finalize_governance_decision_v1\(/i,
+  );
+  assert.match(
+    operationsAccessCompatibilitySql,
+    /create or replace function public\.prepare_treasury_execution_intent_v1\(/i,
+  );
+  assert.doesNotMatch(operationsAccessCompatibilitySql, /\bdecided_by\b/i);
+  assert.doesNotMatch(
+    operationsAccessCompatibilitySql,
+    /\bmask_treasury_destination_wallet_v1\b/i,
+  );
+  assert.match(
+    operationsAccessCompatibilitySql,
+    /left\(p_destination_wallet,\s*4\)\s*\|\|\s*'…'\s*\|\|\s*right\(p_destination_wallet,\s*4\)/i,
+  );
+  assert.doesNotMatch(
+    operationsAccessCompatibilitySql,
+    /http_post|http_get|fetch\(|axios\.|sendgrid|resend|net\.http/i,
+  );
+  assert.doesNotMatch(
+    operationsAccessCompatibilitySql,
+    /signTransaction|sendTransaction|sendRawTransaction|solana rpc|connection\./i,
+  );
+});
+
+test('corrected governance finalization and treasury preparation RPCs run with audited database roles', async () => {
+  const database = await createOperationsDatabase();
+  const ownerId = '70000000-0000-4000-8000-000000000007';
+  const operatorId = '70000000-0000-4000-8000-000000000008';
+  const adminId = '70000000-0000-4000-8000-000000000009';
+  const preparerId = '70000000-0000-4000-8000-000000000010';
+  const wallet = '11111111111111111111111111111111';
+  const manifestHash = 'c'.repeat(64);
+  const manifest = JSON.stringify({
+    pool: 'builders',
+    network: 'devnet',
+    asset_symbol: 'USDC',
+    asset_decimals: '6',
+    asset_mint: wallet,
+    destination_wallet: wallet,
+    amount_base_units: '1000000',
+    recipient_verification_reference: 'runtime recipient verified',
+    purpose_reference: 'Runtime treasury execution',
+    relief_application_id: '',
+  });
+
+  try {
+    await database.exec(`
+      insert into auth.users (id) values
+        ('${ownerId}'), ('${operatorId}'), ('${adminId}'), ('${preparerId}');
+      insert into auth.identities (id, user_id, provider, provider_id, identity_data)
+      values ('compat-owner-wallet', '${ownerId}', 'web3',
+        'web3:solana:${wallet}', '{"sub":"web3:solana:${wallet}"}');
+      update public.operations_intake_control set mode = 'wallet_staging',
+        activation_reference = 'phase-2e-6e compatibility runtime';
+    `);
+    await grantOperationsRole(database, operatorId, 'operator', 'phase-2e-6e-compat-operator');
+    await grantOperationsRole(database, adminId, 'governance_admin', 'phase-2e-6e-compat-admin');
+    await grantOperationsRole(database, preparerId, 'treasury_preparer', 'phase-2e-6e-compat-preparer');
+
+    await assumeAuthenticated(database, ownerId);
+    const proposal = await database.query<{ proposal_submission_id: string }>(`
+      select proposal_submission_id from public.submit_governance_proposal_v1(
+        'Compatibility proposal',
+        'Private compatibility proposal source material stays private.',
+        'builders_spend', true, '${manifest}'::jsonb,
+        '${manifestHash}', true, 'phase-2e-6e-compat-proposal'
+      );
+    `);
+    const proposalSubmissionId = proposal.rows[0]!.proposal_submission_id;
+
+    await assumeAuthenticated(database, operatorId);
+    const published = await database.query<{ public_proposal_id: string }>(`
+      select public_proposal_id from public.publish_governance_proposal_v1(
+        '${proposalSubmissionId}', 'published', 'Independent operator compatibility review.',
+        'Sanitized compatibility proposal',
+        'A public summary that excludes private execution source material.',
+        'compat-public-source', 'https://example.com/compat-manifest.json',
+        '${manifestHash}', 'phase-2e-6e-compat-publish'
+      );
+    `);
+    const publicProposalId = published.rows[0]!.public_proposal_id;
+
+    await assumeAuthenticated(database, adminId);
+    const finalized = await database.query<{
+      governance_decision_id: string;
+      execution_intent_created: boolean;
+      execution_receipt_created: boolean;
+    }>(`
+      select governance_decision_id, execution_intent_created, execution_receipt_created
+      from public.finalize_governance_decision_v1(
+        '${publicProposalId}', 'approved',
+        'Independent compatibility finalization with no public actor identifier.',
+        '${manifestHash}', 'phase-2e-6e-compat-finalized'
+      );
+    `);
+    const decisionId = finalized.rows[0]!.governance_decision_id;
+    assert.equal(finalized.rows[0]!.execution_intent_created, false);
+    assert.equal(finalized.rows[0]!.execution_receipt_created, false);
+
+    const decisionColumns = await database.query<{ column_name: string }>(`
+      select column_name
+      from information_schema.columns
+      where table_schema = 'public' and table_name = 'governance_decisions'
+        and column_name in ('decided_by', 'actor_id', 'auth_user_id', 'user_id');
+    `);
+    assert.deepEqual(decisionColumns.rows, []);
+
+    const decisionJson = await database.query<{ body: string }>(`
+      select to_jsonb(decision)::text as body
+      from public.governance_decisions decision
+      where decision.id = '${decisionId}';
+    `);
+    assert.doesNotMatch(decisionJson.rows[0]!.body, new RegExp(adminId, 'i'));
+
+    await assumeAuthenticated(database, preparerId);
+    const prepared = await database.query<{
+      execution_intent_id: string;
+      transaction_sent: boolean;
+      receipt_created: boolean;
+    }>(`
+      select execution_intent_id, transaction_sent, receipt_created
+      from public.prepare_treasury_execution_intent_v1(
+        '${decisionId}', 'builders', null, 'devnet', 'USDC', 6::smallint, '${wallet}', '${wallet}',
+        1000000::numeric, 'runtime recipient verified', 'Runtime treasury execution',
+        'Private preparation record.', 'phase-2e-6e-compat-intent'
+      );
+    `);
+    assert.ok(prepared.rows[0]!.execution_intent_id);
+    assert.equal(prepared.rows[0]!.transaction_sent, false);
+    assert.equal(prepared.rows[0]!.receipt_created, false);
+
+    const registry = await database.query<{ destination_wallet_display: string }>(`
+      select destination_wallet_display
+      from public.treasury_execution_public_registry
+      where intent_public_id = '${prepared.rows[0]!.execution_intent_id}';
+    `);
+    assert.equal(registry.rows[0]!.destination_wallet_display, '1111…1111');
+
+    await assumeAuthenticated(database, adminId);
+    const privateAudit = await database.query<{ actor_id: string }>(`
+      select actor_id
+      from public.operations_governance_workflow_events
+      where action = 'decision_finalized' and public_entity_id = '${decisionId}';
+    `);
+    assert.equal(privateAudit.rows[0]!.actor_id, adminId);
+  } finally {
+    await database.close();
+  }
+});
+
 async function createOperationsDatabase(
   includeAuditedAccessControl = true,
 ): Promise<PGlite> {
@@ -367,6 +522,7 @@ async function createOperationsDatabase(
   await database.exec(treasuryBase58LintCleanupSql);
   if (includeAuditedAccessControl) {
     await database.exec(auditedAccessControlSql);
+    await database.exec(operationsAccessCompatibilitySql);
   }
   return database;
 }

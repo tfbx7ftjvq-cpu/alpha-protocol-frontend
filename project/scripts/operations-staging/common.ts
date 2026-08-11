@@ -493,19 +493,51 @@ function assertNoBrowserSecretExposure(
 }
 
 function isSupabasePublicKey(value: string): boolean {
-  if (value.startsWith('sb_secret_') || value.toLowerCase().includes('service_role')) {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('sb_secret_')) {
     return false;
   }
 
-  if (value.startsWith('sb_publishable_')) {
-    return value.length >= 24;
+  if (trimmed.startsWith('sb_publishable_')) {
+    return trimmed.length >= 24;
   }
 
-  return /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value);
+  return readSupabaseJwtRole(trimmed) === 'anon';
 }
 
 function isSupabaseServiceRoleKey(value: string): boolean {
-  return value.startsWith('sb_secret_')
-    || value.toLowerCase().includes('service_role')
-    || value.toLowerCase().includes('service-role');
+  const trimmed = value.trim();
+  if (trimmed.startsWith('sb_publishable_')) {
+    return false;
+  }
+
+  if (trimmed.startsWith('sb_secret_')) {
+    return trimmed.length >= 16;
+  }
+
+  return readSupabaseJwtRole(trimmed) === 'service_role';
+}
+
+function readSupabaseJwtRole(value: string): string | null {
+  const parts = value.split('.');
+  if (
+    parts.length !== 3
+    || parts.some((part) => !/^[A-Za-z0-9_-]+$/.test(part))
+  ) {
+    return null;
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+  } catch {
+    return null;
+  }
+
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null;
+  }
+
+  const role = (payload as { role?: unknown }).role;
+  return typeof role === 'string' ? role : null;
 }
