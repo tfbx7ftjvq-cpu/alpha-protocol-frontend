@@ -55,9 +55,9 @@ test('Phase 4M E2E exercises audited task RPCs and controlled fixture cleanup', 
   assert.match(e2eSource, /counts\.tasksDeleted !== 1/);
 });
 
-test('Phase 4M E2E refreshes role claims and verifies sanitized public output', () => {
-  assert.match(e2eSource, /admin\.auth\.admin\.updateUserById/);
-  assert.match(e2eSource, /actor\.client\.auth\.refreshSession\(\)/);
+test('Phase 4M E2E grants audited roles and verifies sanitized public output', () => {
+  assert.match(e2eSource, /grant_operations_role_v1/);
+  assert.match(e2eSource, /get_my_operations_access_v1/);
   assert.match(e2eSource, /public_wallet_consent: false/);
   assert.match(e2eSource, /!\('submission_id' in publicResult\)/);
   assert.match(e2eSource, /!\('submitted_by' in publicResult\)/);

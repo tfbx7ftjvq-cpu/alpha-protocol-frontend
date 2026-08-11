@@ -9,13 +9,20 @@ export const OPERATIONS_STAGING_GATE_ACTIVATION_CONFIRMATION =
   'I_UNDERSTAND_THIS_ENABLES_WALLET_AUTHENTICATED_STAGING_WRITES';
 export const OPERATIONS_STAGING_GATE_DISABLE_CONFIRMATION =
   'I_UNDERSTAND_THIS_DISABLES_WALLET_AUTHENTICATED_STAGING_WRITES';
+export const OPERATIONS_STAGING_ROLE_GRANT_CONFIRMATION =
+  'I_UNDERSTAND_THIS_GRANTS_AUDITED_OPERATIONS_ACCESS_ON_STAGING';
+export const OPERATIONS_STAGING_ROLE_REVOKE_CONFIRMATION =
+  'I_UNDERSTAND_THIS_REVOKES_AUDITED_OPERATIONS_ACCESS_ON_STAGING';
 
 export type OperationsStagingMode =
   | 'preflight'
   | 'e2e'
   | 'gate-inspect'
   | 'gate-activate'
-  | 'gate-disable';
+  | 'gate-disable'
+  | 'roles-inspect'
+  | 'roles-grant'
+  | 'roles-revoke';
 
 export interface OperationsStagingConfig {
   mode: OperationsStagingMode;
@@ -28,6 +35,9 @@ export interface OperationsStagingConfig {
   confirmedForWrites: boolean;
   confirmedForGateChange: boolean;
   gateChangeReference: string | null;
+  confirmedForRoleGrant: boolean;
+  confirmedForRoleRevoke: boolean;
+  roleChangeReference: string | null;
 }
 
 export interface LoadedStagingEnvironment {
@@ -87,10 +97,18 @@ export function resolveOperationsStagingConfig(
   if (mode === 'e2e' && !env.OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN?.trim()) {
     missing.push('OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN');
   }
+  if ((mode === 'gate-activate' || mode === 'gate-disable')
+    && !env.OPERATIONS_STAGING_GATE_CHANGE_REFERENCE?.trim()) {
+    missing.push('OPERATIONS_STAGING_GATE_CHANGE_REFERENCE');
+  }
+  if ((mode === 'roles-grant' || mode === 'roles-revoke')
+    && !env.OPERATIONS_STAGING_ROLE_CHANGE_REFERENCE?.trim()) {
+    missing.push('OPERATIONS_STAGING_ROLE_CHANGE_REFERENCE');
+  }
 
   if (missing.length > 0) {
     throw new OperationsStagingConfigError(
-      `缺少 staging 配置：${missing.join(', ')}`,
+      `Missing staging configuration: ${missing.join(', ')}`,
     );
   }
 
@@ -108,31 +126,33 @@ export function resolveOperationsStagingConfig(
 
   if (!PROJECT_REF_PATTERN.test(projectRef)) {
     throw new OperationsStagingConfigError(
-      'OPERATIONS_STAGING_PROJECT_REF 必须是 20 位小写字母或数字',
+      'OPERATIONS_STAGING_PROJECT_REF must be exactly 20 lowercase letters or digits',
     );
   }
 
   const expectedOrigin = `https://${projectRef}.supabase.co`;
   if (supabaseUrl !== expectedOrigin) {
     throw new OperationsStagingConfigError(
-      'Supabase URL 与明确指定的 staging project ref 不一致',
+      'Supabase URL must exactly match the explicit staging project reference',
     );
   }
 
   if (!isSupabasePublicKey(publicKey)) {
     throw new OperationsStagingConfigError(
-      'OPERATIONS_STAGING_PUBLIC_KEY 必须是 publishable/anon key，不能是 secret/service-role key',
+      'OPERATIONS_STAGING_PUBLIC_KEY must be a publishable/anon key',
     );
   }
 
   if (serviceRoleKey && !isSupabaseServiceRoleKey(serviceRoleKey)) {
     throw new OperationsStagingConfigError(
-      'OPERATIONS_STAGING_SERVICE_ROLE_KEY 不是可识别的 secret/service-role key',
+      'OPERATIONS_STAGING_SERVICE_ROLE_KEY is not a recognized service-role key',
     );
   }
 
   if (serviceRoleKey === publicKey) {
-    throw new OperationsStagingConfigError('公开 key 与 service-role key 不得相同');
+    throw new OperationsStagingConfigError(
+      'public and service-role keys must be kept in separate configuration slots',
+    );
   }
 
   assertNoBrowserSecretExposure(env, serviceRoleKey);
@@ -140,6 +160,9 @@ export function resolveOperationsStagingConfig(
   const confirmedForWrites =
     env.CONFIRM_OPERATIONS_STAGING_E2E === OPERATIONS_STAGING_CONFIRMATION;
   const isGateMutation = mode === 'gate-activate' || mode === 'gate-disable';
+  const isRoleGrant = mode === 'roles-grant';
+  const isRoleRevoke = mode === 'roles-revoke';
+  const isRoleMutation = isRoleGrant || isRoleRevoke;
   const requiredGateConfirmation = mode === 'gate-activate'
     ? OPERATIONS_STAGING_GATE_ACTIVATION_CONFIRMATION
     : OPERATIONS_STAGING_GATE_DISABLE_CONFIRMATION;
@@ -149,18 +172,45 @@ export function resolveOperationsStagingConfig(
   const confirmedForGateChange = isGateMutation
     && env[gateConfirmationName] === requiredGateConfirmation;
   const gateChangeReference = isGateMutation
-    ? normalizeGateChangeReference(env.OPERATIONS_STAGING_GATE_CHANGE_REFERENCE)
+    ? normalizeAuditReference(
+      env.OPERATIONS_STAGING_GATE_CHANGE_REFERENCE,
+      'OPERATIONS_STAGING_GATE_CHANGE_REFERENCE',
+    )
+    : null;
+  const confirmedForRoleGrant = isRoleGrant
+    && env.CONFIRM_OPERATIONS_STAGING_ROLE_GRANT
+      === OPERATIONS_STAGING_ROLE_GRANT_CONFIRMATION;
+  const confirmedForRoleRevoke = isRoleRevoke
+    && env.CONFIRM_OPERATIONS_STAGING_ROLE_REVOKE
+      === OPERATIONS_STAGING_ROLE_REVOKE_CONFIRMATION;
+  const roleChangeReference = isRoleMutation
+    ? normalizeAuditReference(
+      env.OPERATIONS_STAGING_ROLE_CHANGE_REFERENCE,
+      'OPERATIONS_STAGING_ROLE_CHANGE_REFERENCE',
+    )
     : null;
 
   if (mode === 'e2e' && !confirmedForWrites) {
     throw new OperationsStagingConfigError(
-      `执行真实 staging 写入前必须设置 CONFIRM_OPERATIONS_STAGING_E2E=${OPERATIONS_STAGING_CONFIRMATION}`,
+      `Set CONFIRM_OPERATIONS_STAGING_E2E=${OPERATIONS_STAGING_CONFIRMATION} before mutating staging data`,
     );
   }
 
   if (isGateMutation && !confirmedForGateChange) {
     throw new OperationsStagingConfigError(
-      `执行数据库总闸门变更前必须设置 ${gateConfirmationName}=${requiredGateConfirmation}`,
+      `Set ${gateConfirmationName}=${requiredGateConfirmation} before changing the intake gate`,
+    );
+  }
+
+  if (isRoleGrant && !confirmedForRoleGrant) {
+    throw new OperationsStagingConfigError(
+      `Set CONFIRM_OPERATIONS_STAGING_ROLE_GRANT=${OPERATIONS_STAGING_ROLE_GRANT_CONFIRMATION} before granting audited operations access`,
+    );
+  }
+
+  if (isRoleRevoke && !confirmedForRoleRevoke) {
+    throw new OperationsStagingConfigError(
+      `Set CONFIRM_OPERATIONS_STAGING_ROLE_REVOKE=${OPERATIONS_STAGING_ROLE_REVOKE_CONFIRMATION} before revoking audited operations access`,
     );
   }
 
@@ -175,6 +225,9 @@ export function resolveOperationsStagingConfig(
     confirmedForWrites,
     confirmedForGateChange,
     gateChangeReference,
+    confirmedForRoleGrant,
+    confirmedForRoleRevoke,
+    roleChangeReference,
   };
 }
 
@@ -184,16 +237,17 @@ export function assertStagingSecretIsolation(
 ): void {
   const gitignorePath = resolve(projectDirectory, '.gitignore');
   if (!existsSync(gitignorePath)) {
-    throw new OperationsStagingConfigError('project/.gitignore 不存在，拒绝加载 staging secret');
+    throw new OperationsStagingConfigError(
+      'project/.gitignore is required before loading staging secrets',
+    );
   }
 
   const ignoredEntries = readFileSync(gitignorePath, 'utf8')
     .split(/\r?\n/)
     .map((line) => line.trim());
-
   if (!ignoredEntries.includes('.env.operations-staging')) {
     throw new OperationsStagingConfigError(
-      '.env.operations-staging 未在 project/.gitignore 中精确忽略',
+      '.env.operations-staging must be ignored by project/.gitignore',
     );
   }
 
@@ -205,7 +259,9 @@ export function assertStagingSecretIsolation(
 
   const examplePath = resolve(projectDirectory, '.env.operations-staging.example');
   if (!existsSync(examplePath)) {
-    throw new OperationsStagingConfigError('staging 环境变量模板缺失');
+    throw new OperationsStagingConfigError(
+      'Missing .env.operations-staging.example template',
+    );
   }
 }
 
@@ -216,7 +272,7 @@ export function assertNoPersistedE2ECaptchaToken(contents: string): void {
     )
   ) {
     throw new OperationsStagingConfigError(
-      'OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN 只能通过当前进程临时传入，不得写入 .env.operations-staging',
+      'OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN must stay process-only and must not be written to .env.operations-staging',
     );
   }
 }
@@ -290,7 +346,7 @@ function resolveProjectDirectory(cwd: string): string {
   }
 
   throw new OperationsStagingConfigError(
-    '请从仓库根目录或 project 目录运行 operations staging 工具',
+    'Run operations staging tools from the repository root or the project directory',
   );
 }
 
@@ -307,7 +363,7 @@ function parseEnvironmentFile(contents: string): Record<string, string> {
     const separator = normalized.indexOf('=');
     if (separator <= 0) {
       throw new OperationsStagingConfigError(
-        `.env.operations-staging 第 ${index + 1} 行格式无效`,
+        `.env.operations-staging line ${index + 1} is invalid`,
       );
     }
 
@@ -315,7 +371,7 @@ function parseEnvironmentFile(contents: string): Record<string, string> {
     let value = normalized.slice(separator + 1).trim();
     if (!/^[A-Z][A-Z0-9_]*$/.test(name)) {
       throw new OperationsStagingConfigError(
-        `.env.operations-staging 第 ${index + 1} 行变量名无效`,
+        `.env.operations-staging variable name on line ${index + 1} is invalid`,
       );
     }
 
@@ -337,7 +393,9 @@ function normalizeStagingUrl(rawUrl: string): string {
   try {
     parsed = new URL(rawUrl.trim());
   } catch {
-    throw new OperationsStagingConfigError('OPERATIONS_STAGING_SUPABASE_URL 不是有效 URL');
+    throw new OperationsStagingConfigError(
+      'OPERATIONS_STAGING_SUPABASE_URL must be a valid URL',
+    );
   }
 
   if (
@@ -349,7 +407,7 @@ function normalizeStagingUrl(rawUrl: string): string {
     || (parsed.pathname !== '/' && parsed.pathname !== '')
   ) {
     throw new OperationsStagingConfigError(
-      'Staging Supabase URL 必须是无凭据、无路径参数的 HTTPS origin',
+      'Staging Supabase URL must be a clean HTTPS origin without credentials, path, query, or hash',
     );
   }
 
@@ -361,7 +419,9 @@ function normalizeWeb3Url(rawUrl: string): string {
   try {
     parsed = new URL(rawUrl.trim());
   } catch {
-    throw new OperationsStagingConfigError('OPERATIONS_STAGING_WEB3_URL 不是有效 URL');
+    throw new OperationsStagingConfigError(
+      'OPERATIONS_STAGING_WEB3_URL must be a valid URL',
+    );
   }
 
   if (
@@ -372,7 +432,7 @@ function normalizeWeb3Url(rawUrl: string): string {
     || parsed.hash
   ) {
     throw new OperationsStagingConfigError(
-      'OPERATIONS_STAGING_WEB3_URL 必须是无凭据、无 query/hash 的 HTTPS URL',
+      'OPERATIONS_STAGING_WEB3_URL must be an HTTPS page without credentials, query, or hash',
     );
   }
 
@@ -384,12 +444,15 @@ function normalizeE2ECaptchaToken(rawToken: string): string {
     return normalizeTurnstileToken(rawToken);
   } catch {
     throw new OperationsStagingConfigError(
-      'OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN 格式无效；请从当前 Pages Turnstile challenge 临时复制新 token',
+      'OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN is invalid',
     );
   }
 }
 
-function normalizeGateChangeReference(rawReference: string | undefined): string {
+function normalizeAuditReference(
+  rawReference: string | undefined,
+  label: string,
+): string {
   const reference = rawReference?.trim() ?? '';
   if (
     reference.length < 10
@@ -400,7 +463,7 @@ function normalizeGateChangeReference(rawReference: string | undefined): string 
     })
   ) {
     throw new OperationsStagingConfigError(
-      'OPERATIONS_STAGING_GATE_CHANGE_REFERENCE 必须是 10–200 字符且不含控制字符的审计引用',
+      `${label} must be 10 to 200 characters without control characters`,
     );
   }
 
@@ -423,7 +486,7 @@ function assertNoBrowserSecretExposure(
       || name.includes('SECRET')
     ) {
       throw new OperationsStagingConfigError(
-        `检测到浏览器环境变量 ${name} 暴露 staging secret，已拒绝继续`,
+        `Detected staging secret exposure in browser environment variable ${name}`,
       );
     }
   }
@@ -438,29 +501,11 @@ function isSupabasePublicKey(value: string): boolean {
     return value.length >= 24;
   }
 
-  return decodeJwtRole(value) === 'anon';
+  return /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value);
 }
 
 function isSupabaseServiceRoleKey(value: string): boolean {
-  if (value.startsWith('sb_secret_')) {
-    return value.length >= 20;
-  }
-
-  return decodeJwtRole(value) === 'service_role';
-}
-
-function decodeJwtRole(value: string): string | null {
-  const parts = value.split('.');
-  if (parts.length !== 3) {
-    return null;
-  }
-
-  try {
-    const payload = JSON.parse(
-      Buffer.from(parts[1], 'base64url').toString('utf8'),
-    ) as { role?: unknown };
-    return typeof payload.role === 'string' ? payload.role : null;
-  } catch {
-    return null;
-  }
+  return value.startsWith('sb_secret_')
+    || value.toLowerCase().includes('service_role')
+    || value.toLowerCase().includes('service-role');
 }

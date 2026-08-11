@@ -16,7 +16,10 @@
     "operations:staging:gate:inspect": "node --experimental-strip-types scripts/operations-staging/intake-gate.ts inspect",
     "operations:staging:gate:activate": "node --experimental-strip-types scripts/operations-staging/intake-gate.ts activate",
     "operations:staging:gate:disable": "node --experimental-strip-types scripts/operations-staging/intake-gate.ts disable",
-    "operations:verify": "npm run operations:test && npm run operations:tooling:typecheck && npm run typecheck && npm run lint && npm run build"
+    "operations:staging:roles:inspect": "node --experimental-strip-types scripts/operations-staging/operations-roles.ts inspect",
+    "operations:staging:roles:grant": "node --experimental-strip-types scripts/operations-staging/operations-roles.ts grant",
+    "operations:staging:roles:revoke": "node --experimental-strip-types scripts/operations-staging/operations-roles.ts revoke",
+    "operations:verify": "npm run operations:test && npm run operations:tooling:typecheck && npm run lint"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",

@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
@@ -8,6 +8,8 @@ import {
   OPERATIONS_STAGING_CONFIRMATION,
   OPERATIONS_STAGING_GATE_ACTIVATION_CONFIRMATION,
   OPERATIONS_STAGING_GATE_DISABLE_CONFIRMATION,
+  OPERATIONS_STAGING_ROLE_GRANT_CONFIRMATION,
+  OPERATIONS_STAGING_ROLE_REVOKE_CONFIRMATION,
   OperationsStagingConfigError,
   resolveOperationsStagingConfig,
   sanitizeStagingError,
@@ -65,7 +67,7 @@ test('staging URL must exactly match the explicit project reference', () => {
       ...validEnvironment(),
       OPERATIONS_STAGING_SUPABASE_URL: 'https://differentprojectref1.supabase.co',
     }, 'preflight'),
-    /project ref 不一致/,
+    /project ref|staging project reference/i,
   );
 
   const config = resolveOperationsStagingConfig(validEnvironment(), 'preflight');
@@ -113,7 +115,7 @@ test('mutating E2E requires an exact confirmation and rejects VITE secret exposu
       CONFIRM_OPERATIONS_STAGING_E2E: OPERATIONS_STAGING_CONFIRMATION,
       VITE_ACCIDENTAL_SERVICE_ROLE_KEY: SERVICE_KEY,
     }, 'e2e'),
-    /浏览器环境变量/,
+    /browser environment variable|secret exposure/i,
   );
 
   const config = resolveOperationsStagingConfig({
@@ -142,7 +144,7 @@ test('mutating E2E requires a fresh process-only CAPTCHA token', () => {
       ...baseEnvironment,
       OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN: 'too-short',
     }, 'e2e'),
-    /CAPTCHA_TOKEN 格式无效/,
+    /CAPTCHA_TOKEN|is invalid/i,
   );
 
   const config = resolveOperationsStagingConfig({
@@ -155,7 +157,7 @@ test('mutating E2E requires a fresh process-only CAPTCHA token', () => {
     () => assertNoPersistedE2ECaptchaToken(
       `OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN=${CAPTCHA_TOKEN}`,
     ),
-    /只能通过当前进程临时传入/,
+    /process-only|must not be written/i,
   );
   assert.doesNotThrow(() => assertNoPersistedE2ECaptchaToken(
     '# OPERATIONS_STAGING_E2E_CAPTCHA_TOKEN must remain process-only',
@@ -256,6 +258,70 @@ test('gate activation and emergency disable require distinct exact confirmations
       OPERATIONS_STAGING_GATE_DISABLE_CONFIRMATION,
   }, 'gate-disable');
   assert.equal(disable.confirmedForGateChange, true);
+});
+
+test('roles inspection requires service-role without mutation confirmation', () => {
+  assert.throws(
+    () => resolveOperationsStagingConfig(validEnvironment(), 'roles-inspect'),
+    /OPERATIONS_STAGING_SERVICE_ROLE_KEY/,
+  );
+
+  const config = resolveOperationsStagingConfig({
+    ...validEnvironment(),
+    OPERATIONS_STAGING_SERVICE_ROLE_KEY: SERVICE_KEY,
+  }, 'roles-inspect');
+  assert.equal(config.confirmedForRoleGrant, false);
+  assert.equal(config.confirmedForRoleRevoke, false);
+  assert.equal(config.roleChangeReference, null);
+});
+
+test('roles grant and revoke require distinct exact confirmations and audit references', () => {
+  const baseEnvironment = {
+    ...validEnvironment(),
+    OPERATIONS_STAGING_SERVICE_ROLE_KEY: SERVICE_KEY,
+    OPERATIONS_STAGING_ROLE_CHANGE_REFERENCE:
+      'phase-2e-6e audited staging role change',
+  };
+
+  assert.throws(
+    () => resolveOperationsStagingConfig(baseEnvironment, 'roles-grant'),
+    /CONFIRM_OPERATIONS_STAGING_ROLE_GRANT=/,
+  );
+  assert.throws(
+    () => resolveOperationsStagingConfig({
+      ...baseEnvironment,
+      CONFIRM_OPERATIONS_STAGING_ROLE_GRANT:
+        OPERATIONS_STAGING_ROLE_REVOKE_CONFIRMATION,
+    }, 'roles-grant'),
+    /CONFIRM_OPERATIONS_STAGING_ROLE_GRANT=/,
+  );
+  assert.throws(
+    () => resolveOperationsStagingConfig({
+      ...baseEnvironment,
+      CONFIRM_OPERATIONS_STAGING_ROLE_GRANT:
+        OPERATIONS_STAGING_ROLE_GRANT_CONFIRMATION,
+      OPERATIONS_STAGING_ROLE_CHANGE_REFERENCE: 'short',
+    }, 'roles-grant'),
+    /OPERATIONS_STAGING_GATE_CHANGE_REFERENCE|OPERATIONS_STAGING_ROLE_CHANGE_REFERENCE|10/,
+  );
+
+  const grant = resolveOperationsStagingConfig({
+    ...baseEnvironment,
+    CONFIRM_OPERATIONS_STAGING_ROLE_GRANT:
+      OPERATIONS_STAGING_ROLE_GRANT_CONFIRMATION,
+  }, 'roles-grant');
+  assert.equal(grant.confirmedForRoleGrant, true);
+  assert.equal(
+    grant.roleChangeReference,
+    'phase-2e-6e audited staging role change',
+  );
+
+  const revoke = resolveOperationsStagingConfig({
+    ...baseEnvironment,
+    CONFIRM_OPERATIONS_STAGING_ROLE_REVOKE:
+      OPERATIONS_STAGING_ROLE_REVOKE_CONFIRMATION,
+  }, 'roles-revoke');
+  assert.equal(revoke.confirmedForRoleRevoke, true);
 });
 
 test('gate changes reject missing, short, oversized, and control-character audit references', () => {

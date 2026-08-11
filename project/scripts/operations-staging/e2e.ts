@@ -382,10 +382,15 @@ export async function runOperationsStagingE2E(
     );
     assertions += 1;
 
-    await assignOperationsRole(admin, ownerA, 'reviewer');
+    await grantOperationsRole(admin, ownerA.user.id, 'reviewer', `${runReference}:owner:reviewer`);
+    const ownerReviewerAccess = await ownerA.client.rpc('get_my_operations_access_v1');
+    assertNoError(ownerReviewerAccess.error, 'load wallet actor operations access');
     expect(
-      ownerA.user.app_metadata.operations_role === 'reviewer',
-      'wallet actor did not receive the refreshed reviewer claim',
+      Array.isArray(ownerReviewerAccess.data)
+        && ownerReviewerAccess.data.length === 1
+        && ownerReviewerAccess.data[0]?.role_name === 'reviewer'
+        && ownerReviewerAccess.data[0]?.status === 'active',
+      'wallet actor did not receive audited reviewer access',
     );
     assertions += 1;
 
@@ -1126,36 +1131,55 @@ export async function runOperationsStagingE2E(
   };
 }
 
-async function assignOperationsRole(
+async function grantOperationsRole(
   admin: SupabaseClient,
-  actor: TestActor,
+  userId: string,
   role: OperationsRole,
+  grantReference: string,
 ): Promise<void> {
-  const updateResult = await admin.auth.admin.updateUserById(actor.user.id, {
-    app_metadata: {
-      ...actor.user.app_metadata,
-      operations_role: role,
-    },
+  const result = await admin.rpc('grant_operations_role_v1', {
+    p_user_id: userId,
+    p_role_name: role,
+    p_grant_reference: grantReference,
   });
-  assertNoError(updateResult.error, 'assign operations role');
-  if (!updateResult.data.user) {
-    throw new Error('assign operations role returned no user');
-  }
+  assertNoError(result.error, 'grant operations role');
+}
 
-  const refreshResult = await actor.client.auth.refreshSession();
-  assertNoError(refreshResult.error, 'refresh operations role session');
-  if (!refreshResult.data.user) {
-    throw new Error('refresh operations role session returned no user');
+async function revokeOperationsRole(
+  admin: SupabaseClient,
+  userId: string,
+  revokeReference: string,
+): Promise<void> {
+  const result = await admin.rpc('revoke_operations_role_v1', {
+    p_user_id: userId,
+    p_revoke_reference: revokeReference,
+  });
+  assertNoError(result.error, 'revoke operations role');
+}
+
+async function cleanupOperationsRoles(
+  admin: SupabaseClient,
+  userIds: string[],
+  runReference: string,
+  errors: string[],
+): Promise<void> {
+  for (const userId of [...new Set(userIds)].reverse()) {
+    const result = await admin.rpc('inspect_operations_role_v1', {
+      p_user_id: userId,
+    });
+    if (result.error) {
+      errors.push('operations role inspection cleanup failed');
+      continue;
+    }
+    const row = readSingleRpcRow(result.data, 'operations role cleanup inspection');
+    if (row.status === 'active') {
+      try {
+        await revokeOperationsRole(admin, userId, `${runReference}:cleanup:revoke:${userId}`);
+      } catch {
+        errors.push('operations role revoke cleanup failed');
+      }
+    }
   }
-  expect(
-    refreshResult.data.user.id === actor.user.id,
-    'refresh operations role session returned a different user',
-  );
-  expect(
-    refreshResult.data.user.app_metadata.operations_role === role,
-    'refreshed session is missing the assigned operations role',
-  );
-  actor.user = refreshResult.data.user;
 }
 
 async function createActor(
@@ -1169,9 +1193,6 @@ async function createActor(
   const createResult = await admin.auth.admin.createUser({
     email,
     email_confirm: true,
-    app_metadata: operationsRole
-      ? { operations_role: operationsRole }
-      : {},
   });
   assertNoError(createResult.error, `create ${label} test user`);
   if (!createResult.data.user) {
@@ -1208,6 +1229,15 @@ async function createActor(
       signInResult.data.user.id === createResult.data.user.id,
       `sign in ${label} test user returned a different user`,
     );
+
+    if (operationsRole) {
+      await grantOperationsRole(
+        admin,
+        signInResult.data.user.id,
+        operationsRole,
+        `phase-2e-6e-staging-e2e:${runId}:${label}:grant`,
+      );
+    }
 
     return { user: signInResult.data.user, client, walletAddress: null };
   } catch (error) {
@@ -1414,6 +1444,8 @@ async function cleanupStagingFixtures(
   } else if (rows.reliefApplicationIds.length > 0) {
     errors.push('relief workflow cleanup identifiers are inconsistent');
   }
+
+  await cleanupOperationsRoles(admin, userIds, rows.runReference, errors);
 
   for (const userId of [...userIds].reverse()) {
     const result = await admin.auth.admin.deleteUser(userId);

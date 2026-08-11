@@ -9,11 +9,10 @@ import {
   OPERATIONS_WALLET_SIGN_IN_STATEMENT,
 } from '../features/operations/auth';
 import type {
+  MyOperationsAccess,
   OperationsStaffRole,
 } from '../features/operations/domain';
-import {
-  resolveOperationsStaffRole,
-} from '../features/operations/repository';
+import { loadMyOperationsAccess } from '../features/operations/repository';
 import type {
   OperationsAuthStatus,
   OperationsIntakeGateStatus,
@@ -30,6 +29,8 @@ export interface OperationsWalletAuthState {
   connectedWallet: string | null;
   authenticatedWallet: string | null;
   operationsRole: OperationsStaffRole | null;
+  operationsAccessStatus: MyOperationsAccess['status'];
+  operationsRoleExpiresAt: string | null;
   error: string | null;
   intakeGateError: string | null;
   signIn: (captchaToken: string) => Promise<void>;
@@ -46,6 +47,8 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
   );
   const [authenticatedWallet, setAuthenticatedWallet] = useState<string | null>(null);
   const [operationsRole, setOperationsRole] = useState<OperationsStaffRole | null>(null);
+  const [operationsAccessStatus, setOperationsAccessStatus] = useState<MyOperationsAccess['status']>(null);
+  const [operationsRoleExpiresAt, setOperationsRoleExpiresAt] = useState<string | null>(null);
   const [intakeGateStatus, setIntakeGateStatus] = useState<OperationsIntakeGateStatus>(
     operationsBackendConfig.intakeEnabled ? 'checking' : 'unavailable',
   );
@@ -54,12 +57,18 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
   );
   const [intakeGateError, setIntakeGateError] = useState<string | null>(null);
 
+  const clearOperationsAccess = useCallback(() => {
+    setOperationsRole(null);
+    setOperationsAccessStatus(null);
+    setOperationsRoleExpiresAt(null);
+  }, []);
+
   const applyUser = useCallback(async (user: User | null) => {
     if (!operationsBackendConfig.intakeEnabled) {
       setStatus('disabled');
       setIntakeGateStatus('unavailable');
       setAuthenticatedWallet(null);
-      setOperationsRole(null);
+      clearOperationsAccess();
       setError(operationsBackendConfig.reason);
       setIntakeGateError(null);
       return;
@@ -69,7 +78,7 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
       setStatus('signed-out');
       setIntakeGateStatus('unavailable');
       setAuthenticatedWallet(null);
-      setOperationsRole(null);
+      clearOperationsAccess();
       setError(null);
       setIntakeGateError(null);
       return;
@@ -80,8 +89,8 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
       setStatus('error');
       setIntakeGateStatus('unavailable');
       setAuthenticatedWallet(null);
-      setOperationsRole(null);
-      setError('当前会话不是唯一的 Solana Web3 钱包身份，请退出后重新认证');
+      clearOperationsAccess();
+      setError('Current session is not backed by a verified Solana Web3 wallet.');
       setIntakeGateError(null);
       return;
     }
@@ -91,9 +100,9 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
       setStatus('error');
       setIntakeGateStatus('error');
       setAuthenticatedWallet(null);
-      setOperationsRole(null);
-      setError('运营后端尚未配置');
-      setIntakeGateError('无法读取数据库写入总闸门');
+      clearOperationsAccess();
+      setError('Operations backend is not configured.');
+      setIntakeGateError('Could not read the intake gate state.');
       return;
     }
 
@@ -101,8 +110,8 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
       setStatus('error');
       setIntakeGateStatus('unavailable');
       setAuthenticatedWallet(null);
-      setOperationsRole(null);
-      setError('当前页面与允许的钱包认证 URL 不一致，已拒绝签名');
+      clearOperationsAccess();
+      setError('Wallet sign-in is only allowed from the configured Web3 callback page.');
       setIntakeGateError(null);
       return;
     }
@@ -113,7 +122,7 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
     ]);
     if (intakeResult.error) {
       setIntakeGateStatus('error');
-      setIntakeGateError('无法确认数据库写入总闸门；所有提交继续锁定');
+      setIntakeGateError('Could not confirm the intake gate state. New submissions stay locked.');
     } else if (intakeResult.data === true) {
       setIntakeGateStatus('enabled');
       setIntakeGateError(null);
@@ -122,29 +131,32 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
       setIntakeGateError(null);
     } else {
       setIntakeGateStatus('error');
-      setIntakeGateError('数据库写入总闸门返回了无效状态；所有提交继续锁定');
+      setIntakeGateError('The intake gate returned an invalid state. New submissions stay locked.');
     }
 
     if (walletResult.error || walletResult.data !== identityWallet) {
       setStatus('error');
       setAuthenticatedWallet(null);
-      setOperationsRole(null);
-      setError('数据库未确认当前 Web3 钱包身份；钱包认证 migration 可能尚未应用');
+      clearOperationsAccess();
+      setError('Database wallet verification did not match the current Web3 session.');
       return;
     }
 
     setAuthenticatedWallet(identityWallet);
     if (!connectedWallet || connectedWallet !== identityWallet) {
-      setOperationsRole(null);
+      clearOperationsAccess();
       setStatus('wallet-mismatch');
-      setError('连接钱包与已认证会话不一致；请切回原钱包或重新认证');
+      setError('Connected wallet does not match the verified session wallet.');
       return;
     }
 
+    const access = await loadMyOperationsAccess();
+    setOperationsAccessStatus(access.status);
+    setOperationsRoleExpiresAt(access.expiresAt);
     setStatus('authenticated');
-    setOperationsRole(resolveOperationsStaffRole(user));
+    setOperationsRole(access.status === 'active' ? access.role : null);
     setError(null);
-  }, [connectedWallet, expectedWeb3Url]);
+  }, [clearOperationsAccess, connectedWallet, expectedWeb3Url]);
 
   const refresh = useCallback(async () => {
     if (!operationsBackendConfig.intakeEnabled) {
@@ -157,9 +169,9 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
       setStatus('error');
       setIntakeGateStatus('error');
       setAuthenticatedWallet(null);
-      setOperationsRole(null);
-      setError('运营后端尚未配置');
-      setIntakeGateError('无法读取数据库写入总闸门');
+      clearOperationsAccess();
+      setError('Operations backend is not configured.');
+      setIntakeGateError('Could not read the intake gate state.');
       return;
     }
 
@@ -179,14 +191,14 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
       setStatus('error');
       setIntakeGateStatus('unavailable');
       setAuthenticatedWallet(null);
-      setOperationsRole(null);
-      setError('无法验证钱包认证会话，请重新认证');
+      clearOperationsAccess();
+      setError('Could not validate the wallet-authenticated session.');
       setIntakeGateError(null);
       return;
     }
 
     await applyUser(userResult.data.user);
-  }, [applyUser]);
+  }, [applyUser, clearOperationsAccess]);
 
   useEffect(() => {
     void refresh();
@@ -223,7 +235,7 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
       setError(
         captchaError instanceof Error
           ? captchaError.message
-          : 'Turnstile 验证无效，请重新验证',
+          : 'Turnstile verification is invalid. Please try again.',
       );
       setIntakeGateError(null);
       return;
@@ -232,7 +244,7 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
     if (!wallet.publicKey || !wallet.signMessage || !connectedWallet) {
       setStatus('signed-out');
       setIntakeGateStatus('unavailable');
-      setError('请先连接支持消息签名的 Solana 钱包');
+      setError('Connect a Solana wallet that supports message signing first.');
       setIntakeGateError(null);
       return;
     }
@@ -241,15 +253,16 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
     if (!client) {
       setStatus('error');
       setIntakeGateStatus('error');
-      setError('运营后端尚未配置');
-      setIntakeGateError('无法读取数据库写入总闸门');
+      clearOperationsAccess();
+      setError('Operations backend is not configured.');
+      setIntakeGateError('Could not read the intake gate state.');
       return;
     }
 
     if (!expectedWeb3Url || !isCurrentWeb3Page(expectedWeb3Url)) {
       setStatus('error');
       setIntakeGateStatus('unavailable');
-      setError('当前页面与允许的钱包认证 URL 不一致，已拒绝签名');
+      setError('Wallet sign-in is only allowed from the configured Web3 callback page.');
       setIntakeGateError(null);
       return;
     }
@@ -281,8 +294,8 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
       setStatus('error');
       setIntakeGateStatus('unavailable');
       setAuthenticatedWallet(null);
-      setOperationsRole(null);
-      setError('钱包认证失败；请重新完成 Turnstile，并检查 Web3 Provider、Redirect URL、域名和钱包签名权限');
+      clearOperationsAccess();
+      setError('Wallet sign-in failed. Check the Web3 provider, redirect URL, domain, and signature permission.');
       setIntakeGateError(null);
       return;
     }
@@ -295,12 +308,13 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
       setStatus('error');
       setIntakeGateStatus('unavailable');
       setAuthenticatedWallet(null);
-      setOperationsRole(null);
-      setError(authError instanceof Error ? authError.message : '钱包会话校验失败');
+      clearOperationsAccess();
+      setError(authError instanceof Error ? authError.message : 'Wallet session verification failed.');
       setIntakeGateError(null);
     }
   }, [
     applyUser,
+    clearOperationsAccess,
     connectedWallet,
     expectedWeb3Url,
     wallet.publicKey,
@@ -313,12 +327,12 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
       await client.auth.signOut({ scope: 'local' });
     }
     setAuthenticatedWallet(null);
-    setOperationsRole(null);
+    clearOperationsAccess();
     setIntakeGateStatus('unavailable');
     setStatus(operationsBackendConfig.intakeEnabled ? 'signed-out' : 'disabled');
     setError(null);
     setIntakeGateError(null);
-  }, []);
+  }, [clearOperationsAccess]);
 
   return {
     status,
@@ -326,6 +340,8 @@ export function useOperationsWalletAuth(): OperationsWalletAuthState {
     connectedWallet,
     authenticatedWallet,
     operationsRole,
+    operationsAccessStatus,
+    operationsRoleExpiresAt,
     error,
     intakeGateError,
     signIn,

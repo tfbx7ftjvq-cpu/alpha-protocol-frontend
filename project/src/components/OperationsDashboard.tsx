@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+﻿import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   AlertTriangle,
   BadgeCheck,
@@ -111,6 +111,11 @@ export default function OperationsDashboard() {
     staff: staff.workspace.submissions.length + staff.workspace.riskReports.length + staff.workspace.reliefApplications.length + staff.workspace.proposalSubmissions.length + staff.workspace.discussions.length + staff.workspace.treasuryExecutionIntents.length,
   }), [mySubmissions.submissions.length, operations.overview, staff.workspace.discussions.length, staff.workspace.proposalSubmissions.length, staff.workspace.reliefApplications.length, staff.workspace.riskReports.length, staff.workspace.submissions.length, staff.workspace.treasuryExecutionIntents.length]);
   const visibleTabs = walletAuth.operationsRole ? [...TABS, STAFF_TAB] : TABS;
+  useEffect(() => {
+    if (activeTab === 'staff' && !walletAuth.operationsRole) {
+      setActiveTab('tasks');
+    }
+  }, [activeTab, walletAuth.operationsRole]);
 
   return (
     <div className="select-text space-y-6">
@@ -132,6 +137,10 @@ export default function OperationsDashboard() {
                 <StatusBadge
                   label={walletAuth.intakeGateStatus === 'enabled' ? 'INTAKE ENABLED' : 'INTAKE LOCKED'}
                   tone={walletAuth.intakeGateStatus === 'enabled' ? 'yellow' : 'zinc'}
+                />
+                <StatusBadge
+                  label={walletAuth.operationsRole ? `STAFF ROLE ${walletAuth.operationsRole.toUpperCase()}` : 'STAFF ROLE INACTIVE'}
+                  tone={walletAuth.operationsRole ? 'emerald' : 'zinc'}
                 />
               </div>
               <h2 className="mt-4 text-2xl font-black text-zinc-100">社区运营、申请与公开决定</h2>
@@ -949,7 +958,6 @@ function DiscussionPanel({
     </TwoColumnPanel>
   );
 }
-
 function WalletAuthBoundary({ auth }: { auth: OperationsWalletAuthState }) {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileError, setTurnstileError] = useState<string | null>(null);
@@ -971,7 +979,7 @@ function WalletAuthBoundary({ auth }: { auth: OperationsWalletAuthState }) {
 
   const handleSignIn = async () => {
     if (!turnstileToken) {
-      setTurnstileError('请先完成 Turnstile 安全验证');
+      setTurnstileError('Complete the Turnstile challenge first.');
       return;
     }
 
@@ -998,17 +1006,21 @@ function WalletAuthBoundary({ auth }: { auth: OperationsWalletAuthState }) {
             {authenticated
               ? <UserRoundCheck className="h-4 w-4" />
               : <LockKeyhole className="h-4 w-4" />}
-            {authenticated ? 'Solana Web3 钱包会话已验证' : '提交前需要钱包签名认证'}
+            {authenticated ? 'Solana Web3 wallet session verified' : 'Wallet sign-in is required before submitting'}
           </h3>
           <div className="mt-3 grid gap-1 text-[10px] leading-relaxed text-zinc-500">
-            <span>当前连接：{auth.connectedWallet ? shorten(auth.connectedWallet) : '未连接钱包'}</span>
-            <span>认证会话：{auth.authenticatedWallet ? shorten(auth.authenticatedWallet) : '尚未建立'}</span>
-            <span>数据库写入总闸门：{formatIntakeGateStatus(auth.intakeGateStatus)}</span>
-            <span>签名只建立 Supabase 会话，不创建 Solana 交易、不授权代币、不移动资金。</span>
+            <span>Connected wallet: {auth.connectedWallet ? shorten(auth.connectedWallet) : 'not connected'}</span>
+            <span>Verified session wallet: {auth.authenticatedWallet ? shorten(auth.authenticatedWallet) : 'not established'}</span>
+            <span>Database intake gate: {formatIntakeGateStatus(auth.intakeGateStatus)}</span>
+            <span>Operations staff access: {formatOperationsAccessStatus(auth.operationsAccessStatus, auth.operationsRole)}</span>
+            {auth.operationsRoleExpiresAt && (
+              <span>Staff role expires: {formatDate(auth.operationsRoleExpiresAt)}</span>
+            )}
+            <span>Signing in only creates a Supabase session. It does not create a Solana transaction, token approval, or fund movement.</span>
           </div>
           {authenticated && auth.intakeGateStatus === 'disabled' && (
             <p className="mt-3 text-[10px] leading-relaxed text-yellow-300">
-              钱包会话已验证；数据库总闸门仍关闭。你可以查看自己的历史提交，但所有新提交继续锁定。
+              Wallet session is verified, but the intake gate is still locked. You can review existing activity, but new submissions remain blocked.
             </p>
           )}
           {auth.error && (
@@ -1038,7 +1050,7 @@ function WalletAuthBoundary({ auth }: { auth: OperationsWalletAuthState }) {
                 className="inline-flex items-center gap-2 rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-[10px] font-black text-zinc-300 hover:border-zinc-600"
               >
                 <LogOut className="h-3.5 w-3.5" />
-                退出运营会话
+                Sign out
               </button>
             )}
             {!authenticated && (
@@ -1051,7 +1063,7 @@ function WalletAuthBoundary({ auth }: { auth: OperationsWalletAuthState }) {
                 {auth.status === 'checking' || auth.status === 'signing-in'
                   ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   : <LogIn className="h-3.5 w-3.5" />}
-                {auth.status === 'signing-in' ? '等待钱包签名…' : '签名认证钱包'}
+                {auth.status === 'signing-in' ? 'Waiting for wallet signature' : 'Sign in with wallet'}
               </button>
             )}
           </div>
@@ -2142,4 +2154,20 @@ function formatIntakeGateStatus(
     disabled: '已关闭',
     error: '读取失败（按关闭处理）',
   }[status];
+}
+
+function formatOperationsAccessStatus(
+  status: OperationsWalletAuthState['operationsAccessStatus'],
+  role: OperationsWalletAuthState['operationsRole'],
+): string {
+  if (status === 'active' && role) {
+    return `active (${role})`;
+  }
+  if (status === 'revoked') {
+    return 'revoked';
+  }
+  if (status === 'expired') {
+    return 'expired';
+  }
+  return 'inactive';
 }

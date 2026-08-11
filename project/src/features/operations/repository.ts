@@ -1,10 +1,13 @@
-import type { SupabaseClient, User } from '@supabase/supabase-js';
+﻿import type { SupabaseClient, User } from '@supabase/supabase-js';
 import {
   type MyOperationsSubmission,
+  type MyOperationsAccess,
   type CommunityTaskPublicationInput,
   type OperationsStaffRole,
   type OperationsStaffWorkspace,
+  type OperationsAccessStatus,
   OPERATIONS_PUBLIC_RECORD_LIMIT,
+  OPERATIONS_STAFF_ROLES,
   type CommunityTask,
   type DiscussionInput,
   type GovernanceProposalInput,
@@ -121,14 +124,14 @@ export async function loadOperationsOverview(): Promise<OperationsOverview> {
       .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
   ]);
 
-  assertNoQueryError(taskResult.error, '社区任务');
-  assertNoQueryError(taskPublicationResult.error, '公开任务成果');
-  assertNoQueryError(riskResult.error, '风险报告');
-  assertNoQueryError(reliefResult.error, '救助公开进度');
-  assertNoQueryError(discussionResult.error, '治理讨论');
-  assertNoQueryError(proposalResult.error, '治理提案');
-  assertNoQueryError(decisionResult.error, '治理决定');
-  assertNoQueryError(treasuryExecutionResult.error, '公开执行登记');
+  assertNoQueryError(taskResult.error, '绀惧尯浠诲姟');
+  assertNoQueryError(taskPublicationResult.error, '鍏紑浠诲姟鎴愭灉');
+  assertNoQueryError(riskResult.error, '椋庨櫓鎶ュ憡');
+  assertNoQueryError(reliefResult.error, '鏁戝姪鍏紑杩涘害');
+  assertNoQueryError(discussionResult.error, '娌荤悊璁ㄨ');
+  assertNoQueryError(proposalResult.error, '娌荤悊鎻愭');
+  assertNoQueryError(decisionResult.error, '娌荤悊鍐冲畾');
+  assertNoQueryError(treasuryExecutionResult.error, '鍏紑鎵ц鐧昏');
 
   const proposals = new Map(
     (proposalResult.data ?? []).map((row) => [row.id, row.title]),
@@ -143,7 +146,7 @@ export async function loadOperationsOverview(): Promise<OperationsOverview> {
     governanceProposals: (proposalResult.data ?? []).map(mapProposal),
     governanceDecisions: (decisionResult.data ?? []).map((row) => mapDecision(
       row,
-      proposals.get(row.proposal_id) ?? '未公开提案标题',
+      proposals.get(row.proposal_id) ?? '鏈叕寮€鎻愭鏍囬',
     )),
     treasuryExecutions: (treasuryExecutionResult.data ?? []).map(mapTreasuryExecution),
   };
@@ -164,15 +167,23 @@ export async function submitTaskResult(input: TaskSubmissionInput): Promise<void
     status: 'submitted',
   });
 
-  assertNoMutationError(error, '任务成果');
+  assertNoMutationError(error, '浠诲姟鎴愭灉');
 }
 
-export function resolveOperationsStaffRole(user: User | null): OperationsStaffRole | null {
-  const role = user?.app_metadata?.operations_role;
-  return role === 'reviewer' || role === 'relief_reviewer' || role === 'operator' || role === 'moderator' || role === 'governance_admin'
-    || role === 'treasury_preparer' || role === 'treasury_authorizer' || role === 'executor' || role === 'treasury_reconciler'
-    ? role
+export function resolveOperationsStaffRole(role: unknown): OperationsStaffRole | null {
+  return typeof role === 'string'
+    && (OPERATIONS_STAFF_ROLES as readonly string[]).includes(role)
+    ? role as OperationsStaffRole
     : null;
+}
+
+export async function loadMyOperationsAccess(): Promise<MyOperationsAccess> {
+  const client = getOperationsSupabase();
+  if (!client) {
+    throw new OperationsBackendError('operations backend is not configured');
+  }
+
+  return readMyOperationsAccess(client);
 }
 
 export async function loadOperationsStaffWorkspace(): Promise<OperationsStaffWorkspace> {
@@ -248,20 +259,19 @@ export async function loadOperationsStaffWorkspace(): Promise<OperationsStaffWor
       .order('created_at', { ascending: false })
       .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
   ]);
-
-  assertNoQueryError(submissionResult.error, '待审核任务成果');
-  assertNoQueryError(taskResult.error, '任务标题');
-  assertNoQueryError(eventResult.error, '任务工作流审计记录');
-  assertNoQueryError(riskResult.error, '待审核风险报告');
-  assertNoQueryError(evidenceResult.error, '风险证据索引');
-  assertNoQueryError(riskEventResult.error, '风险工作流审计记录');
-  assertNoQueryError(reliefResult.error, '待审核救助申请');
-  assertNoQueryError(reliefEventResult.error, '救助工作流审计记录');
-  assertNoQueryError(proposalSubmissionResult.error, '待审核治理提案');
-  assertNoQueryError(discussionResult.error, '待审核治理讨论');
-  assertNoQueryError(governanceEventResult.error, '治理工作流审计记录');
-  assertNoQueryError(treasuryIntentResult.error, '国库执行 intent');
-  assertNoQueryError(treasuryEventResult.error, '国库执行工作流审计记录');
+  assertNoQueryError(submissionResult.error, 'staff task submissions');
+  assertNoQueryError(taskResult.error, 'staff community tasks');
+  assertNoQueryError(eventResult.error, 'staff task workflow events');
+  assertNoQueryError(riskResult.error, 'staff risk reports');
+  assertNoQueryError(evidenceResult.error, 'staff risk evidence');
+  assertNoQueryError(riskEventResult.error, 'staff risk workflow events');
+  assertNoQueryError(reliefResult.error, 'staff relief applications');
+  assertNoQueryError(reliefEventResult.error, 'staff relief workflow events');
+  assertNoQueryError(proposalSubmissionResult.error, 'staff governance proposal submissions');
+  assertNoQueryError(discussionResult.error, 'staff governance discussions');
+  assertNoQueryError(governanceEventResult.error, 'staff governance workflow events');
+  assertNoQueryError(treasuryIntentResult.error, 'staff treasury execution intents');
+  assertNoQueryError(treasuryEventResult.error, 'staff treasury execution workflow events');
   const taskTitles = new Map((taskResult.data ?? []).map((row) => [row.id, row.title]));
   const evidenceCounts = new Map<string, number>();
   for (const row of evidenceResult.data ?? []) {
@@ -272,7 +282,7 @@ export async function loadOperationsStaffWorkspace(): Promise<OperationsStaffWor
     submissions: (submissionResult.data ?? []).map((row) => ({
       id: row.id,
       taskId: row.task_id,
-      taskTitle: taskTitles.get(row.task_id) ?? '未找到任务标题',
+      taskTitle: taskTitles.get(row.task_id) ?? 'Unknown task',
       summary: row.summary,
       deliverableUrl: row.deliverable_url,
       walletAddress: row.wallet_address,
@@ -405,7 +415,7 @@ export async function publishCommunityTask(
   const payload = validateCommunityTaskPublication(input);
   const { client, role } = await requireStaffSession();
   if (role === 'reviewer' || role === 'relief_reviewer') {
-    throw new OperationsBackendError('reviewer 不能发布社区任务');
+    throw new OperationsBackendError('reviewer 涓嶈兘鍙戝竷绀惧尯浠诲姟');
   }
 
   const result = await client.rpc('publish_community_task_v1', {
@@ -417,9 +427,9 @@ export async function publishCommunityTask(
     p_submission_deadline: payload.submissionDeadline,
     p_audit_reference: payload.auditReference,
   });
-  assertNoMutationError(result.error, '社区任务发布');
+  assertNoMutationError(result.error, '绀惧尯浠诲姟鍙戝竷');
   if (typeof result.data !== 'string') {
-    throw new OperationsBackendError('社区任务发布结果缺少任务标识');
+    throw new OperationsBackendError('绀惧尯浠诲姟鍙戝竷缁撴灉缂哄皯浠诲姟鏍囪瘑');
   }
   return result.data;
 }
@@ -435,7 +445,7 @@ export async function reviewTaskSubmission(input: TaskSubmissionReviewInput): Pr
     p_public_deliverable_url: payload.publicDeliverableUrl,
     p_audit_reference: payload.auditReference,
   });
-  assertNoMutationError(result.error, '任务成果审核');
+  assertNoMutationError(result.error, '浠诲姟鎴愭灉瀹℃牳');
 }
 
 export async function submitRiskReport(input: RiskReportInput): Promise<void> {
@@ -454,7 +464,7 @@ export async function submitRiskReport(input: RiskReportInput): Promise<void> {
     public_reference_consent: payload.publicReferenceConsent,
   });
 
-  assertNoMutationError(error, '风险报告');
+  assertNoMutationError(error, '椋庨櫓鎶ュ憡');
 }
 
 export async function submitRiskEvidence(input: RiskEvidenceInput): Promise<void> {
@@ -468,7 +478,7 @@ export async function submitRiskEvidence(input: RiskEvidenceInput): Promise<void
     summary: payload.summary,
     is_public: false,
   });
-  assertNoMutationError(error, '风险证据');
+  assertNoMutationError(error, '椋庨櫓璇佹嵁');
 }
 
 export async function reviewRiskReport(input: RiskReportReviewInput): Promise<void> {
@@ -483,7 +493,7 @@ export async function reviewRiskReport(input: RiskReportReviewInput): Promise<vo
     p_publication_basis: payload.publicationBasis,
     p_audit_reference: payload.auditReference,
   });
-  assertNoMutationError(result.error, '风险报告审核');
+  assertNoMutationError(result.error, '椋庨櫓鎶ュ憡瀹℃牳');
 }
 
 export async function submitReliefApplication(input: ReliefApplicationInput): Promise<void> {
@@ -500,7 +510,7 @@ export async function submitReliefApplication(input: ReliefApplicationInput): Pr
     public_update_consent: payload.publicUpdateConsent,
   });
 
-  assertNoMutationError(error, '救助申请');
+  assertNoMutationError(error, '鏁戝姪鐢宠');
 }
 
 export async function reviewReliefApplication(
@@ -517,7 +527,7 @@ export async function reviewReliefApplication(
     p_publication_basis: payload.publicationBasis,
     p_audit_reference: payload.auditReference,
   });
-  assertNoMutationError(result.error, '救助申请审核');
+  assertNoMutationError(result.error, '鏁戝姪鐢宠瀹℃牳');
 }
 
 export async function submitDiscussion(input: DiscussionInput): Promise<void> {
@@ -532,7 +542,7 @@ export async function submitDiscussion(input: DiscussionInput): Promise<void> {
     p_submission_reference: payload.submissionReference,
   });
 
-  assertNoMutationError(error, '治理讨论');
+  assertNoMutationError(error, '娌荤悊璁ㄨ');
 }
 
 export async function submitGovernanceProposal(input: GovernanceProposalInput): Promise<void> {
@@ -548,7 +558,7 @@ export async function submitGovernanceProposal(input: GovernanceProposalInput): 
     p_public_proposal_consent: payload.publicProposalConsent,
     p_submission_reference: payload.submissionReference,
   });
-  assertNoMutationError(error, '治理提案');
+  assertNoMutationError(error, '娌荤悊鎻愭');
 }
 
 export async function reviewGovernanceProposal(input: GovernanceProposalReviewInput): Promise<void> {
@@ -564,7 +574,7 @@ export async function reviewGovernanceProposal(input: GovernanceProposalReviewIn
     p_execution_manifest_sha256: input.executionManifestSha256.trim() || null,
     p_audit_reference: input.auditReference.trim(),
   });
-  assertNoMutationError(error, '治理提案审核');
+  assertNoMutationError(error, '娌荤悊鎻愭瀹℃牳');
 }
 
 export async function reviewGovernanceDiscussion(input: GovernanceDiscussionReviewInput): Promise<void> {
@@ -578,7 +588,7 @@ export async function reviewGovernanceDiscussion(input: GovernanceDiscussionRevi
     p_publication_basis: input.publicationBasis.trim() || null,
     p_audit_reference: input.auditReference.trim(),
   });
-  assertNoMutationError(error, '治理讨论审核');
+  assertNoMutationError(error, '娌荤悊璁ㄨ瀹℃牳');
 }
 
 export async function finalizeGovernanceDecision(input: GovernanceDecisionFinalizeInput): Promise<void> {
@@ -590,7 +600,7 @@ export async function finalizeGovernanceDecision(input: GovernanceDecisionFinali
     p_execution_manifest_sha256: input.executionManifestSha256.trim() || null,
     p_finalization_reference: input.finalizationReference.trim(),
   });
-  assertNoMutationError(error, '治理决定终局确认');
+  assertNoMutationError(error, '娌荤悊鍐冲畾缁堝眬纭');
 }
 
 export async function prepareTreasuryExecutionIntent(input: TreasuryExecutionPrepareInput): Promise<void> {
@@ -611,7 +621,7 @@ export async function prepareTreasuryExecutionIntent(input: TreasuryExecutionPre
     p_private_note: payload.privateNote,
     p_audit_reference: payload.auditReference,
   });
-  assertNoMutationError(error, '执行 intent 准备');
+  assertNoMutationError(error, '鎵ц intent 鍑嗗');
 }
 
 export async function authorizeTreasuryExecutionIntent(input: TreasuryExecutionAuthorizeInput): Promise<void> {
@@ -623,7 +633,7 @@ export async function authorizeTreasuryExecutionIntent(input: TreasuryExecutionA
     p_private_note: payload.privateNote,
     p_audit_reference: payload.auditReference,
   });
-  assertNoMutationError(error, '执行 intent 授权');
+  assertNoMutationError(error, '鎵ц intent 鎺堟潈');
 }
 
 export async function cancelTreasuryExecutionIntent(input: TreasuryExecutionCancelInput): Promise<void> {
@@ -635,7 +645,7 @@ export async function cancelTreasuryExecutionIntent(input: TreasuryExecutionCanc
     p_private_note: payload.privateNote,
     p_audit_reference: payload.auditReference,
   });
-  assertNoMutationError(error, '执行 intent 取消');
+  assertNoMutationError(error, '鎵ц intent 鍙栨秷');
 }
 
 export async function reportTreasuryExecutionReceipt(input: TreasuryExecutionReportInput): Promise<void> {
@@ -648,7 +658,7 @@ export async function reportTreasuryExecutionReceipt(input: TreasuryExecutionRep
     p_private_note: payload.privateNote,
     p_audit_reference: payload.auditReference,
   });
-  assertNoMutationError(error, '外部执行回执登记');
+  assertNoMutationError(error, '澶栭儴鎵ц鍥炴墽鐧昏');
 }
 
 export async function reconcileTreasuryExecution(input: TreasuryExecutionReconcileInput): Promise<void> {
@@ -661,7 +671,7 @@ export async function reconcileTreasuryExecution(input: TreasuryExecutionReconci
     p_private_note: payload.privateNote,
     p_audit_reference: payload.auditReference,
   });
-  assertNoMutationError(error, '执行对账');
+  assertNoMutationError(error, '鎵ц瀵硅处');
 }
 
 export async function loadMyOperationsSubmissions(
@@ -696,17 +706,17 @@ export async function loadMyOperationsSubmissions(
       .limit(OPERATIONS_PUBLIC_RECORD_LIMIT),
   ]);
 
-  assertNoQueryError(taskResult.error, '我的任务提交');
-  assertNoQueryError(riskResult.error, '我的风险报告');
-  assertNoQueryError(reliefResult.error, '我的救助申请');
-  assertNoQueryError(proposalResult.error, '我的治理提案');
-  assertNoQueryError(discussionResult.error, '我的治理讨论');
+  assertNoQueryError(taskResult.error, '鎴戠殑浠诲姟鎻愪氦');
+  assertNoQueryError(riskResult.error, '鎴戠殑椋庨櫓鎶ュ憡');
+  assertNoQueryError(reliefResult.error, '鎴戠殑鏁戝姪鐢宠');
+  assertNoQueryError(proposalResult.error, '鎴戠殑娌荤悊鎻愭');
+  assertNoQueryError(discussionResult.error, '鎴戠殑娌荤悊璁ㄨ');
 
   return [
     ...(taskResult.data ?? []).map((row) => ({
       id: row.id,
       kind: 'task' as const,
-      title: summarizePrivateText(row.summary, '任务成果'),
+      title: summarizePrivateText(row.summary, '浠诲姟鎴愭灉'),
       status: row.status,
       reviewerNotes: row.reviewer_notes,
       createdAt: row.created_at,
@@ -724,7 +734,7 @@ export async function loadMyOperationsSubmissions(
     ...(reliefResult.data ?? []).map((row) => ({
       id: row.id,
       kind: 'relief' as const,
-      title: summarizePrivateText(row.incident_summary, '救助申请'),
+      title: summarizePrivateText(row.incident_summary, '鏁戝姪鐢宠'),
       status: row.status,
       reviewerNotes: row.reviewer_notes,
       createdAt: row.created_at,
@@ -758,25 +768,25 @@ async function requireIntakeSession(
 ): Promise<{ client: SupabaseClient; user: User }> {
   if (!operationsBackendConfig.intakeEnabled) {
     throw new OperationsBackendError(
-      operationsBackendConfig.reason ?? '社区提交入口尚未启用',
+      operationsBackendConfig.reason ?? '绀惧尯鎻愪氦鍏ュ彛灏氭湭鍚敤',
     );
   }
 
   const client = getOperationsSupabase();
   if (!client) {
-    throw new OperationsBackendError('运营后端尚未配置');
+    throw new OperationsBackendError('杩愯惀鍚庣灏氭湭閰嶇疆');
   }
 
   const userResult = await client.auth.getUser();
   if (userResult.error || !userResult.data.user) {
-    throw new OperationsBackendError('缺少有效的钱包认证会话，请先签名认证');
+    throw new OperationsBackendError('缂哄皯鏈夋晥鐨勯挶鍖呰璇佷細璇濓紝璇峰厛绛惧悕璁よ瘉');
   }
 
   try {
     assertWalletSessionMatch(userResult.data.user, connectedWallet);
   } catch (error) {
     throw new OperationsBackendError(
-      error instanceof Error ? error.message : '钱包认证会话不匹配',
+      error instanceof Error ? error.message : 'wallet-authenticated session mismatch',
     );
   }
 
@@ -785,16 +795,15 @@ async function requireIntakeSession(
     client.rpc('current_verified_solana_wallet'),
   ]);
   if (intakeResult.error || intakeResult.data !== true) {
-    throw new OperationsBackendError('数据库端钱包提交总闸门仍为关闭状态');
+    throw new OperationsBackendError('wallet intake gate is not enabled');
   }
 
   if (walletResult.error || walletResult.data !== connectedWallet) {
-    throw new OperationsBackendError('数据库未确认当前 Web3 钱包身份，提交已中止');
+    throw new OperationsBackendError('鏁版嵁搴撴湭纭褰撳墠 Web3 閽卞寘韬唤锛屾彁浜ゅ凡涓');
   }
 
   return { client, user: userResult.data.user };
 }
-
 async function requireStaffSession(): Promise<{
   client: SupabaseClient;
   user: User;
@@ -802,29 +811,34 @@ async function requireStaffSession(): Promise<{
 }> {
   const client = getOperationsSupabase();
   if (!client) {
-    throw new OperationsBackendError('运营后端尚未配置');
+    throw new OperationsBackendError('operations backend is not configured');
   }
 
   const userResult = await client.auth.getUser();
   const user = userResult.data.user;
-  const role = resolveOperationsStaffRole(user);
-  if (userResult.error || !user || !role) {
-    throw new OperationsBackendError('当前会话没有运营审核权限');
+  if (userResult.error || !user) {
+    throw new OperationsBackendError('current session has no operations staff access');
   }
 
-  return { client, user, role };
+  const access = await readMyOperationsAccess(client);
+  if (access.status !== 'active' || !access.role) {
+    throw new OperationsBackendError('current session has no operations staff access');
+  }
+
+  return { client, user, role: access.role };
 }
+
 
 function requirePublicReadClient(): SupabaseClient {
   if (!operationsBackendConfig.publicReadEnabled) {
     throw new OperationsBackendError(
-      operationsBackendConfig.reason ?? '运营后端尚未配置',
+      operationsBackendConfig.reason ?? '杩愯惀鍚庣灏氭湭閰嶇疆',
     );
   }
 
   const client = getOperationsSupabase();
   if (!client) {
-    throw new OperationsBackendError('运营后端尚未配置');
+    throw new OperationsBackendError('杩愯惀鍚庣灏氭湭閰嶇疆');
   }
 
   return client;
@@ -832,13 +846,55 @@ function requirePublicReadClient(): SupabaseClient {
 
 function assertNoQueryError(error: { message: string } | null, label: string): void {
   if (error) {
-    throw new OperationsBackendError(`${label}读取失败；未展示缓存或模拟数据`);
+    throw new OperationsBackendError(`${label} could not be loaded`);
   }
+}
+
+async function readMyOperationsAccess(
+  client: SupabaseClient,
+): Promise<MyOperationsAccess> {
+  const result = await client.rpc('get_my_operations_access_v1');
+  if (result.error) {
+    throw new OperationsBackendError('operations access status could not be loaded');
+  }
+
+  if (!Array.isArray(result.data) || result.data.length === 0) {
+    return { role: null, status: null, expiresAt: null };
+  }
+  if (result.data.length !== 1) {
+    throw new OperationsBackendError('operations access status returned an ambiguous result');
+  }
+
+  const row = result.data[0];
+  if (typeof row !== 'object' || row === null || Array.isArray(row)) {
+    throw new OperationsBackendError('operations access status returned an invalid record');
+  }
+
+  const record = row as Record<string, unknown>;
+  const role = resolveOperationsStaffRole(record.role_name);
+  const status = resolveOperationsAccessStatus(record.status);
+  const expiresAt = record.expires_at === null
+    ? null
+    : typeof record.expires_at === 'string'
+      ? record.expires_at
+      : null;
+
+  if (status === null || (record.role_name !== null && role === null)) {
+    throw new OperationsBackendError('operations access status returned invalid values');
+  }
+
+  return { role, status, expiresAt };
+}
+
+function resolveOperationsAccessStatus(value: unknown): OperationsAccessStatus | null {
+  return value === 'active' || value === 'revoked' || value === 'expired'
+    ? value
+    : null;
 }
 
 function assertNoMutationError(error: { message: string } | null, label: string): void {
   if (error) {
-    throw new OperationsBackendError(`${label}未提交成功，请检查权限或稍后重试`);
+    throw new OperationsBackendError(`${label} was not submitted successfully`);
   }
 }
 
@@ -848,7 +904,7 @@ function summarizePrivateText(value: string, fallback: string): string {
     return fallback;
   }
 
-  return normalized.length > 80 ? `${normalized.slice(0, 77)}…` : normalized;
+  return normalized.length > 80 ? `${normalized.slice(0, 77)}...` : normalized;
 }
 
 function mapTask(row: {

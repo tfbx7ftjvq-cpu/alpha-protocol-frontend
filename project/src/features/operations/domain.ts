@@ -1,5 +1,16 @@
 export const OPERATIONS_PUBLIC_RECORD_LIMIT = 24;
 export const MAX_USDC_REQUEST = 1_000_000_000;
+export const OPERATIONS_STAFF_ROLES = [
+  'reviewer',
+  'relief_reviewer',
+  'operator',
+  'moderator',
+  'governance_admin',
+  'treasury_preparer',
+  'treasury_authorizer',
+  'executor',
+  'treasury_reconciler',
+] as const;
 
 export type CommunityTaskStatus = 'open' | 'under_review';
 export type PublicRiskStatus = 'published' | 'resolved' | 'dismissed';
@@ -7,7 +18,8 @@ export type PublicReliefOutcome = 'reviewing' | 'approved' | 'rejected' | 'paid'
 export type GovernanceDecisionValue = 'approved' | 'rejected' | 'cancelled';
 export type GovernanceProposalKind = 'task_acceptance' | 'risk_finding' | 'relief_recommendation' | 'builders_spend' | 'buyback_policy' | 'staking_policy' | 'protocol_parameter' | 'other';
 export type MyOperationsSubmissionKind = 'task' | 'risk' | 'relief' | 'proposal' | 'discussion';
-export type OperationsStaffRole = 'reviewer' | 'relief_reviewer' | 'operator' | 'moderator' | 'governance_admin' | 'treasury_preparer' | 'treasury_authorizer' | 'executor' | 'treasury_reconciler';
+export type OperationsStaffRole = typeof OPERATIONS_STAFF_ROLES[number];
+export type OperationsAccessStatus = 'active' | 'revoked' | 'expired';
 export type TreasuryExecutionStatus = 'prepared' | 'authorized' | 'reported' | 'reconciled' | 'cancelled' | 'failed';
 export type TaskReviewDecision = 'accepted' | 'rejected';
 export type RiskReviewDecision = 'published' | 'dismissed';
@@ -121,6 +133,12 @@ export interface OperationsOverview {
   governanceProposals: PublicGovernanceProposal[];
   governanceDecisions: PublicGovernanceDecision[];
   treasuryExecutions: PublicTreasuryExecutionRecord[];
+}
+
+export interface MyOperationsAccess {
+  role: OperationsStaffRole | null;
+  status: OperationsAccessStatus | null;
+  expiresAt: string | null;
 }
 
 export interface MyOperationsSubmission {
