@@ -37,7 +37,7 @@ not override it.
 | --- | --- | --- |
 | Declared program ID | `HrLBQxUD3XHkB3KABjHXTiBHuAe6jVP2UPqiwmpmH8EY` in Rust, Anchor configuration, and frontend constants | Consistent |
 | Current IDL top-level address | `HrLBQxUD3XHkB3KABjHXTiBHuAe6jVP2UPqiwmpmH8EY` | Matches declared ID |
-| Current IDL metadata address | Missing | Fail-closed blocker |
+| Current IDL metadata address | Not emitted by Anchor IDL spec `0.1.0` | Not a blocker; top-level address is the required binding |
 | Current local program-keypair public key | `BQAiU9HDA3atHN7t6jnykBTHoAKp4R4aeHSDraR6v97A` | Does not match declared ID; fail-closed blocker |
 | Existing local `.so` SHA-256 | `3b197267cec02096479b1c6eac50b2912cbafce6204d31ad66fb786d650588fe` | Uncertified pre-build artifact |
 | Existing local IDL SHA-256 | `a67b5b531c69412f9c29985adeb978ce473e5a22c711a70f521b573973ddde93` | Top-level address only |
@@ -46,10 +46,11 @@ not override it.
 | Historical local build `.so` SHA-256 | `4f2da8d84964b446c0d3dea06339aa55ea61b29eed68aa37798fe91282541fe4` | Does not match current local artifact |
 | Historical alternate dump / temporary binary SHA-256 | `b9d203d02ba5416c05fd2b43af3e2adbb229df3c7ed38cc9d9b2017fe706b20a` | Does not match current local artifact |
 
-Binary-drift verdict: **UNRESOLVED_BLOCKER**. The mismatched local keypair and missing `metadata.address`
-mean the local artifacts cannot prove correspondence to the declared program. Historical hashes are retained
-as evidence, not overwritten or explained away by a redeployment. No Devnet RPC dump was requested in this
-phase, so current deployed-byte correspondence is not asserted.
+The Phase 2E-6I binary-drift verdict was **UNRESOLVED_BLOCKER**. Phase 2E-6J establishes that the missing
+`metadata.address` is expected for Anchor IDL spec `0.1.0`; the unresolved identity issue is instead the
+unavailable matching program keypair. Historical hashes are retained as evidence, not overwritten or
+explained away by a redeployment. No Devnet RPC dump was requested in this phase, so current deployed-byte
+correspondence is not asserted.
 
 The release verifier is local and read-only. It requires explicit artifact paths and expected SHA-256 values,
 checks program ID, keypair public key, both IDL address fields, and optional supplied dump hash. It never
@@ -85,8 +86,8 @@ route operation is deliberately absent and must remain separately approved by hu
 
 - Provide a reviewed build environment, run the required one-time reproducible Anchor build, record versions,
   and produce new artifact hashes.
-- Resolve keypair/program-ID correspondence and add the required IDL `metadata.address` through the correct
-  reviewed build/source process; do not edit deployed history.
+- Recover the original program keypair or equivalent independently reviewed identity evidence; do not edit
+  deployed history or fabricate a keypair.
 - Obtain a separately approved read-only deployed-byte dump and compare it with the reviewed artifact.
 
 ### C. Remaining manual decisions

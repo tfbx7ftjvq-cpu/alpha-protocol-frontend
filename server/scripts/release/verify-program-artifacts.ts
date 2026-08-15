@@ -25,6 +25,7 @@ export type ArtifactVerification = {
 };
 
 const SHA256 = /^[a-f0-9]{64}$/;
+const ANCHOR_IDL_SPEC = "0.1.0";
 
 function requireFile(filePath: string, label: string): string {
   const resolved = path.resolve(filePath);
@@ -52,15 +53,16 @@ function readKeypairPublicKey(filePath: string): string {
   return Keypair.fromSecretKey(Uint8Array.from(parsed as number[])).publicKey.toBase58();
 }
 
-function readIdlProgramAddresses(filePath: string): { address?: string; metadataAddress?: string } {
+function readIdlProgramAddresses(filePath: string): { address?: string; metadataAddress?: string; metadataSpec?: string } {
   const parsed: unknown = JSON.parse(fs.readFileSync(filePath, "utf8"));
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error("IDL must be a JSON object");
   }
-  const idl = parsed as { address?: unknown; metadata?: { address?: unknown } };
+  const idl = parsed as { address?: unknown; metadata?: { address?: unknown; spec?: unknown } };
   return {
     address: typeof idl.address === "string" ? idl.address : undefined,
     metadataAddress: typeof idl.metadata?.address === "string" ? idl.metadata.address : undefined,
+    metadataSpec: typeof idl.metadata?.spec === "string" ? idl.metadata.spec : undefined,
   };
 }
 
@@ -94,8 +96,13 @@ export function verifyProgramArtifacts(input: ArtifactInput): ArtifactVerificati
 
   try {
     const addresses = readIdlProgramAddresses(idlPath);
+    if (addresses.metadataSpec !== ANCHOR_IDL_SPEC) result.errors.push("IDL metadata.spec is not the supported Anchor IDL spec");
     if (addresses.address !== programId) result.errors.push("IDL top-level address does not match program ID");
-    if (addresses.metadataAddress !== programId) result.errors.push("IDL metadata.address does not match program ID");
+    // Anchor IDL spec 0.1.0 binds program identity at top level. metadata.address is legacy-only;
+    // if present, it must still agree with the required top-level binding.
+    if (addresses.metadataAddress !== undefined && addresses.metadataAddress !== programId) {
+      result.errors.push("legacy IDL metadata.address does not match program ID");
+    }
   } catch (error) {
     result.errors.push(error instanceof Error ? error.message : "IDL could not be read");
   }

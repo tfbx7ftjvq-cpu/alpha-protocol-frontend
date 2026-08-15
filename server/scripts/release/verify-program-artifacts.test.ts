@@ -13,7 +13,7 @@ const programPath = path.join(fixtureDir, "program.so");
 const idlPath = path.join(fixtureDir, "program.json");
 fs.writeFileSync(keypairPath, JSON.stringify(Array.from(keypair.secretKey)));
 fs.writeFileSync(programPath, "program-fixture");
-fs.writeFileSync(idlPath, JSON.stringify({ address: keypair.publicKey.toBase58(), metadata: { address: keypair.publicKey.toBase58() } }));
+fs.writeFileSync(idlPath, JSON.stringify({ address: keypair.publicKey.toBase58(), metadata: { name: "fixture", version: "0.1.0", spec: "0.1.0" } }));
 const hash = (file: string) => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 
 const result = verifyProgramArtifacts({
@@ -26,10 +26,16 @@ assert.throws(() => verifyProgramArtifacts({
   programId: keypair.publicKey.toBase58(), programKeypairPath: keypairPath, programSoPath: programPath, idlPath,
   expectedProgramSha256: "BAD", expectedIdlSha256: hash(idlPath),
 }), /lowercase 64-character/);
-fs.writeFileSync(idlPath, JSON.stringify({ address: keypair.publicKey.toBase58(), metadata: {} }));
-const missingMetadata = verifyProgramArtifacts({
+fs.writeFileSync(idlPath, JSON.stringify({ address: keypair.publicKey.toBase58(), metadata: { name: "fixture", version: "0.1.0", spec: "0.1.0", address: Keypair.generate().publicKey.toBase58() } }));
+const legacyAddressMismatch = verifyProgramArtifacts({
   programId: keypair.publicKey.toBase58(), programKeypairPath: keypairPath, programSoPath: programPath, idlPath,
   expectedProgramSha256: hash(programPath), expectedIdlSha256: hash(idlPath),
 });
-assert.strictEqual(missingMetadata.status, "UNRESOLVED_BLOCKER");
+assert.strictEqual(legacyAddressMismatch.status, "UNRESOLVED_BLOCKER");
+fs.writeFileSync(idlPath, JSON.stringify({ address: Keypair.generate().publicKey.toBase58(), metadata: { name: "fixture", version: "0.1.0", spec: "0.1.0" } }));
+const topLevelAddressMismatch = verifyProgramArtifacts({
+  programId: keypair.publicKey.toBase58(), programKeypairPath: keypairPath, programSoPath: programPath, idlPath,
+  expectedProgramSha256: hash(programPath), expectedIdlSha256: hash(idlPath),
+});
+assert.strictEqual(topLevelAddressMismatch.status, "UNRESOLVED_BLOCKER");
 console.log("program artifact verifier tests passed");
