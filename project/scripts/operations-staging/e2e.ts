@@ -1157,27 +1157,43 @@ async function revokeOperationsRole(
   assertNoError(result.error, 'revoke operations role');
 }
 
-async function cleanupOperationsRoles(
+export async function cleanupOperationsRoles(
   admin: SupabaseClient,
   userIds: string[],
   runReference: string,
   errors: string[],
 ): Promise<void> {
   for (const userId of [...new Set(userIds)].reverse()) {
-    const result = await admin.rpc('inspect_operations_role_v1', {
-      p_user_id: userId,
-    });
-    if (result.error) {
-      errors.push('operations role inspection cleanup failed');
-      continue;
-    }
-    const row = readSingleRpcRow(result.data, 'operations role cleanup inspection');
-    if (row.status === 'active') {
-      try {
-        await revokeOperationsRole(admin, userId, `${runReference}:cleanup:revoke:${userId}`);
-      } catch {
-        errors.push('operations role revoke cleanup failed');
+    try {
+      const result = await admin.rpc('inspect_operations_role_v1', {
+        p_user_id: userId,
+      });
+      if (result.error || !Array.isArray(result.data)) {
+        errors.push('operations role inspection cleanup failed');
+        continue;
       }
+      if (result.data.length === 0) {
+        continue;
+      }
+      if (result.data.length !== 1) {
+        errors.push('operations role inspection cleanup returned multiple rows');
+        continue;
+      }
+
+      const row = readUnknownRecord(result.data[0]);
+      if (!row) {
+        errors.push('operations role inspection cleanup failed');
+        continue;
+      }
+      if (row.status === 'active') {
+        try {
+          await revokeOperationsRole(admin, userId, `${runReference}:cleanup:revoke:${userId}`);
+        } catch {
+          errors.push('operations role revoke cleanup failed');
+        }
+      }
+    } catch {
+      errors.push('operations role inspection cleanup failed');
     }
   }
 }
@@ -1241,7 +1257,7 @@ async function createActor(
 
     return { user: signInResult.data.user, client, walletAddress: null };
   } catch (error) {
-    await admin.auth.admin.deleteUser(createResult.data.user.id);
+    await admin.auth.admin.deleteUser(createResult.data.user.id, true);
     throw error;
   }
 }
@@ -1300,7 +1316,7 @@ async function createWalletActor(
       walletAddress: keypair.publicKey.toBase58(),
     };
   } catch (error) {
-    await admin.auth.admin.deleteUser(signInResult.data.user.id);
+    await admin.auth.admin.deleteUser(signInResult.data.user.id, true);
     throw error;
   }
 }
@@ -1448,11 +1464,15 @@ async function cleanupStagingFixtures(
   await cleanupOperationsRoles(admin, userIds, rows.runReference, errors);
 
   for (const userId of [...userIds].reverse()) {
-    const result = await admin.auth.admin.deleteUser(userId);
-    if (result.error) {
+    try {
+      const result = await admin.auth.admin.deleteUser(userId, true);
+      if (result.error) {
+        errors.push('test user cleanup failed');
+      } else {
+        usersDeleted += 1;
+      }
+    } catch {
       errors.push('test user cleanup failed');
-    } else {
-      usersDeleted += 1;
     }
   }
 

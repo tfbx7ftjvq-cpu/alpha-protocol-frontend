@@ -1,12 +1,108 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  cleanupOperationsRoles,
   isExactCleanupDeletion,
   readReliefPaymentStateCounts,
   readReliefWorkflowCleanupCounts,
   readRiskWorkflowCleanupCounts,
   readTaskWorkflowCleanupCounts,
 } from '../scripts/operations-staging/e2e.ts';
+
+function cleanupRoleAdmin(
+  roleRowsByUserId: Record<string, unknown>,
+): {
+  calls: Array<{ name: string; params: Record<string, unknown> }>;
+  admin: Parameters<typeof cleanupOperationsRoles>[0];
+} {
+  const calls: Array<{ name: string; params: Record<string, unknown> }> = [];
+  const admin = {
+    rpc: async (name: string, params: Record<string, unknown>) => {
+      calls.push({ name, params });
+      if (name === 'inspect_operations_role_v1') {
+        return { data: roleRowsByUserId[String(params.p_user_id)], error: null };
+      }
+      return { data: null, error: null };
+    },
+  } as unknown as Parameters<typeof cleanupOperationsRoles>[0];
+  return { calls, admin };
+}
+
+test('operations role cleanup skips users with no role assignment', async () => {
+  const { admin, calls } = cleanupRoleAdmin({ unassigned: [] });
+  const errors: string[] = [];
+
+  await cleanupOperationsRoles(admin, ['unassigned'], 'run', errors);
+
+  assert.deepEqual(errors, []);
+  assert.deepEqual(calls, [{
+    name: 'inspect_operations_role_v1',
+    params: { p_user_id: 'unassigned' },
+  }]);
+});
+
+test('operations role cleanup revokes one active assignment', async () => {
+  const { admin, calls } = cleanupRoleAdmin({ active: [{ status: 'active' }] });
+  const errors: string[] = [];
+
+  await cleanupOperationsRoles(admin, ['active'], 'run', errors);
+
+  assert.deepEqual(errors, []);
+  assert.deepEqual(calls, [
+    {
+      name: 'inspect_operations_role_v1',
+      params: { p_user_id: 'active' },
+    },
+    {
+      name: 'revoke_operations_role_v1',
+      params: {
+        p_user_id: 'active',
+        p_revoke_reference: 'run:cleanup:revoke:active',
+      },
+    },
+  ]);
+});
+
+test('operations role cleanup fails closed for multiple assignments', async () => {
+  const { admin, calls } = cleanupRoleAdmin({
+    duplicated: [{ status: 'active' }, { status: 'active' }],
+  });
+  const errors: string[] = [];
+
+  await cleanupOperationsRoles(admin, ['duplicated'], 'run', errors);
+
+  assert.deepEqual(errors, ['operations role inspection cleanup returned multiple rows']);
+  assert.deepEqual(calls, [{
+    name: 'inspect_operations_role_v1',
+    params: { p_user_id: 'duplicated' },
+  }]);
+});
+
+test('operations role cleanup records one user failure and continues', async () => {
+  const calls: string[] = [];
+  const admin = {
+    rpc: async (name: string, params: Record<string, unknown>) => {
+      calls.push(`${name}:${params.p_user_id}`);
+      if (name === 'inspect_operations_role_v1' && params.p_user_id === 'failed') {
+        return { data: null, error: new Error('inspection failed') };
+      }
+      if (name === 'inspect_operations_role_v1') {
+        return { data: [{ status: 'active' }], error: null };
+      }
+      return { data: null, error: null };
+    },
+  } as unknown as Parameters<typeof cleanupOperationsRoles>[0];
+  const errors: string[] = [];
+
+  await cleanupOperationsRoles(admin, ['active', 'failed'], 'run', errors);
+
+  assert.deepEqual(errors, ['operations role inspection cleanup failed']);
+  assert.deepEqual(calls, [
+    'inspect_operations_role_v1:failed',
+    'inspect_operations_role_v1:active',
+    'revoke_operations_role_v1:active',
+  ]);
+});
 
 test('relief payment inspection accepts one complete non-negative count receipt', () => {
   assert.deepEqual(

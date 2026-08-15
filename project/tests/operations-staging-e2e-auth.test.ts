@@ -125,6 +125,11 @@ test('Phase 4O E2E proves relief approval is not payment and cleans exact fixtur
   assert.equal(increments, 61);
 });
 
+test('temporary Auth fixtures are soft-deleted to preserve role audit records', () => {
+  assert.match(e2eSource, /admin\.auth\.admin\.deleteUser\([^,]+, true\)/);
+  assert.doesNotMatch(e2eSource, /admin\.auth\.admin\.deleteUser\([^,]+\)(?!,)/);
+});
+
 test('governance discussion E2E uses an independent moderator and audited RPCs', () => {
   assert.match(e2eSource, /const moderator = await createActor\(admin, config, runId, 'moderator', 'moderator'\)/);
   assert.match(e2eSource, /ownerA\.client\.rpc\('submit_governance_discussion_v1'/);
