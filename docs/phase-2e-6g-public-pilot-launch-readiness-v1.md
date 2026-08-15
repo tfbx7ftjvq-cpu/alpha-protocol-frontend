@@ -26,6 +26,35 @@ Solana execution path.
   networking or mutations. A human supplies and reviews real evidence outside
   Git before any launch decision.
 
+## External evidence handoff
+
+For a human review only, each real evidence file may be passed explicitly:
+
+```bash
+npm run operations:pilot:verify -- \
+  --release-evidence [external-release-json] \
+  --role-plan [external-role-plan-json] \
+  --recovery-evidence [external-recovery-json] \
+  --staging-e2e-evidence [external-staging-e2e-json]
+```
+
+The equivalent non-browser environment variables are
+`OPERATIONS_PILOT_RELEASE_EVIDENCE_PATH`,
+`OPERATIONS_PILOT_ROLE_PLAN_PATH`,
+`OPERATIONS_PILOT_RECOVERY_EVIDENCE_PATH`, and
+`OPERATIONS_PILOT_STAGING_E2E_EVIDENCE_PATH`. Do not prefix them with `VITE_`.
+Every explicit file must resolve outside the Git working tree and is rejected
+if it contains a secret, JWT, token, email address, wallet private key, or
+service-role key. CI supplies none of these paths and therefore always checks
+only the templates and reports `NO-GO` without using secrets.
+
+Release evidence must be downloaded `release.json` with a lowercase 40-character
+commit SHA, `branch: main`, and `buildContext: cloudflare-pages`. Recovery
+evidence retains `gateMode: disabled`. Wallet Staging E2E evidence instead
+records `executionGateMode: wallet_staging`,
+`postE2EGateMode: wallet_staging`, `cleanupPassed: true`, and
+`noChainTransaction: true`.
+
 ## Pilot checklist
 
 1. Verify the deployed Pages release commit and 2E-6F release inspect record.

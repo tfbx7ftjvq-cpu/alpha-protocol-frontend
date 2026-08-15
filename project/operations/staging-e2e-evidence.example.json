@@ -4,6 +4,8 @@
   "environment": "staging",
   "migrationThrough": "202608110002",
   "walletE2EPassed": true,
-  "gateMode": "disabled",
+  "executionGateMode": "wallet_staging",
+  "postE2EGateMode": "wallet_staging",
+  "cleanupPassed": true,
   "noChainTransaction": true
 }

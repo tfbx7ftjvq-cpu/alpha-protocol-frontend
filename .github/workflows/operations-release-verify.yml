@@ -28,4 +28,5 @@ jobs:
           cache-dependency-path: project/package-lock.json
       - run: npm ci
       - run: npm run release:verify
-      - run: npm run operations:pilot:verify
+      - name: Validate local Public Pilot templates without external evidence
+        run: npm run operations:pilot:verify
