@@ -2,6 +2,13 @@
 
 Alpha Protocol 是 Solana 上的链上国库、绿标认证、散户救济与未来保险/理赔协议原型。
 
+## 项目权威目标与上线清单
+
+`docs/alpha-protocol-canonical-product-charter-and-launch-checklist-v1.md`
+是项目范围、收入模型、DAO 权限边界、反闪电治理和上线优先级的唯一权威入口。
+若阶段文档、旧 README 状态或自动生成的工作摘要与该文件冲突，以该文件为准；
+任何核心模型变更必须由项目所有者明确确认并同步更新该文件。
+
 ## 当前仓库结构
 
 - `project/` 是 Vite + React + TypeScript 前端。

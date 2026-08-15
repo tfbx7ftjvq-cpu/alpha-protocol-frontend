@@ -36,6 +36,7 @@ export default function LaunchTransparencyDashboard() {
               <Badge text="Mainnet launch layer" tone="yellow" />
               <Badge text={config.status === 'live' ? 'LIVE' : 'PRELAUNCH'} tone={config.status === 'live' ? 'green' : 'zinc'} />
               <Badge text="Zero-funded treasury" tone="cyan" />
+              <Badge text="Pump Creator Fee / Platform Revenue" tone="cyan" />
             </div>
             <h2 className="mt-4 text-2xl font-black text-zinc-100">零初始国库 · 收入驱动运行</h2>
             <p className="mt-2 max-w-4xl text-xs leading-relaxed text-zinc-400">

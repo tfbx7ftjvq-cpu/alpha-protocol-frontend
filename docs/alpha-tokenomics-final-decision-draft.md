@@ -54,7 +54,7 @@ Review `docs/fair-launch-decision-checklist.md` before any token launch approval
 The old allocation checklist has been replaced by the Fair Launch decision checklist. Under the corrected model, follow-up decisions should focus only on:
 
 - Total supply.
-- Launch platform.
+- Launch platform: Pump (confirmed; it does not approve launch mechanics or timing).
 - Initial liquidity setup.
 - Pairing asset.
 - Mint authority policy.
@@ -66,7 +66,9 @@ The old allocation checklist has been replaced by the Fair Launch decision check
 
 The user no longer needs to approve team allocation, team vesting, builders token allocation, staking token reserve, DAO treasury token allocation, airdrop bucket, or Option A / B / C allocation models.
 
-The checklist is partially complete. Core Fair Launch decisions are confirmed, while launch platform, liquidity, pairing asset, authority policy, LP handling, communication, preheating timing, and token launch timing remain pending.
+The checklist is partially complete. Core Fair Launch decisions and Pump as launch platform are confirmed,
+while liquidity, pairing asset, authority policy, LP handling, communication, preheating timing, and token
+launch timing remain pending.
 
 ## 6. Token Supply
 
@@ -157,7 +159,7 @@ Future spending should be transparent and governance-reviewed.
 - [x] No DAO treasury token allocation at launch confirmed.
 - [x] No staking token reserve at launch confirmed.
 - [x] No builders / contributors token allocation at launch confirmed.
-- [ ] Launch platform confirmed.
+- [x] Launch platform confirmed: Pump.
 - [ ] Initial liquidity setup confirmed.
 - [ ] Pairing asset confirmed, such as SOL or USDC.
 - [ ] Mint authority policy confirmed.
@@ -187,7 +189,7 @@ Recommended current decision:
 - Use Fair Launch model.
 - Use confirmed total supply: `1,000,000,000 ALPHA`.
 - Do not create project-side, team, VC, DAO treasury, staking reserve, builders, or airdrop token buckets.
-- Require launch platform, liquidity setup, mint / freeze authority policy, LP handling, official communication, anti-scam warnings, and legal / risk review before token launch.
+- Require liquidity setup, mint / freeze authority policy, LP handling, official communication, anti-scam warnings, and legal / risk review before token launch. Pump is confirmed as platform.
 - Keep immediate token launch as NO-GO until pending operational launch decisions are complete.
 - Continue community preheating with warnings.
 

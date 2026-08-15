@@ -342,7 +342,7 @@ Recommended language:
 ### Phase C: Token Launch Decision Review
 
 - Fair Launch core decisions are confirmed; complete operational launch decision review.
-- Select launch platform.
+- Pump is the confirmed launch platform; do not treat this as launch authorization.
 - Confirm initial liquidity setup and pairing asset.
 - Confirm mint / freeze authority policy.
 - Complete launch communication review.
@@ -395,7 +395,7 @@ Before any formal public preheat:
 
 Before any token launch communication:
 
-- Do not announce a launch date until launch platform, liquidity setup, pairing asset, mint / freeze authority policy, and LP / custody decisions are confirmed.
+- Do not announce a launch date until liquidity setup, pairing asset, mint / freeze authority policy, and LP / custody decisions are confirmed. Pump is the confirmed platform.
 - Do not publish a buy link until official launch.
 - All communication must state no team / VC / project-side reserved token allocation.
 - All communication must state `50 / 20 / 20 / 10` is future protocol revenue split, not token allocation.

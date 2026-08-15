@@ -153,7 +153,7 @@ Green Label is not insurance.
 Before launch, the project must confirm:
 
 - Total supply.
-- Launch platform.
+- Launch platform: Pump (confirmed; launch remains unapproved).
 - Initial liquidity setup.
 - Pairing asset, such as SOL or USDC.
 - Mint authority policy.

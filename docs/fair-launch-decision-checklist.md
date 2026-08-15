@@ -65,20 +65,20 @@ Notes:
 
 ## 5. Decision Area 2: Launch Platform
 
-- Status: pending final decision.
-- Launch platform must be selected before token launch.
-- The platform choice affects liquidity setup, launch mechanics, discoverability, bot risk, user experience, and communication.
+- Status: CONFIRMED — Pump.
+- Pump is the selected Fair Launch platform. This does not approve a launch or determine the pairing asset,
+  liquidity, authority, or communication decisions that remain below.
 
 Checklist:
 
-- [ ] Compare available Solana fair-launch / launch options.
-- [ ] Confirm launch platform.
+- [x] Confirm Pump as launch platform.
 - [ ] Confirm launch mechanics.
 - [ ] Confirm whether launch uses bonding curve, AMM pool, or another mechanism.
 - [ ] Confirm official launch link policy.
 - [ ] Confirm anti-scam warning wording.
 
-No specific launch platform is recommended in this document. The launch platform remains TBD / pending.
+Pump Creator Fee is treated as `PlatformRevenue` only when settlement is canonical USDC. No automatic
+SOL-to-USDC conversion is authorized or implemented.
 
 ## 6. Decision Area 3: Initial Liquidity Setup
 
@@ -205,7 +205,7 @@ Checklist:
 - [x] VC allocation confirmed as `0`.
 - [x] Initial token bucket allocation confirmed as none.
 - [x] Treasury revenue split confirmed as `50 / 20 / 20 / 10` for future protocol revenue only.
-- [ ] Launch platform confirmed.
+- [x] Launch platform confirmed: Pump.
 - [ ] Initial liquidity setup confirmed.
 - [ ] Pairing asset confirmed.
 - [ ] Mint authority policy confirmed.

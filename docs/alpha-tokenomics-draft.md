@@ -141,7 +141,7 @@ The full ALPHA voting layer is pending and should not be described as fully laun
 
 Formal token launch remains pending and requires:
 
-- Launch platform selection.
+- Pump launch platform selection is confirmed; all other launch operations remain pending.
 - Initial liquidity setup.
 - Pairing asset decision, such as SOL or USDC.
 - Mint authority policy.
@@ -193,5 +193,5 @@ Recommended current position:
 - Use Fair Launch model.
 - Use confirmed total supply: `1,000,000,000 ALPHA`.
 - Do not use project-side, team, VC, DAO treasury, staking reserve, builders, or airdrop token buckets at launch.
-- Keep immediate token launch as NO-GO until launch platform, liquidity setup, authority policy, communication, and risk review are complete.
+- Keep immediate token launch as NO-GO until liquidity setup, authority policy, communication, and risk review are complete. Pump as platform is confirmed.
 - Community preheating can explain Fair Launch with clear warnings.

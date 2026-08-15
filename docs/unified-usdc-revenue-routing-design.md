@@ -124,6 +124,9 @@ Refundable escrow funds are not Treasury revenue while they remain refundable. T
 - Builders payout governance is not implemented in this phase.
 - DAO voting is not implemented in this phase.
 - Token launch remains NO-GO.
+- Pump Creator Fee may be classified as `RevenueType::PlatformRevenue` only after a separate human-reviewed
+  canonical-USDC receipt. Non-USDC settlement (including SOL) must stop automatic routing; this router does
+  not convert SOL to USDC and no conversion path is authorized.
 
 ## Green Label Certification Fee Route
 

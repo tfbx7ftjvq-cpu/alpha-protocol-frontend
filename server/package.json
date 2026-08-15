@@ -36,6 +36,9 @@
     "devnet:authority:recovery-unpause-e2e": "tsx scripts/protocol-authority/recovery-unpause-e2e.ts",
     "devnet:authority:verify-legacy-fail-close": "tsx scripts/protocol-authority/verify-legacy-fail-close.ts",
     "tooling:test": "ts-node --transpile-only scripts/devnet/alpha-v1/common.test.ts",
+    "release:verify-program-artifacts": "tsx scripts/release/verify-program-artifacts.ts",
+    "revenue:pump-creator-fee-usdc": "tsx scripts/revenue/pump-creator-fee-usdc.ts",
+    "revenue:tooling:test": "tsx scripts/release/verify-program-artifacts.test.ts && tsx scripts/revenue/pump-creator-fee-usdc.test.ts",
     "devnet:prelaunch:sanity": "tsx scripts/sanity/mainnet-prelaunch-readonly-check.ts",
     "mainnet:prelaunch:sanity": "tsx scripts/sanity/mainnet-prelaunch-readonly-check.ts"
   },

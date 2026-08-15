@@ -21,6 +21,8 @@ It does not constitute investment advice, a return promise, a price promise, a d
 | VC Allocation | `0` |
 | Initial Token Bucket Allocation | None |
 | Market Access | Open market after launch |
+| Launch Platform | Pump |
+| Primary Revenue Route | Pump Creator Fee / Platform Revenue settled in USDC only |
 | Treasury Revenue Split | `50 / 20 / 20 / 10` applies only to future protocol revenue |
 
 ## 3. Fair Launch Meaning
@@ -54,7 +56,6 @@ Additional constraints:
 
 The following operational launch decisions are still pending:
 
-- Launch platform.
 - Initial liquidity setup.
 - Pairing asset, such as SOL or USDC.
 - Mint authority policy.
@@ -64,6 +65,10 @@ The following operational launch decisions are still pending:
 - Anti-scam warning.
 - Community preheating timing.
 - Token launch timing.
+
+Pump is the confirmed Fair Launch platform. This confirms neither the trading pair nor Pump UI settings,
+liquidity mechanics, mint/freeze authority policy, or launch timing. A non-USDC creator-fee settlement is
+not eligible for automatic routing: there is no automatic SOL-to-USDC conversion path.
 
 ## 6. Current Status
 

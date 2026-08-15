@@ -52,7 +52,7 @@ The current product is best described as a Devnet-verified, read-only Public MVP
 | Mainnet Safety | Framework completed | Go/No-Go checklist, prelaunch hardening, authority migration plan, sanity scripts, and runbook exist. | Ready with warnings |
 | Legal / Regulatory Review | Not completed | No formal legal / regulatory sign-off recorded. | Not ready |
 | Community Materials | Drafting needed | Public landing and Litepaper exist, but announcement copy, screenshots, FAQ, and launch posts are not finalized. | Needs review |
-| Tokenomics Finalization | Core Fair Launch decisions confirmed | Total supply, Fair Launch model, no project / team / VC allocation, no initial token buckets, and Treasury revenue split are confirmed. Launch platform, liquidity setup, mint / freeze authority, and communication remain pending. | Ready with warnings |
+| Tokenomics Finalization | Core Fair Launch decisions confirmed | Total supply, Fair Launch model, no project / team / VC allocation, no initial token buckets, Treasury revenue split, and Pump as launch platform are confirmed. Liquidity setup, mint / freeze authority, and communication remain pending. | Ready with warnings |
 
 ## 4. Token Launch Readiness
 
@@ -63,7 +63,7 @@ Reasons:
 - Mainnet not live.
 - Legal / regulatory review not completed.
 - Core Fair Launch decisions are confirmed, but operational token launch decisions remain pending.
-- Launch platform, liquidity setup, mint / freeze authority, and LP handling not finalized.
+- Pump is confirmed as launch platform; liquidity setup, mint / freeze authority, and LP handling are not finalized.
 - ALPHA voting layer not completed.
 - Public community materials not finalized.
 - Launch communication not reviewed.
@@ -78,7 +78,7 @@ However, the project is close to a public preview / community preheating stage. 
 - Project-side / team / VC reserved allocation confirmed: `0`.
 - Initial token bucket allocation confirmed: none.
 - Formal token launch should not proceed before pending operational launch decisions are complete.
-- Launch platform, liquidity setup, pairing asset, mint / freeze authority, LP handling, communication, and risk disclosures must be reviewed before launch.
+- Pump is confirmed as launch platform; liquidity setup, pairing asset, mint / freeze authority, LP handling, communication, and risk disclosures must be reviewed before launch.
 - Immediate token launch remains NO-GO.
 
 ## 6. Tokenomics Allocation Review
@@ -87,7 +87,7 @@ However, the project is close to a public preview / community preheating stage. 
 - Previous allocation review is superseded by the Fair Launch model.
 - The old `35/20/15/15/10/5` token bucket model is no longer recommended.
 - Alpha Protocol will not use initial team, VC, project-side, DAO treasury, staking reserve, builders, or airdrop token buckets at launch.
-- Tokenomics freeze is pending operational decisions on launch platform, liquidity setup, pairing asset, mint / freeze authority, LP handling, official communication, and risk review.
+- Tokenomics freeze is pending operational decisions on liquidity setup, pairing asset, mint / freeze authority, LP handling, official communication, and risk review; Pump is confirmed as launch platform.
 - Immediate token launch remains NO-GO.
 
 ## 7. Tokenomics Final Decision Draft
@@ -97,7 +97,7 @@ However, the project is close to a public preview / community preheating stage. 
 - Recommended draft: Fair Launch model with no project-side, team, VC, DAO treasury, staking reserve, builders, or airdrop token buckets at launch.
 - `1,000,000,000 ALPHA` is confirmed total supply.
 - Core Fair Launch decisions are confirmed, but operational launch decisions remain pending.
-- Immediate token launch remains NO-GO until launch platform, liquidity setup, pairing asset, mint / freeze authority, LP handling, official communication, anti-scam warnings, and legal / risk review are complete.
+- Immediate token launch remains NO-GO until liquidity setup, pairing asset, mint / freeze authority, LP handling, official communication, anti-scam warnings, and legal / risk review are complete; Pump is confirmed as launch platform.
 
 ## 8. Fair Launch Core Decisions Confirmed
 
@@ -150,7 +150,7 @@ Public preview should be framed as transparency, research, Devnet verification, 
 The following must be completed before a formal token launch:
 
 - Final tokenomics operational review.
-- Launch platform decision.
+- Pump launch platform confirmation (recorded; no launch authorization).
 - Initial liquidity setup and pairing asset.
 - Mint / freeze authority policy.
 - Liquidity custody / LP handling.

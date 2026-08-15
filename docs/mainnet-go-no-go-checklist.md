@@ -192,7 +192,7 @@ Manual review notes:
 
 - Review `docs/alpha-tokenomics-draft.md` before any token launch decision.
 - Fair Launch model, total supply, no project / team / VC allocation, no initial token bucket allocation, and Treasury revenue split are confirmed.
-- Launch platform, initial liquidity setup, pairing asset, mint / freeze authority policy, liquidity custody / LP handling, official communication, anti-scam warnings, and risk disclosure review remain token launch preconditions.
+- Pump is the confirmed launch platform. Initial liquidity setup, pairing asset, mint / freeze authority policy, liquidity custody / LP handling, official communication, anti-scam warnings, and risk disclosure review remain token launch preconditions.
 - If any pending operational launch decision remains unresolved, token launch decision must be NO-GO.
 - The tokenomics draft does not approve immediate token launch and must not be used as a yield, dividend, insurance, or price appreciation promise.
 
@@ -203,7 +203,7 @@ Manual review notes:
 - Alpha Protocol will not use initial token allocation buckets at launch.
 - Core Fair Launch decisions are confirmed.
 - Token launch remains NO-GO until pending operational launch decisions are completed.
-- Launch platform, initial liquidity setup, pairing asset, liquidity custody / LP handling, authority policy, and communication must be finalized before token launch.
+- Pump is the confirmed launch platform; initial liquidity setup, pairing asset, liquidity custody / LP handling, authority policy, and communication must be finalized before token launch.
 - The `50 / 20 / 20 / 10` split is protocol revenue split, not token supply allocation.
 
 ## 16. Tokenomics Final Decision Draft
@@ -214,7 +214,7 @@ Manual review notes:
 - `1,000,000,000 ALPHA` is confirmed total supply.
 - Core Fair Launch decisions are recorded in `docs/fair-launch-confirmed-decisions.md`.
 - Token launch requires final operational launch sign-off.
-- Unresolved launch platform, initial liquidity setup, pairing asset, mint / freeze authority policy, liquidity custody / LP handling, official communication, anti-scam warnings, and legal / risk review remain blockers.
+- Initial liquidity setup, pairing asset, mint / freeze authority policy, liquidity custody / LP handling, official communication, anti-scam warnings, and legal / risk review remain blockers. Pump is confirmed as platform.
 - The final decision draft does not approve immediate token launch.
 
 ## 17. Green Label Strict Forfeit Governance
@@ -233,8 +233,8 @@ Manual review notes:
   - No project / team / VC allocation confirmed.
   - Initial token bucket allocation confirmed: none.
   - Treasury revenue split confirmed: `50 / 20 / 20 / 10` applies only to future protocol revenue.
+  - Launch platform confirmed: Pump.
 - Remaining blockers:
-  - Launch platform must be confirmed.
   - Initial liquidity setup must be confirmed.
   - Pairing asset must be confirmed.
   - Mint / freeze authority policy must be handled and publicly disclosed.

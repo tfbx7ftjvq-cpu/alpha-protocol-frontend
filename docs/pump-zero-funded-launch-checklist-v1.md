@@ -41,14 +41,14 @@ Record before signing:
 - [ ] Record Creator Rewards recipient.
 - [ ] Execute no treasury distribution until a real reward receipt is observed.
 - [ ] Verify the first receipt asset and amount.
-- [ ] If received as SOL, record conversion transaction and resulting USDC separately.
+- [ ] If settlement is not USDC, stop automatic revenue routing; record it as manual-review evidence only.
 - [ ] Configure frontend public values.
 - [ ] Change launch status to `live` only after all values are independently checked.
 - [ ] Publish explorer links.
 
 ## Revenue batch
 
-- [ ] Confirm eligible USDC revenue.
+- [ ] Confirm eligible canonical-USDC Pump Creator Fee / Platform Revenue.
 - [ ] Exclude refundable Green Label escrow.
 - [ ] Assign a unique batch ID.
 - [ ] Calculate 50/20/20/10 using deterministic rounding.
@@ -56,6 +56,9 @@ Record before signing:
 - [ ] Record transaction signatures.
 - [ ] Reconcile pre/post balances.
 - [ ] Publish any rounding remainder.
+
+No automatic SOL-to-USDC conversion is authorized. The offline manifest helper only inspects and prepares
+the fixed `50 / 20 / 20 / 10` USDC routing evidence; it does not construct or submit a transaction.
 
 ## Explicitly not authorized
 

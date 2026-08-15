@@ -116,7 +116,7 @@ Future spending should be transparent and governance-reviewed.
 
 Fair Launch still requires:
 
-- Launch platform.
+- Launch platform: Pump (confirmed; not launch approval).
 - Initial liquidity setup.
 - Pairing asset decision, such as SOL or USDC.
 - Mint authority policy.
@@ -131,7 +131,7 @@ Fair Launch still requires:
 The user still needs to decide:
 
 - Whether total supply is `1,000,000,000 ALPHA`.
-- Launch platform.
+- Launch platform: Pump (confirmed; not launch approval).
 - Initial liquidity setup.
 - Pairing asset, such as SOL or USDC.
 - Mint authority policy.

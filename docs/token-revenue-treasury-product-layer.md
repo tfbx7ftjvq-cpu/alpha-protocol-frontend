@@ -150,7 +150,7 @@ Before Mainnet or token launch:
 
 - Confirm Fair Launch model.
 - Confirm total supply.
-- Select launch platform.
+- Pump is the confirmed launch platform; this is not token-launch authorization.
 - Confirm initial liquidity setup.
 - Confirm pairing asset, such as SOL or USDC.
 - Confirm mint authority policy.
