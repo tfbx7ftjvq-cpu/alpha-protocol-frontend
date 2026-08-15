@@ -1,11 +1,31 @@
 import { defineConfig } from 'vite';
+import type { Plugin } from 'vite';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import { NodeGlobalsPolyfillPlugin } from '@esbuild-plugins/node-globals-polyfill';
+import { resolveReleaseManifest } from './scripts/release-manifest.ts';
+
+function releaseManifestPlugin(): Plugin {
+  return {
+    name: 'alpha-release-manifest',
+    apply: 'build',
+    closeBundle() {
+      const distDirectory = resolve(process.cwd(), 'dist');
+      mkdirSync(distDirectory, { recursive: true });
+      writeFileSync(
+        resolve(distDirectory, 'release.json'),
+        `${JSON.stringify(resolveReleaseManifest())}\n`,
+        'utf8',
+      );
+    },
+  };
+}
 
 // https://vitejs.dev/config/
 export default defineConfig({
   publicDir: '../public',
-  plugins: [react()],
+  plugins: [react(), releaseManifestPlugin()],
   optimizeDeps: {
     esbuildOptions: {
       // 告诉 Esbuild 在预构建阶段注入 Node 全局变量

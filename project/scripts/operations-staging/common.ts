@@ -16,6 +16,7 @@ export const OPERATIONS_STAGING_ROLE_REVOKE_CONFIRMATION =
 
 export type OperationsStagingMode =
   | 'preflight'
+  | 'release-inspect'
   | 'e2e'
   | 'gate-inspect'
   | 'gate-activate'

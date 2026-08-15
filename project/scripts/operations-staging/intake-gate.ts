@@ -117,6 +117,9 @@ function createOperationsGateClient(supabaseUrl: string, serviceRoleKey: string)
       detectSessionInUrl: false,
       persistSession: false,
     },
+    global: {
+      fetch: (input, init) => fetch(input, { ...init, redirect: 'error' }),
+    },
   });
 }
 

@@ -18,6 +18,10 @@ Alpha Protocol 是 Solana 上的链上国库、绿标认证、散户救济与未
 
 ## 当前尚未实现功能
 
+The following historic prototype inventory is not the current release-status
+source of truth. It is superseded by the Devnet, off-chain Staging, and Mainnet
+boundaries documented below and in the Phase 2E-6F runbook.
+
 - 真实链上 `TreasuryState`。
 - `deposit` 指令。
 - 50/20/20/10 链上分账。
@@ -45,3 +49,13 @@ anchor build
 ## 当前阶段声明
 
 当前项目仍处于 MVP / prototype 阶段，不能用于真实资金托管或主网生产环境。
+
+## Deployment boundary (Phase 2E-6F)
+
+The repository contains verified Devnet-oriented Solana program work and a
+separate off-chain Supabase Staging operations boundary. The Pages frontend can
+publish static release evidence at `/release.json`, but a Pages Production
+deployment is not a Mainnet deployment, custody system, authority change, or
+funds movement. Mainnet remains unlaunched. See
+`docs/phase-2e-6f-release-monitoring-recovery-and-launch-operations-v1.md` for
+the release, monitoring, recovery, and human-only rollback procedure.

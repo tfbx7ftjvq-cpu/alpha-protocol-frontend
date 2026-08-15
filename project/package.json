@@ -12,6 +12,7 @@
     "operations:test": "node --experimental-strip-types --test tests/*.test.ts",
     "operations:tooling:typecheck": "tsc --noEmit -p tsconfig.operations.json",
     "operations:staging:preflight": "node --experimental-strip-types scripts/operations-staging/preflight.ts",
+    "operations:staging:release:inspect": "node --experimental-strip-types scripts/operations-staging/release-readiness.ts",
     "operations:staging:e2e": "node --experimental-strip-types scripts/operations-staging/e2e.ts",
     "operations:staging:gate:inspect": "node --experimental-strip-types scripts/operations-staging/intake-gate.ts inspect",
     "operations:staging:gate:activate": "node --experimental-strip-types scripts/operations-staging/intake-gate.ts activate",
@@ -19,7 +20,9 @@
     "operations:staging:roles:inspect": "node --experimental-strip-types scripts/operations-staging/operations-roles.ts inspect",
     "operations:staging:roles:grant": "node --experimental-strip-types scripts/operations-staging/operations-roles.ts grant",
     "operations:staging:roles:revoke": "node --experimental-strip-types scripts/operations-staging/operations-roles.ts revoke",
-    "operations:verify": "npm run operations:test && npm run operations:tooling:typecheck && npm run lint"
+    "release:artifact:verify": "node --experimental-strip-types scripts/release-artifact-verify.ts",
+    "operations:verify": "npm run operations:test && npm run operations:tooling:typecheck && npm run typecheck && npm run lint && npm run build",
+    "release:verify": "npm run operations:test && npm run operations:tooling:typecheck && npm run typecheck && npm run lint && npm run build && npm run release:artifact:verify"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",

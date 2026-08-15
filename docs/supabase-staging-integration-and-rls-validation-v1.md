@@ -525,3 +525,14 @@ payment receipt, Solana transaction, or funds movement. See
 # Phase 2E-6D execution registry note
 
 The audited treasury execution registry migration remains local-only until separately authorized. Before any Staging application, follow `audited-treasury-execution-registry-and-reconciliation-v1.md`, run its read-only legacy inventory, use distinct preparer/authorizer/executor/reconciler actors, and preserve the separation between governance approval, authorization, external receipt reporting, and reconciliation. Service role is limited to the exact owner-bound two-intent cleanup RPC in isolated Node tooling and must never enter browser configuration.
+
+# Phase 2E-6F current-state note
+
+As of the Phase 2E-6F local release-operations closure, the formal migration
+baseline to confirm remotely is through `202608110002`. This note does not
+assert a new remote deployment, migration application, gate transition, role
+grant, or E2E run. The local repository now provides production build release
+evidence (`/release.json`), Cloudflare static security headers, an explicitly
+read-only release readiness probe, CI artifact verification, and a recovery
+runbook. See
+`docs/phase-2e-6f-release-monitoring-recovery-and-launch-operations-v1.md`.
