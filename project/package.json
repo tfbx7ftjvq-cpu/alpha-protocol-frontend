@@ -20,6 +20,10 @@
     "operations:staging:roles:inspect": "node --experimental-strip-types scripts/operations-staging/operations-roles.ts inspect",
     "operations:staging:roles:grant": "node --experimental-strip-types scripts/operations-staging/operations-roles.ts grant",
     "operations:staging:roles:revoke": "node --experimental-strip-types scripts/operations-staging/operations-roles.ts revoke",
+    "operations:roles:bootstrap:validate": "node --experimental-strip-types scripts/operations-staging/role-bootstrap-plan.ts",
+    "operations:recovery:rehearsal:validate": "node --experimental-strip-types scripts/operations-staging/recovery-rehearsal.ts",
+    "dependencies:risk:verify": "node --experimental-strip-types scripts/dependency-risk-verify.ts",
+    "operations:pilot:verify": "node --experimental-strip-types scripts/operations-pilot-verify.ts",
     "release:artifact:verify": "node --experimental-strip-types scripts/release-artifact-verify.ts",
     "operations:verify": "npm run operations:test && npm run operations:tooling:typecheck && npm run typecheck && npm run lint && npm run build",
     "release:verify": "npm run operations:test && npm run operations:tooling:typecheck && npm run typecheck && npm run lint && npm run build && npm run release:artifact:verify"

@@ -28,3 +28,4 @@ jobs:
           cache-dependency-path: project/package-lock.json
       - run: npm ci
       - run: npm run release:verify
+      - run: npm run operations:pilot:verify

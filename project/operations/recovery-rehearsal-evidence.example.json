@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "status": "template",
+  "target": { "classification": "isolated_restore", "projectRef": "abcdefghijklmnopqrst", "environment": "isolated_restore" },
+  "backupInventory": { "method": "dashboard_pitr", "reviewedAt": "2026-08-15T00:00:00.000Z" },
+  "migrationParity": { "through": "202608110002", "verified": true },
+  "rls": { "publicReadTables": 7, "privateAnonTablesDenied": 7 },
+  "gateMode": "disabled",
+  "noMutationAttestation": { "users": false, "roles": false, "funds": false, "chain": false }
+}

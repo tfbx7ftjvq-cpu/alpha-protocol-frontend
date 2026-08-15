@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "status": "template",
+  "environment": "staging",
+  "migrationThrough": "202608110002",
+  "walletE2EPassed": true,
+  "gateMode": "disabled",
+  "noChainTransaction": true
+}

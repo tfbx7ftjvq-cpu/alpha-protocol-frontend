@@ -12,16 +12,20 @@ import {
 } from './common.ts';
 
 export type OperationsRoleAction = 'inspect' | 'grant' | 'revoke';
+export const OPERATIONS_ROLE_NAMES = [
+  'reviewer',
+  'relief_reviewer',
+  'operator',
+  'moderator',
+  'governance_admin',
+  'treasury_preparer',
+  'treasury_authorizer',
+  'executor',
+  'treasury_reconciler',
+] as const;
+
 export type OperationsRoleName =
-  | 'reviewer'
-  | 'relief_reviewer'
-  | 'operator'
-  | 'moderator'
-  | 'governance_admin'
-  | 'treasury_preparer'
-  | 'treasury_authorizer'
-  | 'executor'
-  | 'treasury_reconciler';
+  typeof OPERATIONS_ROLE_NAMES[number];
 
 export interface OperationsRoleSnapshot {
   userId: string;
@@ -176,18 +180,8 @@ function parseAction(raw: string | undefined): OperationsRoleAction {
 }
 
 function parseRoleName(raw: string | undefined): OperationsRoleName {
-  if (
-    raw === 'reviewer'
-    || raw === 'relief_reviewer'
-    || raw === 'operator'
-    || raw === 'moderator'
-    || raw === 'governance_admin'
-    || raw === 'treasury_preparer'
-    || raw === 'treasury_authorizer'
-    || raw === 'executor'
-    || raw === 'treasury_reconciler'
-  ) {
-    return raw;
+  if (OPERATIONS_ROLE_NAMES.includes(raw as OperationsRoleName)) {
+    return raw as OperationsRoleName;
   }
   throw new Error('grant requires a supported audited operations role name');
 }

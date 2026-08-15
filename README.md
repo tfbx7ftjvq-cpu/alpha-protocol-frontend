@@ -59,3 +59,11 @@ deployment is not a Mainnet deployment, custody system, authority change, or
 funds movement. Mainnet remains unlaunched. See
 `docs/phase-2e-6f-release-monitoring-recovery-and-launch-operations-v1.md` for
 the release, monitoring, recovery, and human-only rollback procedure.
+
+## Public Pilot boundary (Phase 2E-6G)
+
+The Public Pilot candidate is an off-chain, human-controlled release readiness
+state, not a Mainnet launch. It keeps real role grants, gate changes, funds,
+and Solana execution outside automated tooling. The local Go/No-Go validator
+and required evidence schemas are documented in
+`docs/phase-2e-6g-public-pilot-launch-readiness-v1.md`.

@@ -163,3 +163,11 @@ secrets:
 - [ ] preflight, linked lint, and release-inspect outcomes recorded;
 - [ ] backup/PITR inventory or isolated rehearsal result recorded;
 - [ ] timestamp, operator, reviewer, and incident/change reference recorded.
+
+## 8. Phase 2E-6G Public Pilot handoff
+
+Phase 2E-6G adds local-only dependency risk, role-plan, recovery-evidence, and
+Go/No-Go validation. It does not change the recovery rules above: any restore
+remains isolated, gate-disabled, and human-approved. A Public Pilot is not a
+Devnet operational rehearsal and neither is a Mainnet launch. See
+`phase-2e-6g-public-pilot-launch-readiness-v1.md`.
